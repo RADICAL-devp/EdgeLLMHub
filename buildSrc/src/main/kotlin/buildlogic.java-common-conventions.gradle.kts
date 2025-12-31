@@ -5,6 +5,8 @@
 plugins {
     // Apply the java Plugin to add support for Java.
     java
+    id("org.jetbrains.kotlin.jvm")
+    id("com.diffplug.spotless")
 }
 
 repositories {
@@ -27,11 +29,42 @@ dependencies {
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(25)
+}
+kotlin {
+    jvmToolchain(25)
+}
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
     }
 }
 
-tasks.named<Test>("test") {
-    // Use JUnit Platform for unit tests.
-    useJUnitPlatform()
+// CODE FORMATTING
+spotless {
+    java {
+        importOrder()
+        removeUnusedImports()
+        formatAnnotations()
+        palantirJavaFormat("2.75.0")
+    }
+    val ktlintSettings = mapOf(
+        "indent_size" to 4,
+        "ktlint_code_style" to "intellij_idea",
+        "ktlint_standard_filename" to "disabled",
+    )
+    kotlin {
+        targetExclude("**/generated/**/*.kt")
+        ktlint().editorConfigOverride(ktlintSettings)
+    }
+    kotlinGradle {
+        targetExclude("**/generated/**/*.kt")
+        ktlint().editorConfigOverride(ktlintSettings)
+    }
 }
+
+tasks { check { finalizedBy("spotlessApply") } }

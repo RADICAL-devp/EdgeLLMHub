@@ -20,11 +20,19 @@ t = "mise run"
 # ------------------------------------------------------
 [tasks."code:clean"]
 description = "Clean Project and Build Cache"
-run = "./gradlew clean"
+run = "./gradlew clean && ./gradlew :list:clean && ./gradlew :utilities:clean && ./gradlew :app:clean && rm -rf build"
 
 [tasks."code:build"]
 description = "Build Code"
-run = "./gradlew build"
+run = "./gradlew :list:build && ./gradlew :utilities:build && ./gradlew :app:build"
+
+[tasks."code:release"]
+description = "Clean and Build Code"
+run = "mise run code:clean && mise run code:build"
+
+[tasks."code:format"]
+description = "Format Code"
+run = "./gradlew :list:spotlessApply && ./gradlew :utilities:spotlessApply && ./gradlew :app:spotlessApply"
 # ------------------------------------------------------
 # END: Code Tasks
 # ======================================================

@@ -3,11 +3,50 @@
  */
 
 plugins {
-    // Support convention plugins written in Kotlin. Convention plugins are build scripts in 'src/main' that automatically become available as plugins in the main build.
+    // Support convention plugins written in Kotlin.
+    // Convention plugins are build scripts in 'src/main' that automatically become available as plugins in the main build.
     `kotlin-dsl`
 }
 
 repositories {
-    // Use the plugin portal to apply community plugins in convention plugins.
+    mavenCentral()
     gradlePluginPortal()
+}
+
+repositories {
+    mavenCentral()
+    gradlePluginPortal()
+}
+
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+// change this to 25 when gradle's embedded kotlin supports JDK25
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(21)
+}
+
+kotlin {
+    jvmToolchain(25)
+}
+
+// change this to 25 when gradle's embedded kotlin supports JDK25
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
+}
+
+dependencies {
+    // kotlin support
+    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
+    implementation("org.jetbrains.kotlin:kotlin-allopen:2.3.0")
+    implementation("com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.3.3")
+
+    // code formatting
+    implementation("org.jlleitschuh.gradle:ktlint-gradle:12.3.0")
+    implementation("com.diffplug.spotless:spotless-plugin-gradle:6.25.0")
 }

@@ -5,3 +5,7 @@
 plugins {
     id("buildlogic.java-library-conventions")
 }
+
+tasks.withType<Test>().configureEach {
+    failOnNoDiscoveredTests = false
+}

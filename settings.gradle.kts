@@ -11,4 +11,13 @@ plugins {
 }
 
 rootProject.name = "dev-playground"
-include("app", "list", "utilities")
+
+data class RepoProject(val name: String, val location: String)
+listOf(
+    RepoProject(name = "app", location = "projects/apps/app"),
+    RepoProject(name = "list", location = "projects/libs/list"),
+    RepoProject(name = "utilities", location = "projects/libs/utilities"),
+).forEach {
+    include(it.name)
+    project(":${it.name}").projectDir = file(it.location)
+}
