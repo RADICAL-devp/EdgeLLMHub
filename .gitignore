@@ -45,3 +45,6 @@ out/
 **/application-dev.json
 **/application-dev.toml
 **/devops-dev.toml
+
+# Ignore Gradle build output directory
+build
