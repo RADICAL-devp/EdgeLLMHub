@@ -1,0 +1,47 @@
+# mac
+Thumbs.db
+.DS_Store
+
+
+# gradle
+.gradle
+
+
+# vscode
+.vscode
+.code-workspace
+pkg.code-workspace
+
+
+# intellij
+.idea
+*.iml
+*.ipr
+*.iws
+
+
+# build dirs
+build/
+target/
+out/
+
+
+# misc
+*.orig
+*.pyc
+*.swp
+*.tmp
+.kotlin
+.diff
+.project
+.settings
+.classpath
+.factorypath
+
+
+# local data
+**/.env
+**/application-dev.properties
+**/application-dev.json
+**/application-dev.toml
+**/devops-dev.toml
