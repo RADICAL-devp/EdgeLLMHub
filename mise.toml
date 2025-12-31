@@ -4,7 +4,7 @@ node = "24.12.0"
 deno = "2.5.6"
 
 [env]
-
+GRADLE_USER_HOME = "{{env.HOME}}/.gradle"
 
 [plugins]
 
@@ -13,3 +13,28 @@ deno = "2.5.6"
 tasks = "mise tasks"
 task = "mise run"
 t = "mise run"
+
+
+# ======================================================
+# BEGIN: Code Tasks
+# ------------------------------------------------------
+[tasks."code:clean"]
+description = "Clean Project and Build Cache"
+run = "./gradlew clean"
+
+[tasks."code:build"]
+description = "Build Code"
+run = "./gradlew build"
+# ------------------------------------------------------
+# END: Code Tasks
+# ======================================================
+
+# ======================================================
+# BEGIN: Setup Tasks
+# ------------------------------------------------------
+[tasks."setup:dev-env"]
+description = "Setup Dev Env"
+run = "mise install"
+# ------------------------------------------------------
+# END: Setup Tasks
+# ======================================================
