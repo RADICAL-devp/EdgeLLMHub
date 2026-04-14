@@ -15,6 +15,7 @@ rootProject.name = "dev-playground"
 data class RepoProject(val name: String, val location: String)
 listOf(
     RepoProject(name = "app", location = "projects/apps/app"),
+    RepoProject(name = "clinical-intelligence", location = "projects/apps/clinical-intelligence"),
     RepoProject(name = "list", location = "projects/libs/list"),
     RepoProject(name = "utilities", location = "projects/libs/utilities"),
 ).forEach {

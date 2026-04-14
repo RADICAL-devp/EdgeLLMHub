@@ -49,4 +49,7 @@ dependencies {
     // code formatting
     implementation("org.jlleitschuh.gradle:ktlint-gradle:12.3.0")
     implementation("com.diffplug.spotless:spotless-plugin-gradle:6.25.0")
+
+    // Micronaut support
+    implementation("io.micronaut.gradle:micronaut-gradle-plugin:4.6.2")
 }

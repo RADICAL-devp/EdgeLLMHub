@@ -4,6 +4,10 @@
  * This settings file is used to specify which projects to include in your build-logic build.
  */
 
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention")
+}
+
 dependencyResolutionManagement {
     // Reuse version catalog from the main build.
     versionCatalogs {
