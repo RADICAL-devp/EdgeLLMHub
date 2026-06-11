@@ -1,0 +1,59 @@
+{
+  "patientId": "PAT-2024-0042",
+  "doctorId": "DR-SINGH-001",
+  "sleepLabId": "SL-MUMBAI-003",
+  "consultation": {
+    "patientId": "PAT-2024-0042",
+    "doctorId": "DR-SINGH-001",
+    "consultationDate": "2024-11-15T10:30:00",
+    "sleepLabId": "SL-MUMBAI-003",
+    "chiefComplaint": "Excessive daytime sleepiness for 6 months, loud snoring reported by spouse, morning headaches 3-4 times per week",
+    "historyOfPresentIllness": "42-year-old male presents with progressive excessive daytime sleepiness (EDS) over the past 6 months. Epworth Sleepiness Scale score 16/24 (pathological). Spouse reports loud snoring with witnessed apneic episodes occurring 4-5 times per night. Patient reports unrefreshing sleep despite 7-8 hours in bed. Morning headaches 3-4 times per week. No history of narcolepsy symptoms (no cataplexy, sleep paralysis, or hypnagogic hallucinations). Denies alcohol use. Caffeine intake: 3-4 cups/day.",
+    "pastMedicalHistory": "Type 2 Diabetes Mellitus diagnosed 2019, on Metformin 500mg BD. Hypertension diagnosed 2020, on Telmisartan 40mg OD. No surgical history. No prior sleep studies. Family history: Father had OSA (diagnosed at age 55). Mother: Type 2 DM.",
+    "vitals": {
+      "bp": "142/88 mmHg",
+      "hr": "78 bpm",
+      "spo2": "94%",
+      "temp": "98.4°F",
+      "weight": "92 kg",
+      "height": "170 cm",
+      "bmi": "31.8"
+    },
+    "physicalExamination": "General: Obese male, no acute distress. ENT: Mallampati Grade III (high risk for OSA), neck circumference 42cm (>40cm threshold for OSA risk), retrognathia noted, no tonsillar hypertrophy (Grade 1). Chest: Clear bilaterally, no wheeze/crepitations. CVS: S1S2 normal, no murmurs. Abdomen: Soft, non-tender, obese. CNS: Alert, oriented, no focal neurological deficits.",
+    "investigationsOrdered": [
+      {
+        "testName": "Level 1 Polysomnography (PSG)",
+        "sleepLabId": "SL-MUMBAI-003",
+        "status": "COMPLETED",
+        "results": {
+          "ahi": 34.2,
+          "oxygenDesatIndex": 28,
+          "minimumSpO2": 78,
+          "sleepEfficiency": 68.5,
+          "remAhi": 52.1,
+          "supineAhi": 48.3
+        }
+      },
+      {
+        "testName": "Thyroid Function Test",
+        "sleepLabId": null,
+        "status": "COMPLETED",
+        "results": null
+      },
+      {
+        "testName": "HbA1c",
+        "sleepLabId": null,
+        "status": "COMPLETED",
+        "results": null
+      }
+    ],
+    "currentMedications": [
+      "Metformin 500mg BD",
+      "Telmisartan 40mg OD"
+    ],
+    "allergies": [
+      "Sulfonamides"
+    ],
+    "notes": "Patient is a software engineer with irregular work hours. Driving 45 minutes to office daily — critical to assess driving safety with EDS."
+  }
+}

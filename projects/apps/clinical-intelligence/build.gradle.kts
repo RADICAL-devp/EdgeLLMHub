@@ -22,4 +22,20 @@ dependencies {
 
     // Project Reactor (Used in dummy authentication Mono.just)
     implementation("io.projectreactor:reactor-core")
+
+    // --- LangChain4J ---
+    implementation("dev.langchain4j:langchain4j:1.0.0-beta3")
+    implementation("dev.langchain4j:langchain4j-open-ai:1.0.0-beta3")
+
+    // Local embedding model (runs offline, no API key needed)
+    implementation("dev.langchain4j:langchain4j-embeddings-all-minilm-l6-v2:1.0.0-beta3")
+
+    // Jackson for JSON serialization of structured summaries
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.4")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.4")
+    implementation("io.micronaut:micronaut-jackson-databind")
+
+    // Test dependencies
+    testImplementation("io.micronaut.test:micronaut-test-junit5")
+    testImplementation("org.mockito:mockito-core:5.14.2")
 }
