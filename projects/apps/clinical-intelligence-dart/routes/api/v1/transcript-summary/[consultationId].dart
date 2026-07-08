@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:clinical_intelligence_dart/application/services/summary_orchestrator.dart';
 import 'package:dart_frog/dart_frog.dart';
+import 'generate.dart' as generate;
 
 /// GET /api/v1/transcript-summary/[consultationId]
 ///
@@ -11,6 +12,11 @@ Future<Response> onRequest(
   RequestContext context,
   String consultationId,
 ) async {
+  // Handle Dart Frog route conflict: if ID is "generate", route to generate request
+  if (consultationId == 'generate') {
+    return generate.onRequest(context);
+  }
+
   if (context.request.method != HttpMethod.get) {
     return Response(
       statusCode: HttpStatus.methodNotAllowed,

@@ -8,8 +8,8 @@ import 'package:dart_frog/dart_frog.dart';
 
 import '../routes/index.dart' as index;
 import '../routes/api/v1/transcript-summary/generate.dart' as api_v1_transcript_summary_generate;
+import '../routes/api/v1/transcript-summary/[consultationId].dart' as api_v1_transcript_summary_$consultation_id;
 import '../routes/api/v1/transcript-summary/[consultationId]/regenerate.dart' as api_v1_transcript_summary_$consultation_id_regenerate;
-import '../routes/api/v1/transcript-summary/[consultationId]/index.dart' as api_v1_transcript_summary_$consultation_id_index;
 import '../routes/api/v1/clinical-processing/process.dart' as api_v1_clinical_processing_process;
 
 import '../routes/_middleware.dart' as middleware;
@@ -45,14 +45,14 @@ Handler buildApiV1ClinicalProcessingHandler() {
 Handler buildApiV1TranscriptSummary$consultationIdHandler(String consultationId,) {
   final pipeline = const Pipeline();
   final router = Router()
-    ..all('/regenerate', (context) => api_v1_transcript_summary_$consultation_id_regenerate.onRequest(context,consultationId,))..all('/', (context) => api_v1_transcript_summary_$consultation_id_index.onRequest(context,consultationId,));
+    ..all('/regenerate', (context) => api_v1_transcript_summary_$consultation_id_regenerate.onRequest(context,consultationId,));
   return pipeline.addHandler(router);
 }
 
 Handler buildApiV1TranscriptSummaryHandler() {
   final pipeline = const Pipeline();
   final router = Router()
-    ..all('/generate', (context) => api_v1_transcript_summary_generate.onRequest(context,));
+    ..all('/generate', (context) => api_v1_transcript_summary_generate.onRequest(context,))..all('/<consultationId>', (context,consultationId,) => api_v1_transcript_summary_$consultation_id.onRequest(context,consultationId,));
   return pipeline.addHandler(router);
 }
 
