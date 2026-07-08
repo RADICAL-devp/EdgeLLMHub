@@ -16,6 +16,20 @@ import 'features/note_assist/data/services/on_device_llm_service.dart';
 import 'features/note_assist/presentation/pages/consultation_detail_page.dart';
 import 'features/note_assist/presentation/pages/model_manager_page.dart';
 
+import 'core/ports/llm_port.dart';
+import 'core/llm/native_llm_adapter.dart';
+import 'core/ports/transcript_repository.dart';
+import 'core/ports/transcript_summary_repository.dart';
+import 'core/repositories/drift_transcript_repository.dart';
+import 'core/repositories/drift_summary_repository.dart';
+import 'core/services/device_capability_service.dart';
+import 'core/application_services/transcript_chunking_service.dart';
+import 'core/application_services/summary_generation_service.dart';
+import 'core/application_services/summary_orchestrator.dart';
+import 'core/application_services/clinical_processing_orchestrator.dart';
+import 'core/application_services/validation_service.dart';
+import 'core/application_services/terminology_assistance_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await setupDependencies();
@@ -45,6 +59,29 @@ Future<void> setupDependencies() async {
 
   // AI Service
   getIt.registerLazySingleton<NoteAssistService>(() => OnDeviceLlmService());
+
+  // Clinical Intelligence Core Services
+  getIt.registerLazySingleton<DeviceCapabilityService>(() => DeviceCapabilityService());
+  getIt.registerLazySingleton<LlmPort>(() => NativeLlmAdapter());
+  getIt.registerLazySingleton<TranscriptRepository>(() => DriftTranscriptRepository(getIt<LocalDatabase>()));
+  getIt.registerLazySingleton<TranscriptSummaryRepository>(() => DriftSummaryRepository(getIt<LocalDatabase>()));
+  
+  getIt.registerLazySingleton<TranscriptChunkingService>(() => TranscriptChunkingService());
+  getIt.registerLazySingleton<ValidationService>(() => ValidationService());
+  getIt.registerLazySingleton<TerminologyAssistanceService>(() => TerminologyAssistanceService(getIt<LlmPort>()));
+  getIt.registerLazySingleton<SummaryGenerationService>(() => SummaryGenerationService(getIt<LlmPort>(), getIt<TerminologyAssistanceService>()));
+  getIt.registerLazySingleton<SummaryOrchestrator>(() => SummaryOrchestrator(
+        llmPort: getIt<LlmPort>(),
+        transcriptRepo: getIt<TranscriptRepository>(),
+        summaryRepo: getIt<TranscriptSummaryRepository>(),
+        chunkingService: getIt<TranscriptChunkingService>(),
+        generationService: getIt<SummaryGenerationService>(),
+      ));
+  getIt.registerLazySingleton<ClinicalProcessingOrchestrator>(() => ClinicalProcessingOrchestrator(
+        llmPort: getIt<LlmPort>(),
+        summaryOrchestrator: getIt<SummaryOrchestrator>(),
+        validationService: getIt<ValidationService>(),
+      ));
 }
 
 final GoRouter _router = GoRouter(

@@ -24,7 +24,35 @@ class DoctorNotes extends Table {
   Set<Column> get primaryKey => {noteId};
 }
 
-@DriftDatabase(tables: [DoctorNotes])
+@DataClassName('TranscriptEntity')
+class Transcripts extends Table {
+  TextColumn get transcriptId => text()();
+  TextColumn get consultationId => text()();
+  TextColumn get doctorId => text()();
+  TextColumn get rawText => text()();
+  TextColumn get cleanedText => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  IntColumn get source => integer()();
+
+  @override
+  Set<Column> get primaryKey => {transcriptId};
+}
+
+@DataClassName('TranscriptSummaryEntity')
+class TranscriptSummaries extends Table {
+  TextColumn get consultationId => text()();
+  TextColumn get doctorId => text()();
+  TextColumn get structuredSummaryJson => text().nullable()();
+  TextColumn get executiveSummary => text().nullable()();
+  TextColumn get contextEnrichedSummaryJson => text().nullable()();
+  TextColumn get doctorNoteJson => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {consultationId};
+}
+
+@DriftDatabase(tables: [DoctorNotes, Transcripts, TranscriptSummaries])
 class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
 

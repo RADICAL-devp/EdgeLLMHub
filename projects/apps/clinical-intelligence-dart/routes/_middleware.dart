@@ -12,6 +12,7 @@ import 'package:clinical_intelligence_dart/application/services/transcript_norma
 import 'package:clinical_intelligence_dart/application/services/transcript_summary_aggregation_service.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/stub_llm_adapter.dart';
+import 'package:clinical_intelligence_dart/infrastructure/llm/ollama_llm_adapter.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/in_memory_summary_repository.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/in_memory_transcript_repository.dart';
 import 'package:dart_frog/dart_frog.dart';
@@ -22,7 +23,7 @@ import 'package:dart_frog/dart_frog.dart';
 /// [provider] middleware.
 Handler middleware(Handler handler) {
   // --- Infrastructure ---
-  final LlmPort llmPort = StubLlmAdapter();
+  final LlmPort llmPort = OllamaLlmAdapter();
   // To use Ollama for on-device LLM, uncomment:
   // final LlmPort llmPort = OllamaLlmAdapter();
 
