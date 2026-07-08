@@ -1,4 +1,5 @@
 import 'package:clinical_intelligence_dart/api/dto/clinical_processing_request.dart';
+import 'package:clinical_intelligence_dart/api/dto/transcript_summary_request.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:clinical_intelligence_dart/core/models/processing_mode.dart';
 import 'package:test/test.dart';
@@ -139,6 +140,31 @@ void main() {
         doctorId: 'D1',
         transcriptText: 'Patient presents with headache.',
       );
+    });
+
+    test('successfully parses Java ConsultationInput format', () {
+      final json = {
+        'patientId': 'PAT-2024-0042',
+        'doctorId': 'DR-SINGH-001',
+        'sleepLabId': 'SL-MUMBAI-003',
+        'consultation': {
+          'patientId': 'PAT-2024-0042',
+          'doctorId': 'DR-SINGH-001',
+          'chiefComplaint': 'Excessive daytime sleepiness',
+          'vitals': {
+            'bp': '142/88 mmHg',
+            'hr': '78 bpm'
+          }
+        }
+      };
+
+      final request = TranscriptSummaryRequest.fromJson(json);
+
+      expect(request.patientId, equals('PAT-2024-0042'));
+      expect(request.doctorId, equals('DR-SINGH-001'));
+      expect(request.sleepLabId, equals('SL-MUMBAI-003'));
+      expect(request.transcriptText, contains('Chief Complaint: Excessive daytime sleepiness'));
+      expect(request.transcriptText, contains('Vitals: BP: 142/88 mmHg, HR: 78 bpm'));
     });
   });
 }
