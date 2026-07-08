@@ -1,0 +1,21 @@
+name: clinical_intelligence_dart
+description: >
+  Dart Frog Clinical Intelligence backend.
+  Provides clinical text processing (voice-notes workflow) and
+  transcript summarization APIs.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  dart_frog: ^1.2.6
+  uuid: ^4.5.1
+  http: ^1.2.2
+  meta: ^1.15.0
+
+dev_dependencies:
+  test: ^1.25.8
+  mocktail: ^1.0.4
+  very_good_analysis: ^6.0.0
