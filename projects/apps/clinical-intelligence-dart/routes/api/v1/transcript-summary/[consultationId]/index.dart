@@ -6,10 +6,25 @@ import 'package:clinical_intelligence_dart/application/services/summary_orchestr
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:dart_frog/dart_frog.dart';
 
-/// POST /api/v1/transcript-summary/generate
+/// GET /api/v1/transcript-summary/[consultationId]
+///   - Retrieve a previously generated summary.
 ///
-/// Generate a full transcript summary bundle (Milestone 2).
-Future<Response> onRequest(RequestContext context) async {
+/// POST /api/v1/transcript-summary/generate
+///   - Handle Dart Frog route matching fallback: if consultationId is "generate",
+///     we treat this as a POST request to generate a summary bundle.
+Future<Response> onRequest(
+  RequestContext context,
+  String consultationId,
+) async {
+  if (consultationId == 'generate') {
+    return _handleGenerate(context);
+  }
+
+  return _handleGetSummary(context, consultationId);
+}
+
+/// POST /api/v1/transcript-summary/generate
+Future<Response> _handleGenerate(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return Response(
       statusCode: HttpStatus.methodNotAllowed,
@@ -47,6 +62,43 @@ Future<Response> onRequest(RequestContext context) async {
       body: jsonEncode({'error': 'Invalid JSON: ${e.message}'}),
       headers: {'Content-Type': 'application/json'},
     );
+  } catch (e) {
+    return Response(
+      statusCode: HttpStatus.internalServerError,
+      body: jsonEncode({'error': 'Internal server error: $e'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
+/// GET /api/v1/transcript-summary/[consultationId]
+Future<Response> _handleGetSummary(
+  RequestContext context,
+  String consultationId,
+) async {
+  if (context.request.method != HttpMethod.get) {
+    return Response(
+      statusCode: HttpStatus.methodNotAllowed,
+      body: jsonEncode({'error': 'Method not allowed. Use GET.'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  try {
+    final orchestrator = context.read<SummaryOrchestrator>();
+    final response = await orchestrator.getSummary(consultationId);
+
+    if (response == null) {
+      return Response(
+        statusCode: HttpStatus.notFound,
+        body: jsonEncode({
+          'error': 'No summary found for consultation: $consultationId',
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    return Response.json(body: response.toJson());
   } catch (e) {
     return Response(
       statusCode: HttpStatus.internalServerError,
