@@ -13,7 +13,7 @@ class AiToolbar extends StatelessWidget {
     return BlocBuilder<AiAssistCubit, AiAssistState>(
       builder: (context, state) {
         final isBusy = state is AiAssistGenerating;
-        
+
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Container(
@@ -25,53 +25,54 @@ class AiToolbar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-              _buildActionButton(
-                context,
-                icon: Icons.auto_fix_high,
-                label: 'Clean up',
-                isBusy: isBusy,
-                onPressed: () {
-                  if (currentText.isNotEmpty) {
-                    context.read<AiAssistCubit>().cleanUpText(currentText);
-                  }
-                },
-              ),
-              const SizedBox(width: 8),
-              _buildActionButton(
-                context,
-                icon: Icons.format_list_bulleted,
-                label: 'Structure',
-                isBusy: isBusy,
-                onPressed: () {
-                  if (currentText.isNotEmpty) {
-                    context.read<AiAssistCubit>().structureNote(currentText);
-                  }
-                },
-              ),
-              _buildActionButton(
-                context,
-                icon: Icons.data_object,
-                label: 'Extract',
-                isBusy: isBusy,
-                onPressed: () {
-                  if (currentText.isNotEmpty) {
-                    context.read<AiAssistCubit>().extractFields(currentText);
-                  }
-                },
-              ),
-              const SizedBox(width: 8),
-              _buildActionButton(
-                context,
-                icon: Icons.summarize,
-                label: 'Recap',
-                isBusy: isBusy,
-                onPressed: () {
-                  if (currentText.isNotEmpty) {
-                    context.read<AiAssistCubit>().generateRecap(currentText);
-                  }
-                },
-              ),
-            ],
+                _buildActionButton(
+                  context,
+                  icon: Icons.auto_fix_high,
+                  label: 'Clean up',
+                  isBusy: isBusy,
+                  onPressed: () {
+                    if (currentText.isNotEmpty) {
+                      context.read<AiAssistCubit>().cleanUpText(currentText);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildActionButton(
+                  context,
+                  icon: Icons.format_list_bulleted,
+                  label: 'Structure',
+                  isBusy: isBusy,
+                  onPressed: () {
+                    if (currentText.isNotEmpty) {
+                      context.read<AiAssistCubit>().structureNote(currentText);
+                    }
+                  },
+                ),
+                _buildActionButton(
+                  context,
+                  icon: Icons.data_object,
+                  label: 'Extract',
+                  isBusy: isBusy,
+                  onPressed: () {
+                    if (currentText.isNotEmpty) {
+                      context.read<AiAssistCubit>().extractFields(currentText);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildActionButton(
+                  context,
+                  icon: Icons.summarize,
+                  label: 'Recap',
+                  isBusy: isBusy,
+                  onPressed: () {
+                    if (currentText.isNotEmpty) {
+                      context.read<AiAssistCubit>().generateRecap(currentText);
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },

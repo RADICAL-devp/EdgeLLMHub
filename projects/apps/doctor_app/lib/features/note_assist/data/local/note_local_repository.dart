@@ -17,7 +17,9 @@ class NoteLocalRepository {
             doctorId: Value(note.doctorId),
             rawText: Value(note.rawText),
             status: Value(note.status.index),
-            extractedFields: Value(note.extractedFields != null ? jsonEncode(note.extractedFields!.toJson()) : null),
+            extractedFields: Value(note.extractedFields != null
+                ? jsonEncode(note.extractedFields!.toJson())
+                : null),
             patientRecap: Value(note.patientRecap),
             createdAt: Value(note.createdAt),
             updatedAt: Value(note.updatedAt),
@@ -39,14 +41,17 @@ class NoteLocalRepository {
       doctorId: record.doctorId,
       rawText: record.rawText,
       status: NoteStatus.values[record.status],
-      extractedFields: record.extractedFields != null ? ExtractedFields.fromJson(jsonDecode(record.extractedFields!)) : null,
+      extractedFields: record.extractedFields != null
+          ? ExtractedFields.fromJson(jsonDecode(record.extractedFields!))
+          : null,
       patientRecap: record.patientRecap,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     );
   }
 
-  Future<List<DoctorNote>> getNotesForConsultation(String consultationId) async {
+  Future<List<DoctorNote>> getNotesForConsultation(
+      String consultationId) async {
     final records = await (db.select(db.doctorNotes)
           ..where((t) => t.consultationId.equals(consultationId)))
         .get();
@@ -59,11 +64,18 @@ class NoteLocalRepository {
               doctorId: r.doctorId,
               rawText: r.rawText,
               status: NoteStatus.values[r.status],
-              extractedFields: r.extractedFields != null ? ExtractedFields.fromJson(jsonDecode(r.extractedFields!)) : null,
+              extractedFields: r.extractedFields != null
+                  ? ExtractedFields.fromJson(jsonDecode(r.extractedFields!))
+                  : null,
               patientRecap: r.patientRecap,
               createdAt: r.createdAt,
               updatedAt: r.updatedAt,
             ))
         .toList();
+  }
+
+  Future<DoctorNote?> getNoteByConsultationId(String consultationId) async {
+    final notes = await getNotesForConsultation(consultationId);
+    return notes.isEmpty ? null : notes.first;
   }
 }

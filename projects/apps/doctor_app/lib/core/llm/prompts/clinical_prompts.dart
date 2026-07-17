@@ -10,6 +10,17 @@
 class ClinicalPrompts {
   ClinicalPrompts._();
 
+  /// Basic prompt-injection defense and input sanitization.
+  /// Removes potentially dangerous HTML/XML-like tags and trims whitespace.
+  static String sanitize(String input) {
+    if (input.isEmpty) return input;
+    // Strip basic HTML/XML tags that might confuse the model
+    final noTags = input.replaceAll(RegExp(r'<[^>]*>'), '');
+    // Limit excessive newlines
+    final noExcessiveNewlines = noTags.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return noExcessiveNewlines.trim();
+  }
+
   /// VOCAB_ASSIST: Conservative terminology improvement.
   static const vocabAssist = '''
 You are a medical terminology assistant. Your task is to improve dictated clinical text.

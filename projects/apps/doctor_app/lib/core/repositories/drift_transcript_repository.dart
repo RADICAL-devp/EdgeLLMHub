@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 import 'package:doctor_app/core/models/consultation_transcript.dart';
-import 'package:doctor_app/core/models/processing_source.dart';
 import 'package:doctor_app/core/ports/transcript_repository.dart';
 import 'package:doctor_app/features/note_assist/data/local/local_database.dart';
 
@@ -14,18 +13,19 @@ class DriftTranscriptRepository implements TranscriptRepository {
     final companion = TranscriptsCompanion(
       transcriptId: Value(transcript.transcriptId),
       consultationId: Value(transcript.consultationId),
-      doctorId: Value(transcript.doctorId),
-      rawText: Value(transcript.rawText),
-      cleanedText: Value(transcript.cleanedText),
-      source: Value(transcript.source.index),
-      createdAt: Value(transcript.createdAt),
+      doctorId: Value(transcript.doctorId ?? ''),
+      rawText: Value(transcript.transcriptText),
+      cleanedText: const Value(null),
+      source: const Value(1),
+      createdAt: Value(transcript.createdAt ?? DateTime.now().toUtc()),
     );
 
     await _db.into(_db.transcripts).insertOnConflictUpdate(companion);
   }
 
   @override
-  Future<ConsultationTranscript?> findByTranscriptId(String transcriptId) async {
+  Future<ConsultationTranscript?> findByTranscriptId(
+      String transcriptId) async {
     final query = _db.select(_db.transcripts)
       ..where((t) => t.transcriptId.equals(transcriptId));
     final entity = await query.getSingleOrNull();
@@ -35,7 +35,8 @@ class DriftTranscriptRepository implements TranscriptRepository {
   }
 
   @override
-  Future<ConsultationTranscript?> findByConsultationId(String consultationId) async {
+  Future<ConsultationTranscript?> findByConsultationId(
+      String consultationId) async {
     final query = _db.select(_db.transcripts)
       ..where((t) => t.consultationId.equals(consultationId));
     final entity = await query.getSingleOrNull();
@@ -58,9 +59,7 @@ class DriftTranscriptRepository implements TranscriptRepository {
       transcriptId: entity.transcriptId,
       consultationId: entity.consultationId,
       doctorId: entity.doctorId,
-      rawText: entity.rawText,
-      cleanedText: entity.cleanedText,
-      source: ProcessingSource.values[entity.source],
+      transcriptText: entity.rawText,
       createdAt: entity.createdAt,
     );
   }

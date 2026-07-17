@@ -1,7 +1,12 @@
 import 'package:dio/dio.dart';
 import '../../domain/models/doctor_note.dart';
-import 'dart:convert';
+import 'package:doctor_app/core/exceptions/app_exceptions.dart';
+import 'package:doctor_app/core/network/dio_error_handler.dart';
 
+/// Remote datasource for syncing notes to the backend API.
+///
+/// Uses [DioErrorHandler] to map all Dio failures to typed
+/// [NetworkException] with transience metadata.
 class NoteRemoteDatasource {
   final Dio _dio;
 
@@ -16,7 +21,7 @@ class NoteRemoteDatasource {
         'doctorId': note.doctorId,
         'rawText': note.rawText,
         'status': note.status.name,
-        'extractedFields': note.extractedFields != null ? note.extractedFields!.toJson() : null,
+        'extractedFields': note.extractedFields?.toJson(),
         'recap': note.patientRecap,
         'createdAt': note.createdAt.toIso8601String(),
         'updatedAt': note.updatedAt.toIso8601String(),
@@ -26,24 +31,39 @@ class NoteRemoteDatasource {
         '/api/doctor-notes/sync',
         data: payload,
       );
+    } on DioException catch (e) {
+      throw DioErrorHandler.handle(e, context: 'syncNote');
     } catch (e) {
-      throw Exception('Failed to sync note: $e');
+      if (e is AppException) rethrow;
+      throw NetworkException(
+        'Unexpected error syncing note: $e',
+        cause: e,
+        isTransient: true,
+      );
     }
   }
 
   Future<DoctorNote?> fetchNoteForConsultation(String consultationId) async {
     try {
-      final response = await _dio.get('/api/doctor-notes/consultation/$consultationId');
+      final response =
+          await _dio.get('/api/doctor-notes/consultation/$consultationId');
       if (response.data != null) {
         // Parse logic would go here
         return null; // For simplicity in this scaffold
       }
       return null;
-    } catch (e) {
-      if (e is DioException && e.response?.statusCode == 404) {
-        return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return null; // Not found is an expected case
       }
-      throw Exception('Failed to fetch note: $e');
+      throw DioErrorHandler.handle(e, context: 'fetchNote');
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw NetworkException(
+        'Failed to fetch note: $e',
+        cause: e,
+        isTransient: true,
+      );
     }
   }
 }

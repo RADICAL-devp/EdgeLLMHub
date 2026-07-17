@@ -5,9 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 
 # IntelliJ related
@@ -41,3 +43,18 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# MLC LLM and Python related
+.venv/
+.venv*/
+venv/
+**/ios/.venv*/
+**/ios/mlc-llm*/
+**/ios/mlc-llm-src/
+**/Llama-*/
+**/ios/Runner/Llama-*/
+**/download_llama.py
+**/patch_pbxproj.py
+
+# VS Code settings
+.vscode/

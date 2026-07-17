@@ -5,19 +5,23 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/doctor_note.dart';
 import '../../data/local/note_local_repository.dart';
 import '../../data/repositories/note_sync_repository.dart';
+import 'package:doctor_app/core/services/sync_queue_service.dart';
 import 'note_editor_state.dart';
 
 class NoteEditorCubit extends Cubit<NoteEditorState> {
   final NoteLocalRepository _localRepository;
   final NoteSyncRepository _syncRepository;
+  final SyncQueueService _syncQueueService;
   Timer? _debounce;
   Timer? _syncDebounce;
 
   NoteEditorCubit({
     required NoteLocalRepository localRepository,
     required NoteSyncRepository syncRepository,
+    required SyncQueueService syncQueueService,
   })  : _localRepository = localRepository,
         _syncRepository = syncRepository,
+        _syncQueueService = syncQueueService,
         super(NoteEditorInitial());
 
   Future<void> loadOrCreateNote({
@@ -68,9 +72,12 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
           }
         } catch (e) {
           if (!isClosed) {
+            final note = (state as NoteEditorLoaded).note;
+            _syncQueueService.enqueueNote(note);
+            
             emit((state as NoteEditorLoaded).copyWith(
               isSyncing: false,
-              error: 'Failed to sync with server.',
+              error: 'Failed to sync with server. Saved offline and queued for retry.',
             ));
           }
         }
@@ -99,16 +106,28 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
   }
 
   Future<void> _saveNote(DoctorNote note) async {
-    if (state is NoteEditorLoaded) {
-      final currentState = state as NoteEditorLoaded;
-      emit(currentState.copyWith(isSaving: true));
-      
-      try {
-        await _localRepository.saveNote(note);
-        emit(currentState.copyWith(isSaving: false, lastSavedAt: DateTime.now()));
+    if (state is! NoteEditorLoaded) return;
+
+    // Emit saving indicator from current (not captured) state
+    emit((state as NoteEditorLoaded).copyWith(isSaving: true));
+
+    try {
+      // Save the exact note instance passed to us — not whatever
+      // is in state right now (which may have changed during debounce)
+      await _localRepository.saveNote(note);
+
+      // Re-read state AFTER the async save completes, since more
+      // edits may have arrived while we were writing to disk.
+      if (!isClosed && state is NoteEditorLoaded) {
+        emit((state as NoteEditorLoaded).copyWith(
+          isSaving: false,
+          lastSavedAt: DateTime.now(),
+        ));
         _triggerSync(note.consultationId);
-      } catch (e) {
-        emit(currentState.copyWith(isSaving: false));
+      }
+    } catch (e) {
+      if (!isClosed && state is NoteEditorLoaded) {
+        emit((state as NoteEditorLoaded).copyWith(isSaving: false));
       }
     }
   }

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/note_editor_cubit.dart';
 import '../cubit/note_editor_state.dart';
+import '../cubit/ai_assist_cubit.dart';
+import '../cubit/ai_assist_state.dart';
 import '../../../../core/services/speech_service.dart';
+import '../../domain/models/doctor_note.dart';
 import 'package:get_it/get_it.dart';
 import 'dart:convert';
 import '../widgets/ai_toolbar.dart';
@@ -32,7 +35,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   void initState() {
     super.initState();
     _textController = TextEditingController();
-    
+
     context.read<NoteEditorCubit>().loadOrCreateNote(
           consultationId: widget.consultationId,
           patientId: widget.patientId,
@@ -68,7 +71,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Widget build(BuildContext context) {
     return BlocConsumer<NoteEditorCubit, NoteEditorState>(
       listener: (context, state) {
-        if (state is NoteEditorLoaded && _textController.text != state.note.rawText) {
+        if (state is NoteEditorLoaded &&
+            _textController.text != state.note.rawText) {
           // Only update if it's not the user currently typing
           if (!FocusScope.of(context).hasFocus) {
             _textController.text = state.note.rawText;
@@ -108,17 +112,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           else if (state.error != null)
-                            const Icon(Icons.cloud_off, size: 16, color: Colors.red)
+                            const Icon(Icons.cloud_off,
+                                size: 16, color: Colors.red)
                           else
-                            const Icon(Icons.cloud_done, size: 16, color: Colors.green),
+                            const Icon(Icons.cloud_done,
+                                size: 16, color: Colors.green),
                           const SizedBox(width: 8),
                           Text(
                             state.isSyncing
                                 ? 'Syncing...'
                                 : (state.error != null ? 'Offline' : 'Saved'),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey,
+                                    ),
                           ),
                         ],
                       ),
@@ -137,21 +144,32 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         final currentNote = state.note;
                         try {
                           final parsedJson = jsonDecode(suggestion);
-                          final extracted = ExtractedFields.fromJson(parsedJson);
-                          final updatedNote = currentNote.copyWith(extractedFields: extracted);
-                          context.read<NoteEditorCubit>().saveNoteFields(updatedNote); 
+                          final extracted =
+                              ExtractedFields.fromJson(parsedJson);
+                          final updatedNote =
+                              currentNote.copyWith(extractedFields: extracted);
+                          context
+                              .read<NoteEditorCubit>()
+                              .saveNoteFields(updatedNote);
                         } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Failed to parse extracted fields.')),
+                            const SnackBar(
+                                content:
+                                    Text('Failed to parse extracted fields.')),
                           );
                         }
                       } else if (aiState.action == 'generating recap') {
                         final currentNote = state.note;
-                        final updatedNote = currentNote.copyWith(patientRecap: suggestion);
-                        context.read<NoteEditorCubit>().saveNoteFields(updatedNote); 
+                        final updatedNote =
+                            currentNote.copyWith(patientRecap: suggestion);
+                        context
+                            .read<NoteEditorCubit>()
+                            .saveNoteFields(updatedNote);
                       } else {
                         final currentText = _textController.text;
-                        final newText = currentText.isEmpty ? suggestion : '$currentText\n\n$suggestion';
+                        final newText = currentText.isEmpty
+                            ? suggestion
+                            : '$currentText\n\n$suggestion';
                         _textController.text = newText;
                         context.read<NoteEditorCubit>().updateText(newText);
                       }
@@ -169,10 +187,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                             maxLines: null,
                             expands: true,
                             decoration: const InputDecoration(
-                              hintText: 'Start typing or dictating your notes...',
+                              hintText:
+                                  'Start typing or dictating your notes...',
                               border: OutlineInputBorder(),
                             ),
-                            onChanged: (text) => context.read<NoteEditorCubit>().updateText(text),
+                            onChanged: (text) => context
+                                .read<NoteEditorCubit>()
+                                .updateText(text),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -184,7 +205,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                             children: [
                               Padding(
                                 padding: const EdgeInsets.all(16.0),
-                                child: Text(_formatExtractedFields(state.note.extractedFields!)),
+                                child: Text(_formatExtractedFields(
+                                    state.note.extractedFields!)),
                               ),
                             ],
                           ),
@@ -222,13 +244,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   String _formatExtractedFields(ExtractedFields fields) {
     final buffer = StringBuffer();
-    if (fields.provisionalDiagnosis != null) buffer.writeln('Diagnosis: ${fields.provisionalDiagnosis}');
+    if (fields.provisionalDiagnosis != null)
+      buffer.writeln('Diagnosis: ${fields.provisionalDiagnosis}');
     if (fields.duration != null) buffer.writeln('Duration: ${fields.duration}');
-    if (fields.symptoms.isNotEmpty) buffer.writeln('Symptoms: ${fields.symptoms.join(', ')}');
-    if (fields.medications.isNotEmpty) buffer.writeln('Medications: ${fields.medications.join(', ')}');
-    if (fields.allergies.isNotEmpty) buffer.writeln('Allergies: ${fields.allergies.join(', ')}');
-    if (fields.testsRecommended.isNotEmpty) buffer.writeln('Tests: ${fields.testsRecommended.join(', ')}');
-    if (fields.followUpActions.isNotEmpty) buffer.writeln('Follow Up: ${fields.followUpActions.join(', ')}');
+    if (fields.symptoms.isNotEmpty)
+      buffer.writeln('Symptoms: ${fields.symptoms.join(', ')}');
+    if (fields.medications.isNotEmpty)
+      buffer.writeln('Medications: ${fields.medications.join(', ')}');
+    if (fields.allergies.isNotEmpty)
+      buffer.writeln('Allergies: ${fields.allergies.join(', ')}');
+    if (fields.testsRecommended.isNotEmpty)
+      buffer.writeln('Tests: ${fields.testsRecommended.join(', ')}');
+    if (fields.followUpActions.isNotEmpty)
+      buffer.writeln('Follow Up: ${fields.followUpActions.join(', ')}');
     return buffer.toString().trim();
   }
 }

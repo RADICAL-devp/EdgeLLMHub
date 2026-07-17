@@ -1,30 +1,70 @@
 import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
+
+enum ExecutionMode {
+  local,
+  cloud,
+  mock
+}
 
 /// Service to check if the current device has the hardware capabilities
-/// (RAM, NPU/GPU) to run an on-device LLM (Gemma 2B or Llama 3B).
+/// to run an on-device LLM, dictation, etc., and to detect simulators.
 class DeviceCapabilityService {
-  /// Returns true if the device is deemed capable of running the local LLM.
+  final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
+  
+  bool? _isSimulatorCache;
+
+  Future<bool> get isSimulator async {
+    if (_isSimulatorCache != null) return _isSimulatorCache!;
+    
+    if (Platform.isIOS) {
+      final iosInfo = await _deviceInfo.iosInfo;
+      _isSimulatorCache = !iosInfo.isPhysicalDevice;
+    } else if (Platform.isAndroid) {
+      final androidInfo = await _deviceInfo.androidInfo;
+      _isSimulatorCache = !androidInfo.isPhysicalDevice;
+    } else {
+      _isSimulatorCache = false;
+    }
+    
+    return _isSimulatorCache!;
+  }
+
+  /// Returns true if the device is deemed capable of running the local LLM natively.
   Future<bool> canRunLocalLlm() async {
     try {
-      // In a production app, use `device_info_plus` and native channels to check:
-      // 1. Total Physical RAM (Need >= 6GB for iOS, >= 8GB for Android)
-      // 2. Chipset (Need Apple A15+ or Snapdragon 8 Gen 1+)
-      
-      if (Platform.isIOS) {
-        // Assume recent iPhones can run it.
-        return true; 
-      } else if (Platform.isAndroid) {
-        // Assume recent Androids can run it.
-        return true;
+      final simulator = await isSimulator;
+      if (simulator) {
+        // Simulators generally do not have the required Metal/Vulkan GPU setup
+        // or RAM allocation required for 3B parameter models efficiently.
+        return false; 
       }
-      return false; // Not supported on other platforms natively yet
+      
+      if (Platform.isIOS || Platform.isAndroid) {
+        // Assume physical devices can run it for now.
+        return true; 
+      }
+      return false;
     } catch (e) {
       return false;
     }
   }
 
+  Future<bool> canUseSpeechToText() async {
+    // Dictation relies on native Siri/Google Assistant services, which fail on Simulators.
+    final simulator = await isSimulator;
+    return !simulator;
+  }
+
+  Future<ExecutionMode> getRecommendedExecutionMode() async {
+    if (await canRunLocalLlm()) {
+      return ExecutionMode.local;
+    }
+    return ExecutionMode.cloud;
+  }
+
   /// Get a user-friendly message if the device cannot run the local LLM.
   String getUnsupportedMessage() {
-    return 'Your device does not meet the minimum hardware requirements (e.g., sufficient RAM or modern processor) to run Clinical AI locally. Please use the cloud-sync option.';
+    return 'Your device (or Simulator) does not support running Clinical AI locally. The cloud-fallback mode will be used.';
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:get_it/get_it.dart';
+import 'package:doctor_app/core/services/device_capability_service.dart';
 import '../cubit/model_manager_cubit.dart';
 
 class ModelManagerPage extends StatelessWidget {
@@ -9,7 +11,9 @@ class ModelManagerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => ModelManagerCubit()..checkModelExists(),
+      create: (context) => ModelManagerCubit(
+        capabilityService: GetIt.I<DeviceCapabilityService>(),
+      )..checkModelExists(),
       child: Scaffold(
         appBar: AppBar(title: const Text('AI Model Manager')),
         body: Center(

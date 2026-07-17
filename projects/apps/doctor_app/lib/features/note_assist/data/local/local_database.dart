@@ -55,9 +55,33 @@ class TranscriptSummaries extends Table {
 @DriftDatabase(tables: [DoctorNotes, Transcripts, TranscriptSummaries])
 class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
+  
+  LocalDatabase.connect(QueryExecutor e) : super(e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (Migrator m) async {
+        await m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 2) {
+          // v1 → v2: Added TranscriptSummaries table.
+          // DoctorNotes and Transcripts tables are unchanged.
+          await m.createTable(transcriptSummaries);
+        }
+      },
+      beforeOpen: (details) async {
+        // Validate schema integrity on every launch.
+        // This ensures foreign keys are enabled and the schema matches
+        // what Drift expects (catches corruption early).
+        await customStatement('PRAGMA foreign_keys = ON');
+      },
+    );
+  }
 }
 
 LazyDatabase _openConnection() {

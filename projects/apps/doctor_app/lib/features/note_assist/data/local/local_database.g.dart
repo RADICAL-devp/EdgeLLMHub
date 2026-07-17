@@ -568,11 +568,27 @@ class $TranscriptsTable extends Transcripts
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
       'created_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _lastModifiedAtMeta =
+      const VerificationMeta('lastModifiedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastModifiedAt =
+      GeneratedColumn<DateTime>('last_modified_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _sourceMeta = const VerificationMeta('source');
   @override
   late final GeneratedColumn<int> source = GeneratedColumn<int>(
       'source', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _isSyncedMeta =
+      const VerificationMeta('isSynced');
+  @override
+  late final GeneratedColumn<bool> isSynced = GeneratedColumn<bool>(
+      'is_synced', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_synced" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         transcriptId,
@@ -581,7 +597,9 @@ class $TranscriptsTable extends Transcripts
         rawText,
         cleanedText,
         createdAt,
-        source
+        lastModifiedAt,
+        source,
+        isSynced
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -633,11 +651,21 @@ class $TranscriptsTable extends Transcripts
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('last_modified_at')) {
+      context.handle(
+          _lastModifiedAtMeta,
+          lastModifiedAt.isAcceptableOrUnknown(
+              data['last_modified_at']!, _lastModifiedAtMeta));
+    }
     if (data.containsKey('source')) {
       context.handle(_sourceMeta,
           source.isAcceptableOrUnknown(data['source']!, _sourceMeta));
     } else if (isInserting) {
       context.missing(_sourceMeta);
+    }
+    if (data.containsKey('is_synced')) {
+      context.handle(_isSyncedMeta,
+          isSynced.isAcceptableOrUnknown(data['is_synced']!, _isSyncedMeta));
     }
     return context;
   }
@@ -660,8 +688,12 @@ class $TranscriptsTable extends Transcripts
           .read(DriftSqlType.string, data['${effectivePrefix}cleaned_text']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      lastModifiedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}last_modified_at']),
       source: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}source'])!,
+      isSynced: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_synced'])!,
     );
   }
 
@@ -679,7 +711,9 @@ class TranscriptEntity extends DataClass
   final String rawText;
   final String? cleanedText;
   final DateTime createdAt;
+  final DateTime? lastModifiedAt;
   final int source;
+  final bool isSynced;
   const TranscriptEntity(
       {required this.transcriptId,
       required this.consultationId,
@@ -687,7 +721,9 @@ class TranscriptEntity extends DataClass
       required this.rawText,
       this.cleanedText,
       required this.createdAt,
-      required this.source});
+      this.lastModifiedAt,
+      required this.source,
+      required this.isSynced});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -699,7 +735,11 @@ class TranscriptEntity extends DataClass
       map['cleaned_text'] = Variable<String>(cleanedText);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || lastModifiedAt != null) {
+      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
+    }
     map['source'] = Variable<int>(source);
+    map['is_synced'] = Variable<bool>(isSynced);
     return map;
   }
 
@@ -713,7 +753,11 @@ class TranscriptEntity extends DataClass
           ? const Value.absent()
           : Value(cleanedText),
       createdAt: Value(createdAt),
+      lastModifiedAt: lastModifiedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastModifiedAt),
       source: Value(source),
+      isSynced: Value(isSynced),
     );
   }
 
@@ -727,7 +771,9 @@ class TranscriptEntity extends DataClass
       rawText: serializer.fromJson<String>(json['rawText']),
       cleanedText: serializer.fromJson<String?>(json['cleanedText']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastModifiedAt: serializer.fromJson<DateTime?>(json['lastModifiedAt']),
       source: serializer.fromJson<int>(json['source']),
+      isSynced: serializer.fromJson<bool>(json['isSynced']),
     );
   }
   @override
@@ -740,7 +786,9 @@ class TranscriptEntity extends DataClass
       'rawText': serializer.toJson<String>(rawText),
       'cleanedText': serializer.toJson<String?>(cleanedText),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastModifiedAt': serializer.toJson<DateTime?>(lastModifiedAt),
       'source': serializer.toJson<int>(source),
+      'isSynced': serializer.toJson<bool>(isSynced),
     };
   }
 
@@ -751,7 +799,9 @@ class TranscriptEntity extends DataClass
           String? rawText,
           Value<String?> cleanedText = const Value.absent(),
           DateTime? createdAt,
-          int? source}) =>
+          Value<DateTime?> lastModifiedAt = const Value.absent(),
+          int? source,
+          bool? isSynced}) =>
       TranscriptEntity(
         transcriptId: transcriptId ?? this.transcriptId,
         consultationId: consultationId ?? this.consultationId,
@@ -759,7 +809,10 @@ class TranscriptEntity extends DataClass
         rawText: rawText ?? this.rawText,
         cleanedText: cleanedText.present ? cleanedText.value : this.cleanedText,
         createdAt: createdAt ?? this.createdAt,
+        lastModifiedAt:
+            lastModifiedAt.present ? lastModifiedAt.value : this.lastModifiedAt,
         source: source ?? this.source,
+        isSynced: isSynced ?? this.isSynced,
       );
   TranscriptEntity copyWithCompanion(TranscriptsCompanion data) {
     return TranscriptEntity(
@@ -774,7 +827,11 @@ class TranscriptEntity extends DataClass
       cleanedText:
           data.cleanedText.present ? data.cleanedText.value : this.cleanedText,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastModifiedAt: data.lastModifiedAt.present
+          ? data.lastModifiedAt.value
+          : this.lastModifiedAt,
       source: data.source.present ? data.source.value : this.source,
+      isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
     );
   }
 
@@ -787,14 +844,16 @@ class TranscriptEntity extends DataClass
           ..write('rawText: $rawText, ')
           ..write('cleanedText: $cleanedText, ')
           ..write('createdAt: $createdAt, ')
-          ..write('source: $source')
+          ..write('lastModifiedAt: $lastModifiedAt, ')
+          ..write('source: $source, ')
+          ..write('isSynced: $isSynced')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(transcriptId, consultationId, doctorId,
-      rawText, cleanedText, createdAt, source);
+      rawText, cleanedText, createdAt, lastModifiedAt, source, isSynced);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -805,7 +864,9 @@ class TranscriptEntity extends DataClass
           other.rawText == this.rawText &&
           other.cleanedText == this.cleanedText &&
           other.createdAt == this.createdAt &&
-          other.source == this.source);
+          other.lastModifiedAt == this.lastModifiedAt &&
+          other.source == this.source &&
+          other.isSynced == this.isSynced);
 }
 
 class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
@@ -815,7 +876,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
   final Value<String> rawText;
   final Value<String?> cleanedText;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> lastModifiedAt;
   final Value<int> source;
+  final Value<bool> isSynced;
   final Value<int> rowid;
   const TranscriptsCompanion({
     this.transcriptId = const Value.absent(),
@@ -824,7 +887,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     this.rawText = const Value.absent(),
     this.cleanedText = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.lastModifiedAt = const Value.absent(),
     this.source = const Value.absent(),
+    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TranscriptsCompanion.insert({
@@ -834,7 +899,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     required String rawText,
     this.cleanedText = const Value.absent(),
     required DateTime createdAt,
+    this.lastModifiedAt = const Value.absent(),
     required int source,
+    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : transcriptId = Value(transcriptId),
         consultationId = Value(consultationId),
@@ -849,7 +916,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     Expression<String>? rawText,
     Expression<String>? cleanedText,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastModifiedAt,
     Expression<int>? source,
+    Expression<bool>? isSynced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -859,7 +928,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
       if (rawText != null) 'raw_text': rawText,
       if (cleanedText != null) 'cleaned_text': cleanedText,
       if (createdAt != null) 'created_at': createdAt,
+      if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
       if (source != null) 'source': source,
+      if (isSynced != null) 'is_synced': isSynced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -871,7 +942,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
       Value<String>? rawText,
       Value<String?>? cleanedText,
       Value<DateTime>? createdAt,
+      Value<DateTime?>? lastModifiedAt,
       Value<int>? source,
+      Value<bool>? isSynced,
       Value<int>? rowid}) {
     return TranscriptsCompanion(
       transcriptId: transcriptId ?? this.transcriptId,
@@ -880,7 +953,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
       rawText: rawText ?? this.rawText,
       cleanedText: cleanedText ?? this.cleanedText,
       createdAt: createdAt ?? this.createdAt,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       source: source ?? this.source,
+      isSynced: isSynced ?? this.isSynced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -906,8 +981,14 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (lastModifiedAt.present) {
+      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
+    }
     if (source.present) {
       map['source'] = Variable<int>(source.value);
+    }
+    if (isSynced.present) {
+      map['is_synced'] = Variable<bool>(isSynced.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -924,7 +1005,9 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
           ..write('rawText: $rawText, ')
           ..write('cleanedText: $cleanedText, ')
           ..write('createdAt: $createdAt, ')
+          ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('source: $source, ')
+          ..write('isSynced: $isSynced, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -980,6 +1063,22 @@ class $TranscriptSummariesTable extends TranscriptSummaries
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
       'created_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _lastModifiedAtMeta =
+      const VerificationMeta('lastModifiedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastModifiedAt =
+      GeneratedColumn<DateTime>('last_modified_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _isSyncedMeta =
+      const VerificationMeta('isSynced');
+  @override
+  late final GeneratedColumn<bool> isSynced = GeneratedColumn<bool>(
+      'is_synced', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_synced" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         consultationId,
@@ -988,7 +1087,9 @@ class $TranscriptSummariesTable extends TranscriptSummaries
         executiveSummary,
         contextEnrichedSummaryJson,
         doctorNoteJson,
-        createdAt
+        createdAt,
+        lastModifiedAt,
+        isSynced
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1046,6 +1147,16 @@ class $TranscriptSummariesTable extends TranscriptSummaries
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('last_modified_at')) {
+      context.handle(
+          _lastModifiedAtMeta,
+          lastModifiedAt.isAcceptableOrUnknown(
+              data['last_modified_at']!, _lastModifiedAtMeta));
+    }
+    if (data.containsKey('is_synced')) {
+      context.handle(_isSyncedMeta,
+          isSynced.isAcceptableOrUnknown(data['is_synced']!, _isSyncedMeta));
+    }
     return context;
   }
 
@@ -1072,6 +1183,10 @@ class $TranscriptSummariesTable extends TranscriptSummaries
           DriftSqlType.string, data['${effectivePrefix}doctor_note_json']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      lastModifiedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}last_modified_at']),
+      isSynced: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_synced'])!,
     );
   }
 
@@ -1090,6 +1205,8 @@ class TranscriptSummaryEntity extends DataClass
   final String? contextEnrichedSummaryJson;
   final String? doctorNoteJson;
   final DateTime createdAt;
+  final DateTime? lastModifiedAt;
+  final bool isSynced;
   const TranscriptSummaryEntity(
       {required this.consultationId,
       required this.doctorId,
@@ -1097,7 +1214,9 @@ class TranscriptSummaryEntity extends DataClass
       this.executiveSummary,
       this.contextEnrichedSummaryJson,
       this.doctorNoteJson,
-      required this.createdAt});
+      required this.createdAt,
+      this.lastModifiedAt,
+      required this.isSynced});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1117,6 +1236,10 @@ class TranscriptSummaryEntity extends DataClass
       map['doctor_note_json'] = Variable<String>(doctorNoteJson);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || lastModifiedAt != null) {
+      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
+    }
+    map['is_synced'] = Variable<bool>(isSynced);
     return map;
   }
 
@@ -1138,6 +1261,10 @@ class TranscriptSummaryEntity extends DataClass
           ? const Value.absent()
           : Value(doctorNoteJson),
       createdAt: Value(createdAt),
+      lastModifiedAt: lastModifiedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastModifiedAt),
+      isSynced: Value(isSynced),
     );
   }
 
@@ -1154,6 +1281,8 @@ class TranscriptSummaryEntity extends DataClass
           serializer.fromJson<String?>(json['contextEnrichedSummaryJson']),
       doctorNoteJson: serializer.fromJson<String?>(json['doctorNoteJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastModifiedAt: serializer.fromJson<DateTime?>(json['lastModifiedAt']),
+      isSynced: serializer.fromJson<bool>(json['isSynced']),
     );
   }
   @override
@@ -1169,6 +1298,8 @@ class TranscriptSummaryEntity extends DataClass
           serializer.toJson<String?>(contextEnrichedSummaryJson),
       'doctorNoteJson': serializer.toJson<String?>(doctorNoteJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastModifiedAt': serializer.toJson<DateTime?>(lastModifiedAt),
+      'isSynced': serializer.toJson<bool>(isSynced),
     };
   }
 
@@ -1179,7 +1310,9 @@ class TranscriptSummaryEntity extends DataClass
           Value<String?> executiveSummary = const Value.absent(),
           Value<String?> contextEnrichedSummaryJson = const Value.absent(),
           Value<String?> doctorNoteJson = const Value.absent(),
-          DateTime? createdAt}) =>
+          DateTime? createdAt,
+          Value<DateTime?> lastModifiedAt = const Value.absent(),
+          bool? isSynced}) =>
       TranscriptSummaryEntity(
         consultationId: consultationId ?? this.consultationId,
         doctorId: doctorId ?? this.doctorId,
@@ -1195,6 +1328,9 @@ class TranscriptSummaryEntity extends DataClass
         doctorNoteJson:
             doctorNoteJson.present ? doctorNoteJson.value : this.doctorNoteJson,
         createdAt: createdAt ?? this.createdAt,
+        lastModifiedAt:
+            lastModifiedAt.present ? lastModifiedAt.value : this.lastModifiedAt,
+        isSynced: isSynced ?? this.isSynced,
       );
   TranscriptSummaryEntity copyWithCompanion(TranscriptSummariesCompanion data) {
     return TranscriptSummaryEntity(
@@ -1215,6 +1351,10 @@ class TranscriptSummaryEntity extends DataClass
           ? data.doctorNoteJson.value
           : this.doctorNoteJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastModifiedAt: data.lastModifiedAt.present
+          ? data.lastModifiedAt.value
+          : this.lastModifiedAt,
+      isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
     );
   }
 
@@ -1227,7 +1367,9 @@ class TranscriptSummaryEntity extends DataClass
           ..write('executiveSummary: $executiveSummary, ')
           ..write('contextEnrichedSummaryJson: $contextEnrichedSummaryJson, ')
           ..write('doctorNoteJson: $doctorNoteJson, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastModifiedAt: $lastModifiedAt, ')
+          ..write('isSynced: $isSynced')
           ..write(')'))
         .toString();
   }
@@ -1240,7 +1382,9 @@ class TranscriptSummaryEntity extends DataClass
       executiveSummary,
       contextEnrichedSummaryJson,
       doctorNoteJson,
-      createdAt);
+      createdAt,
+      lastModifiedAt,
+      isSynced);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1251,7 +1395,9 @@ class TranscriptSummaryEntity extends DataClass
           other.executiveSummary == this.executiveSummary &&
           other.contextEnrichedSummaryJson == this.contextEnrichedSummaryJson &&
           other.doctorNoteJson == this.doctorNoteJson &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.lastModifiedAt == this.lastModifiedAt &&
+          other.isSynced == this.isSynced);
 }
 
 class TranscriptSummariesCompanion
@@ -1263,6 +1409,8 @@ class TranscriptSummariesCompanion
   final Value<String?> contextEnrichedSummaryJson;
   final Value<String?> doctorNoteJson;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> lastModifiedAt;
+  final Value<bool> isSynced;
   final Value<int> rowid;
   const TranscriptSummariesCompanion({
     this.consultationId = const Value.absent(),
@@ -1272,6 +1420,8 @@ class TranscriptSummariesCompanion
     this.contextEnrichedSummaryJson = const Value.absent(),
     this.doctorNoteJson = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.lastModifiedAt = const Value.absent(),
+    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TranscriptSummariesCompanion.insert({
@@ -1282,6 +1432,8 @@ class TranscriptSummariesCompanion
     this.contextEnrichedSummaryJson = const Value.absent(),
     this.doctorNoteJson = const Value.absent(),
     required DateTime createdAt,
+    this.lastModifiedAt = const Value.absent(),
+    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : consultationId = Value(consultationId),
         doctorId = Value(doctorId),
@@ -1294,6 +1446,8 @@ class TranscriptSummariesCompanion
     Expression<String>? contextEnrichedSummaryJson,
     Expression<String>? doctorNoteJson,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastModifiedAt,
+    Expression<bool>? isSynced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1306,6 +1460,8 @@ class TranscriptSummariesCompanion
         'context_enriched_summary_json': contextEnrichedSummaryJson,
       if (doctorNoteJson != null) 'doctor_note_json': doctorNoteJson,
       if (createdAt != null) 'created_at': createdAt,
+      if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
+      if (isSynced != null) 'is_synced': isSynced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1318,6 +1474,8 @@ class TranscriptSummariesCompanion
       Value<String?>? contextEnrichedSummaryJson,
       Value<String?>? doctorNoteJson,
       Value<DateTime>? createdAt,
+      Value<DateTime?>? lastModifiedAt,
+      Value<bool>? isSynced,
       Value<int>? rowid}) {
     return TranscriptSummariesCompanion(
       consultationId: consultationId ?? this.consultationId,
@@ -1329,6 +1487,8 @@ class TranscriptSummariesCompanion
           contextEnrichedSummaryJson ?? this.contextEnrichedSummaryJson,
       doctorNoteJson: doctorNoteJson ?? this.doctorNoteJson,
       createdAt: createdAt ?? this.createdAt,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
+      isSynced: isSynced ?? this.isSynced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1359,6 +1519,12 @@ class TranscriptSummariesCompanion
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (lastModifiedAt.present) {
+      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
+    }
+    if (isSynced.present) {
+      map['is_synced'] = Variable<bool>(isSynced.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1375,6 +1541,8 @@ class TranscriptSummariesCompanion
           ..write('contextEnrichedSummaryJson: $contextEnrichedSummaryJson, ')
           ..write('doctorNoteJson: $doctorNoteJson, ')
           ..write('createdAt: $createdAt, ')
+          ..write('lastModifiedAt: $lastModifiedAt, ')
+          ..write('isSynced: $isSynced, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1657,7 +1825,9 @@ typedef $$TranscriptsTableCreateCompanionBuilder = TranscriptsCompanion
   required String rawText,
   Value<String?> cleanedText,
   required DateTime createdAt,
+  Value<DateTime?> lastModifiedAt,
   required int source,
+  Value<bool> isSynced,
   Value<int> rowid,
 });
 typedef $$TranscriptsTableUpdateCompanionBuilder = TranscriptsCompanion
@@ -1668,7 +1838,9 @@ typedef $$TranscriptsTableUpdateCompanionBuilder = TranscriptsCompanion
   Value<String> rawText,
   Value<String?> cleanedText,
   Value<DateTime> createdAt,
+  Value<DateTime?> lastModifiedAt,
   Value<int> source,
+  Value<bool> isSynced,
   Value<int> rowid,
 });
 
@@ -1700,8 +1872,15 @@ class $$TranscriptsTableFilterComposer
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<DateTime> get lastModifiedAt => $composableBuilder(
+      column: $table.lastModifiedAt,
+      builder: (column) => ColumnFilters(column));
+
   ColumnFilters<int> get source => $composableBuilder(
       column: $table.source, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnFilters(column));
 }
 
 class $$TranscriptsTableOrderingComposer
@@ -1733,8 +1912,15 @@ class $$TranscriptsTableOrderingComposer
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
+      column: $table.lastModifiedAt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get source => $composableBuilder(
       column: $table.source, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnOrderings(column));
 }
 
 class $$TranscriptsTableAnnotationComposer
@@ -1764,8 +1950,14 @@ class $$TranscriptsTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get lastModifiedAt => $composableBuilder(
+      column: $table.lastModifiedAt, builder: (column) => column);
+
   GeneratedColumn<int> get source =>
       $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<bool> get isSynced =>
+      $composableBuilder(column: $table.isSynced, builder: (column) => column);
 }
 
 class $$TranscriptsTableTableManager extends RootTableManager<
@@ -1800,7 +1992,9 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             Value<String> rawText = const Value.absent(),
             Value<String?> cleanedText = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime?> lastModifiedAt = const Value.absent(),
             Value<int> source = const Value.absent(),
+            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptsCompanion(
@@ -1810,7 +2004,9 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             rawText: rawText,
             cleanedText: cleanedText,
             createdAt: createdAt,
+            lastModifiedAt: lastModifiedAt,
             source: source,
+            isSynced: isSynced,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -1820,7 +2016,9 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             required String rawText,
             Value<String?> cleanedText = const Value.absent(),
             required DateTime createdAt,
+            Value<DateTime?> lastModifiedAt = const Value.absent(),
             required int source,
+            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptsCompanion.insert(
@@ -1830,7 +2028,9 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             rawText: rawText,
             cleanedText: cleanedText,
             createdAt: createdAt,
+            lastModifiedAt: lastModifiedAt,
             source: source,
+            isSynced: isSynced,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -1864,6 +2064,8 @@ typedef $$TranscriptSummariesTableCreateCompanionBuilder
   Value<String?> contextEnrichedSummaryJson,
   Value<String?> doctorNoteJson,
   required DateTime createdAt,
+  Value<DateTime?> lastModifiedAt,
+  Value<bool> isSynced,
   Value<int> rowid,
 });
 typedef $$TranscriptSummariesTableUpdateCompanionBuilder
@@ -1875,6 +2077,8 @@ typedef $$TranscriptSummariesTableUpdateCompanionBuilder
   Value<String?> contextEnrichedSummaryJson,
   Value<String?> doctorNoteJson,
   Value<DateTime> createdAt,
+  Value<DateTime?> lastModifiedAt,
+  Value<bool> isSynced,
   Value<int> rowid,
 });
 
@@ -1912,6 +2116,13 @@ class $$TranscriptSummariesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastModifiedAt => $composableBuilder(
+      column: $table.lastModifiedAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnFilters(column));
 }
 
 class $$TranscriptSummariesTableOrderingComposer
@@ -1948,6 +2159,13 @@ class $$TranscriptSummariesTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
+      column: $table.lastModifiedAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnOrderings(column));
 }
 
 class $$TranscriptSummariesTableAnnotationComposer
@@ -1979,6 +2197,12 @@ class $$TranscriptSummariesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastModifiedAt => $composableBuilder(
+      column: $table.lastModifiedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isSynced =>
+      $composableBuilder(column: $table.isSynced, builder: (column) => column);
 }
 
 class $$TranscriptSummariesTableTableManager extends RootTableManager<
@@ -2018,6 +2242,8 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             Value<String?> contextEnrichedSummaryJson = const Value.absent(),
             Value<String?> doctorNoteJson = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime?> lastModifiedAt = const Value.absent(),
+            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptSummariesCompanion(
@@ -2028,6 +2254,8 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             contextEnrichedSummaryJson: contextEnrichedSummaryJson,
             doctorNoteJson: doctorNoteJson,
             createdAt: createdAt,
+            lastModifiedAt: lastModifiedAt,
+            isSynced: isSynced,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -2038,6 +2266,8 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             Value<String?> contextEnrichedSummaryJson = const Value.absent(),
             Value<String?> doctorNoteJson = const Value.absent(),
             required DateTime createdAt,
+            Value<DateTime?> lastModifiedAt = const Value.absent(),
+            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptSummariesCompanion.insert(
@@ -2048,6 +2278,8 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             contextEnrichedSummaryJson: contextEnrichedSummaryJson,
             doctorNoteJson: doctorNoteJson,
             createdAt: createdAt,
+            lastModifiedAt: lastModifiedAt,
+            isSynced: isSynced,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

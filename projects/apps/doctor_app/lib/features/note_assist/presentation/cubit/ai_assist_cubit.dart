@@ -27,20 +27,27 @@ class AiAssistCubit extends Cubit<AiAssistState> {
 
   void _startGenerationStream(Stream<String> stream, String action) {
     _generationSubscription?.cancel();
+    _generationSubscription = null;
     emit(AiAssistGenerating('', action));
-    
+
     _generationSubscription = stream.listen(
       (text) {
-        emit(AiAssistGenerating(text, action));
+        if (!isClosed) {
+          emit(AiAssistGenerating(text, action));
+        }
       },
       onDone: () {
-        if (state is AiAssistGenerating) {
+        if (!isClosed && state is AiAssistGenerating) {
           final current = (state as AiAssistGenerating).currentSuggestion;
           emit(AiAssistSuggestionReady(current, action));
         }
+        _generationSubscription = null;
       },
       onError: (e) {
-        emit(AiAssistError(e.toString()));
+        if (!isClosed) {
+          emit(AiAssistError(e.toString()));
+        }
+        _generationSubscription = null;
       },
     );
   }
