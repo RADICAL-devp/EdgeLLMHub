@@ -10,6 +10,7 @@ import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
+import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Singleton;
 import java.util.List;
 import java.util.Map;
@@ -21,8 +22,10 @@ import org.slf4j.LoggerFactory;
  * In-memory vector store adapter with doctor-specific partitioning via metadata filtering.
  * Each embedding is tagged with a "doctorId" metadata key, and retrieval queries filter by it.
  * This enables incremental, doctor-specific context building.
+ * Only active when clinical.vector-store.type=in-memory.
  */
 @Singleton
+@Requires(property = "clinical.vector-store.type", value = "in-memory")
 public class InMemoryVectorStoreAdapter implements VectorStorePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(InMemoryVectorStoreAdapter.class);

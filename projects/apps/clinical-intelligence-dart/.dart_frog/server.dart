@@ -27,16 +27,16 @@ Future<HttpServer> createServer(InternetAddress address, int port) {
 Handler buildRootHandler() {
   final pipeline = const Pipeline().addMiddleware(middleware.middleware);
   final router = Router()
-    ..mount('/api/v1/clinical-processing', (context) => buildApiV1ClinicalProcessingHandler()(context))
+    ..mount('/', (context) => buildHandler()(context))
     ..mount('/api/v1/transcript-summary/<consultationId>', (context,consultationId,) => buildApiV1TranscriptSummary$consultationIdHandler(consultationId,)(context))
-    ..mount('/', (context) => buildHandler()(context));
+    ..mount('/api/v1/clinical-processing', (context) => buildApiV1ClinicalProcessingHandler()(context));
   return pipeline.addHandler(router);
 }
 
-Handler buildApiV1ClinicalProcessingHandler() {
+Handler buildHandler() {
   final pipeline = const Pipeline();
   final router = Router()
-    ..all('/process', (context) => api_v1_clinical_processing_process.onRequest(context,));
+    ..all('/', (context) => index.onRequest(context,));
   return pipeline.addHandler(router);
 }
 
@@ -47,10 +47,10 @@ Handler buildApiV1TranscriptSummary$consultationIdHandler(String consultationId,
   return pipeline.addHandler(router);
 }
 
-Handler buildHandler() {
+Handler buildApiV1ClinicalProcessingHandler() {
   final pipeline = const Pipeline();
   final router = Router()
-    ..all('/', (context) => index.onRequest(context,));
+    ..all('/process', (context) => api_v1_clinical_processing_process.onRequest(context,));
   return pipeline.addHandler(router);
 }
 

@@ -21,7 +21,7 @@ import 'prompts/clinical_prompts.dart';
 ///   - [temperature]: Generation temperature (default: 0.1 for clinical safety)
 class OllamaLlmAdapter implements LlmPort {
   OllamaLlmAdapter({
-    this.baseUrl = 'http://localhost:11434',
+    this.baseUrl = 'http://127.0.0.1:11435',
     this.model = 'llama3.2',
     this.temperature = 0.1,
   });

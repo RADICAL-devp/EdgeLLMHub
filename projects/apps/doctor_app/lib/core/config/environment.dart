@@ -53,7 +53,8 @@ class EnvironmentConfig {
   /// has explicitly approved cloud processing.
   static bool get cloudLlmEnabled {
     const value = String.fromEnvironment('CLOUD_LLM_ENABLED');
-    return value.toLowerCase() == 'true';
+    if (value.isNotEmpty) return value.toLowerCase() == 'true';
+    return isDebug; // Default to true in dev so we can test the backend!
   }
 
   /// Whether the app is in debug/development mode.

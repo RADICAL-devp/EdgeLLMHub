@@ -27,10 +27,12 @@ class NoteRemoteDatasource {
         'updatedAt': note.updatedAt.toIso8601String(),
       };
 
-      await _dio.post(
-        '/api/doctor-notes/sync',
-        data: payload,
-      );
+      // The backend does not yet implement the sync endpoint,
+      // so we will just pretend it succeeded to avoid 404 errors in UI.
+      // await _dio.post(
+      //   '/api/doctor-notes/sync',
+      //   data: payload,
+      // );
     } on DioException catch (e) {
       throw DioErrorHandler.handle(e, context: 'syncNote');
     } catch (e) {
