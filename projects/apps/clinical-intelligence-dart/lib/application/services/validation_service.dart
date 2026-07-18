@@ -22,6 +22,8 @@ class ValidationService {
     final supportedModes = {
       ProcessingMode.vocabAssist,
       ProcessingMode.cleanTranscript,
+      ProcessingMode.summarize,
+      ProcessingMode.generateDoctorNote,
     };
 
     if (!supportedModes.contains(request.processingMode)) {

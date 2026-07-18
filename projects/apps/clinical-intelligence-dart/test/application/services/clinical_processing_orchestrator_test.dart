@@ -25,6 +25,7 @@ void main() {
         llmPort: llmPort,
         normalizationService: normalizationService,
       ),
+      llmPort: llmPort,
     );
   });
 

@@ -58,6 +58,7 @@ Handler middleware(Handler handler) {
     validationService: validationService,
     terminologyAssistanceService: terminologyAssistanceService,
     transcriptCleanupService: transcriptCleanupService,
+    llmPort: llmPort,
   );
 
   final summaryOrchestrator = SummaryOrchestrator(

@@ -21,11 +21,11 @@ class CloudLlmAdapter implements LlmPort {
     final response = await _post(
       '/api/v1/clinical-processing/process',
       data: {
-        'text': cleanInput,
-        'mode': mode.name,
+        'inputText': cleanInput,
+        'processingMode': mode.name,
       },
     );
-    return response['result'] as String? ?? '';
+    return response['processedText'] as String? ?? '';
   }
 
   @override
