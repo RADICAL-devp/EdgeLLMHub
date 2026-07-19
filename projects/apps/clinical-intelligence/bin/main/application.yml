@@ -1,0 +1,72 @@
+micronaut:
+  application:
+    name: clinical-intelligence
+  server:
+    port: 8080
+    max-request-size: 10485760  # 10MB limit
+
+  router:
+    static-resources:
+      default:
+        paths: "classpath:public"
+        mapping: "/**"
+
+  security:
+    intercept-url-map:
+      - pattern: /
+        http-method: GET
+        access:
+          - isAnonymous()
+      - pattern: /index.html
+        http-method: GET
+        access:
+          - isAnonymous()
+      - pattern: /login
+        http-method: POST
+        access:
+          - isAnonymous()
+    authentication: bearer
+    token:
+      jwt:
+        signatures:
+          secret:
+            generator:
+              secret: "${JWT_SECRET:vErYSeCrEtVaLuEvErYSeCrEtVaLuEvErYSeCrEtVaLuE}"
+
+clinical:
+  llm:
+    provider: openai
+    api-key: "${OPENAI_API_KEY:demo}"
+    api-url: "${OPENAI_API_URL:https://api.openai.com/v1}"
+    model-name: "${LLM_MODEL:gpt-4o-mini}"
+    temperature: 0.1
+    max-tokens: 4000
+
+  vector-store:
+    type: "${VECTOR_STORE_TYPE:in-memory}"  # set to 'qdrant' for production
+    host: "${QDRANT_HOST:localhost}"
+    port: "${QDRANT_PORT:6334}"
+    collection-name: "${QDRANT_COLLECTION:clinical-embeddings}"
+    api-key: "${QDRANT_API_KEY:}"
+    use-tls: "${QDRANT_USE_TLS:false}"
+
+  encryption:
+    # Base64-encoded 32-byte key for AES-256-GCM (dev-only, use KMS in prod)
+    key: "${ENCRYPTION_KEY:dGhpc0lzQTMyQnl0ZUtleUZvckFFUzI1NkdDTSE=}"
+
+  max-payload-bytes: 10485760  # 10MB
+
+  # --- Phase 2: Agora Video Call Transcription ---
+  agora:
+    app-id: "${AGORA_APP_ID:}"
+    app-certificate: "${AGORA_APP_CERTIFICATE:}"
+    customer-id: "${AGORA_CUSTOMER_ID:}"
+    customer-secret: "${AGORA_CUSTOMER_SECRET:}"
+    rtt-region: "${AGORA_RTT_REGION:us}"
+
+  # --- Phase 2: Google Cloud STT & Translate ---
+  google-cloud:
+    project-id: "${GCP_PROJECT_ID:}"
+    location: "${GCP_LOCATION:us-central1}"
+    stt-model: "${GCP_STT_MODEL:chirp}"
+    glossary-id: "${GCP_GLOSSARY_ID:}"

@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# MLC LLM artifacts
+ios/.venv311/
+ios/Llama-*/
+ios/Runner/Llama-*/
+ios/mlc-llm-src/
+ios/mlc-llm/
+

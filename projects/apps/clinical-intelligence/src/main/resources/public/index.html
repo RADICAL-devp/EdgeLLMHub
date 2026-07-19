@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinical Intelligence - Live Note Taker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .pulse { animation: pulse-animation 1.5s infinite; }
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-white shadow-sm py-4 px-6 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-600 p-2 rounded-lg">
+                <i class="fas fa-stethoscope text-white"></i>
+            </div>
+            <h1 class="text-xl font-bold text-gray-900">Clinical Intelligence Engine</h1>
+        </div>
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+            System Online
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex px-6 py-8 gap-6 max-w-7xl mx-auto w-full">
+        <!-- Sidebar Controls -->
+        <aside class="w-80 flex flex-col gap-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="font-semibold text-gray-900 mb-4">Consultation Settings</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Doctor ID</label>
+                        <input type="text" id="doctorId" value="DR-001" class="w-full border-gray-300 rounded-lg shadow-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Patient ID</label>
+                        <input type="text" id="patientId" value="PAT-001" class="w-full border-gray-300 rounded-lg shadow-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Spoken Language</label>
+                        <select id="languageCode" class="w-full border-gray-300 rounded-lg shadow-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500">
+                            <option value="en-IN">English (India)</option>
+                            <option value="hi-IN" selected>Hindi</option>
+                            <option value="ta-IN">Tamil</option>
+                            <option value="te-IN">Telugu</option>
+                            <option value="bn-IN">Bengali</option>
+                            <option value="mr-IN">Marathi</option>
+                            <option value="gu-IN">Gujarati</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-10">
+                <button id="recordBtn" class="w-24 h-24 rounded-full bg-red-100 text-red-600 border-4 border-red-200 flex items-center justify-center transition-all hover:bg-red-200">
+                    <i class="fas fa-microphone text-3xl"></i>
+                </button>
+                <p id="recordStatus" class="mt-4 font-medium text-gray-600">Click to start recording</p>
+                <div id="recordingIndicator" class="hidden text-red-500 text-sm mt-2 font-semibold">
+                    Recording in progress...
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Summary Display -->
+        <section class="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
+            <div class="bg-gray-50 border-b border-gray-100 px-6 py-4 flex justify-between items-center">
+                <h2 class="font-semibold text-gray-900">Clinical Summary</h2>
+                <div id="processingLoader" class="hidden flex items-center gap-3 text-blue-600 text-sm font-medium">
+                    <div class="loader"></div>
+                    Transcribing & Translating via AI...
+                </div>
+            </div>
+
+            <div class="p-8 overflow-y-auto flex-1 bg-gray-50" id="resultsArea">
+                <div class="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+                    <i class="fas fa-clipboard-list text-5xl opacity-50"></i>
+                    <p>No consultation recorded yet.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let jwtToken = null;
+
+        const recordBtn = document.getElementById('recordBtn');
+        const recordStatus = document.getElementById('recordStatus');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const processingLoader = document.getElementById('processingLoader');
+        const resultsArea = document.getElementById('resultsArea');
+
+        // Automatically login to get JWT token
+        async function autoLogin() {
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: "doctor", password: "password" })
+                });
+                const data = await response.json();
+                jwtToken = data.access_token;
+                console.log("Authenticated successfully.");
+            } catch (err) {
+                console.error("Failed to authenticate:", err);
+                alert("Failed to authenticate with backend. Is it running?");
+            }
+        }
+        autoLogin();
+
+        recordBtn.addEventListener('click', async () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.addEventListener("dataavailable", event => {
+                    audioChunks.push(event.data);
+                });
+
+                mediaRecorder.addEventListener("stop", async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    sendToBackend(audioBlob);
+                });
+
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // UI Updates
+                recordBtn.classList.add('pulse', 'bg-red-600', 'text-white', 'border-red-600');
+                recordBtn.classList.remove('bg-red-100', 'text-red-600', 'border-red-200');
+                recordBtn.innerHTML = '<i class="fas fa-stop text-3xl"></i>';
+                recordStatus.textContent = "Recording...";
+                recordingIndicator.classList.remove('hidden');
+
+            } catch (err) {
+                alert("Could not access microphone: " + err);
+            }
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            // Stop all audio tracks
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            
+            isRecording = false;
+
+            // UI Updates
+            recordBtn.classList.remove('pulse', 'bg-red-600', 'text-white', 'border-red-600');
+            recordBtn.classList.add('bg-red-100', 'text-red-600', 'border-red-200');
+            recordBtn.innerHTML = '<i class="fas fa-microphone text-3xl"></i>';
+            recordStatus.textContent = "Click to start recording";
+            recordingIndicator.classList.add('hidden');
+        }
+
+        async function sendToBackend(audioBlob) {
+            if (!jwtToken) {
+                alert("Not authenticated. Please refresh.");
+                return;
+            }
+
+            processingLoader.classList.remove('hidden');
+            resultsArea.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full text-gray-500 space-y-4">
+                    <div class="loader"></div>
+                    <p class="animate-pulse">Analyzing regional audio with Google Cloud Chirp Model...</p>
+                </div>
+            `;
+
+            const formData = new FormData();
+            formData.append("audioFile", audioBlob, "recording.webm");
+            formData.append("languageCode", document.getElementById('languageCode').value);
+            formData.append("doctorId", document.getElementById('doctorId').value);
+            formData.append("patientId", document.getElementById('patientId').value);
+
+            try {
+                const response = await fetch('/api/v1/note-taker/transcribe-and-summarize', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${jwtToken}`
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                renderSummary(data);
+
+            } catch (err) {
+                console.error(err);
+                resultsArea.innerHTML = `
+                    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Error processing consultation: ${err.message}
+                    </div>
+                `;
+            } finally {
+                processingLoader.classList.add('hidden');
+            }
+        }
+
+        function renderSummary(data) {
+            const sum = data.summary;
+            resultsArea.innerHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-6">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <h3 class="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">Chief Complaint</h3>
+                            <p class="text-gray-900 font-medium">${sum.complaint || 'N/A'}</p>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                            <h3 class="text-xs font-semibold text-purple-600 uppercase tracking-wider mb-1">Diagnosis</h3>
+                            <p class="text-gray-900 font-medium">${sum.diagnosis || 'N/A'}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 mb-2 border-b pb-1">Treatment & Advice</h3>
+                        <p class="text-gray-700 whitespace-pre-wrap">${sum.advice || 'N/A'}</p>
+                    </div>
+
+                    ${sum.followUpRequired ? `
+                    <div class="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200 w-fit">
+                        <i class="fas fa-calendar-alt"></i>
+                        <span class="text-sm font-medium">Follow-up Recommended</span>
+                    </div>` : ''}
+                    
+                    <div class="mt-6 pt-4 border-t border-gray-100 flex justify-between text-xs text-gray-400">
+                        <span>Source Language: ${data.sourceLanguageCode}</span>
+                        <span>Doctor: ${data.doctorId} | Patient: ${data.patientId}</span>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
