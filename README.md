@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/java/java-original.svg" width="50" />
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/gradle/gradle-original.svg" width="50" />
-  <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/googlecloud/googlecloud-original.svg" width="50" />
+  <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/amazonwebservices/amazonwebservices-original-wordmark.svg" width="50" />
 </p>
 
 **Core Technologies**
@@ -139,7 +139,7 @@ This is a Gradle multi-project build composed of applications and shared librari
 
 ---
 
-## 🧪 Testing
+## Testing
 
 The repository relies on JUnit 5 and Mockito for robust test coverage.
 
