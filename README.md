@@ -1,4 +1,4 @@
-# 🏥 dev-playground: Clinical Intelligence & Utilities
+# dev-playground: Clinical Intelligence & Utilities
 
 <p align="center">
   A multi-project monorepo housing the <b>Clinical Intelligence API</b>, a high-performance healthcare engine powered by <b>Micronaut</b>, <b>LangChain4J</b>, and <b>Google Cloud AI</b>.
