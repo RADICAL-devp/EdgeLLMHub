@@ -1,0 +1,47 @@
+%% Backend Architecture — Hexagonal (Ports and Adapters) layering
+%% Referenced in: docs/backend.md
+graph TB
+    subgraph API[API Layer]
+        R1[POST /clinical-processing/process]
+        R2[GET /transcript-summary/:id]
+        R3[POST /transcript-summary/:id/regenerate]
+    end
+
+    subgraph APP[Application Layer]
+        O1[ClinicalProcessingOrchestrator]
+        O2[SummaryOrchestrator]
+        S1[SummaryGenerationService]
+        S2[DoctorNoteGenerationService]
+        S3[TranscriptChunkingService]
+    end
+
+    subgraph PORTS[Ports]
+        P1[LlmPort]
+        P2[TranscriptRepository]
+    end
+
+    subgraph INFRA[Infrastructure -- Adapters]
+        A1[OllamaLlmAdapter]
+        A2[StubLlmAdapter]
+        A3[InMemoryTranscriptRepository]
+        A4[InMemorySummaryRepository]
+    end
+
+    R1 --> O1
+    R2 --> O2
+    R3 --> O2
+    O1 --> S1
+    O1 --> S2
+    O2 --> S1
+    S1 --> S3
+    O1 --> P1
+    O2 --> P1
+    O1 --> P2
+    P1 -.implemented by.-> A1
+    P1 -.implemented by.-> A2
+    P2 -.implemented by.-> A3
+    P2 -.implemented by.-> A4
+    A1 --> Ollama[(Ollama)]
+
+    style A3 fill:#f8d7da,stroke:#842029
+    style A4 fill:#f8d7da,stroke:#842029

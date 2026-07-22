@@ -1,0 +1,24 @@
+%% High-Level Architecture — three systems, HTTP boundary between mobile and Dart backend
+%% Referenced in: docs/architecture.md
+graph TB
+    subgraph Mobile[doctor_app — Flutter]
+        Presentation[Presentation: BLoC/Cubit]
+        Domain1[Domain: entities, service interfaces]
+        Data1[Data: Drift local DB, Dio remote, LLM adapters]
+        Presentation --> Domain1 --> Data1
+    end
+
+    subgraph DartBE[clinical-intelligence-dart — Dart Frog]
+        API[API: Dart Frog routes]
+        AppLayer[Application: orchestrators, services]
+        Infra[Infrastructure: Ollama adapter, in-memory repos]
+        API --> AppLayer --> Infra
+    end
+
+    subgraph JavaBE[clinical-intelligence — Micronaut]
+        Ingest[Ingestion: reactive endpoints]
+        Pipeline[Pipeline: STT -> Translate -> LLM structuring -> Vectorize]
+        Ingest --> Pipeline
+    end
+
+    Data1 -->|Dio + REST, not a package dependency| API

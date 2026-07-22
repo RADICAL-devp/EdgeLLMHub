@@ -122,5 +122,3 @@ This is the most important open question in the entire documentation set, and it
 Until this is clarified by the project's maintainers, this documentation set treats `clinical-intelligence` (Java) as an **independently operated system within the same monorepo**, not as a component the mobile app calls or depends on. See [`architecture.md` — Future Architecture](architecture.md#future-architecture) for this listed as an open architectural question.
 
 ---
-
-**Next:** [`docs/security.md`](security.md) — the complete security architecture, across all documented systems.

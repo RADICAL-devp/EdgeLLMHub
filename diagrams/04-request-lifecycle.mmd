@@ -1,0 +1,33 @@
+%% Request Lifecycle — one consultation, mobile UI through to persistence
+%% Referenced in: docs/architecture.md (Data Flow)
+sequenceDiagram
+    participant Doctor
+    participant UI as Flutter UI
+    participant Cubit as NoteEditorCubit
+    participant Hybrid as HybridLlmAdapter
+    participant Native as On-device LLM
+    participant Cloud as CloudLlmAdapter
+    participant Backend as clinical-intelligence-dart
+    participant Ollama
+
+    Doctor->>UI: Tap "Start Consultation"
+    UI->>Cubit: loadOrCreateNote()
+    Doctor->>UI: Speaks consultation
+    UI->>Cubit: updateText(rawSpeech)
+    Cubit->>Hybrid: processText(cleanTranscript)
+    Hybrid->>Native: try Tier 1
+    alt native succeeds
+        Native-->>Cubit: cleaned text (streamed)
+    else native fails
+        Hybrid->>Cloud: try Tier 2
+        Cloud->>Backend: POST /clinical-processing/process
+        Backend->>Ollama: /api/generate
+        Ollama-->>Backend: response
+        Backend-->>Cloud: response
+        Cloud-->>Cubit: cleaned text
+    end
+    Doctor->>UI: Tap "Generate Summary"
+    Cubit->>Hybrid: generateStructuredSummary()
+    Hybrid-->>Cubit: StructuredSummary (7 fields)
+    Cubit->>Cubit: debounced autosave (2s) to Drift
+    Cubit->>Cubit: debounced sync (3s) to backend

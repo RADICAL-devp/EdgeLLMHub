@@ -1,0 +1,19 @@
+%% Security Flow -- current state (red) vs. planned three-layer auth/authz (green)
+%% Referenced in: docs/security.md
+flowchart TD
+    Client[Any HTTP client] --> Route[Dart Frog route]
+
+    Route -.CURRENT STATE: no check.-> Orchestrator1[Orchestrator]
+    Orchestrator1 -.CURRENT STATE: no check.-> Repo1[(In-memory repo<br/>keyed only by consultationId)]
+
+    Route ==PLANNED: Layer 1==> MW[Middleware: OIDC token verification]
+    MW ==PLANNED: Layer 2==> Orchestrator2[Orchestrator: object-level<br/>authorization check]
+    Orchestrator2 ==PLANNED: Layer 3==> Query[Query scoped by<br/>authenticated doctor_id]
+    Query --> DB[(Postgres, future)]
+
+    style Route fill:#f8d7da,stroke:#842029
+    style Orchestrator1 fill:#f8d7da,stroke:#842029
+    style Repo1 fill:#f8d7da,stroke:#842029
+    style MW fill:#d1e7dd,stroke:#0f5132
+    style Orchestrator2 fill:#d1e7dd,stroke:#0f5132
+    style Query fill:#d1e7dd,stroke:#0f5132

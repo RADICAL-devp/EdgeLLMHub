@@ -1,0 +1,10 @@
+%% Scalability Tiers -- bottleneck-driven growth path
+%% Referenced in: docs/scalability.md
+flowchart LR
+    T1["100 users<br/>Bottleneck: data loss on restart<br/>Fix: Postgres"]
+    T2["1,000 users<br/>Bottleneck: Ollama serializes requests<br/>Fix: vLLM + stateless replicas"]
+    T3["100,000 users<br/>Bottleneck: sync HTTP doesn't scale<br/>Fix: async queue, rate limits, read replicas"]
+    T4["1,000,000 users<br/>Bottleneck: single-region DB<br/>Fix: sharding, data residency"]
+    T5["100,000,000 users<br/>Bottleneck: per-request cost compounds<br/>Fix: model cascading, dedicated infra"]
+
+    T1 -->|new bottleneck appears| T2 -->|new bottleneck appears| T3 -->|new bottleneck appears| T4 -->|new bottleneck appears| T5

@@ -1,0 +1,17 @@
+%% Hybrid LLM Routing — three-tier fallback with permanent vs transient failure handling
+%% Referenced in: docs/architecture.md, docs/mobile.md
+flowchart TD
+    Start[processText / generateStructuredSummary] --> T1{Tier 1: Native available?}
+    T1 -->|yes| NativeCall[Call native adapter]
+    NativeCall -->|success| Done1[Return result]
+    NativeCall -->|UnsupportedPlatformException / LlmInitializationException| DisableNative[Disable native for session]
+    NativeCall -->|transient LlmException| T1
+    DisableNative --> T2
+    T1 -->|no| T2{Tier 2: cloudEnabled AND cloud available?}
+    T2 -->|yes| CloudCall[Call CloudLlmAdapter]
+    CloudCall -->|success| Done2[Return result]
+    CloudCall -->|ComplianceException| DisableCloud[Disable cloud for session]
+    CloudCall -->|non-transient NetworkException| DisableCloud
+    DisableCloud --> T3
+    T2 -->|no| T3[Tier 3: Stub -- always succeeds]
+    T3 --> Done3["Return '[OFFLINE MODE]' response"]

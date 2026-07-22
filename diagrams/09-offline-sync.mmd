@@ -1,0 +1,27 @@
+%% Offline Sync -- local-first write path and sync queue behavior
+%% Referenced in: docs/mobile.md, docs/scalability.md (Failure Recovery)
+stateDiagram-v2
+    [*] --> Written: Doctor writes/edits note
+    Written --> LocalDrift: Immediate write to Drift (SQLite)
+    LocalDrift --> AutosaveDebounce: 2s autosave debounce
+    AutosaveDebounce --> Saved: state re-read after async save completes
+    Saved --> SyncDebounce: 3s sync debounce
+    SyncDebounce --> Online: connectivity check
+    Online --> Syncing: enqueue in sync_queue_service
+    Syncing --> Synced: backend accepts
+    Syncing --> Failed: network error
+    Failed --> Syncing: retry (RetryInterceptor, exponential backoff + jitter)
+
+    note right of Syncing
+        Known gap: _pendingNotes is an
+        in-memory List<DoctorNote>.
+        An OS-killed app while offline
+        loses queue state (notes remain
+        safe in Drift, but the app forgets
+        they still need to sync).
+        Planned fix: persist queue as a
+        Drift table with a status enum.
+    end note
+
+    Online --> Offline: no connectivity
+    Offline --> Online: connectivity restored
