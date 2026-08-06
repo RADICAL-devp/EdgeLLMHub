@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:clinical_intelligence_dart/api/dto/transcript_summary_request.dart';
 import 'package:clinical_intelligence_dart/application/services/summary_orchestrator.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
+import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// GET /api/v1/transcript-summary/[consultationId]
@@ -17,10 +18,13 @@ Future<Response> onRequest(
   String consultationId,
 ) async {
   if (consultationId == 'generate') {
-    return _handleGenerate(context);
+    return requireAuth(_handleGenerate, scopes: ['clinical:write'])(context);
   }
 
-  return _handleGetSummary(context, consultationId);
+  return requireAuth(
+    (ctx) => _handleGetSummary(ctx, consultationId),
+    scopes: ['clinical:read'],
+  )(context);
 }
 
 /// POST /api/v1/transcript-summary/generate

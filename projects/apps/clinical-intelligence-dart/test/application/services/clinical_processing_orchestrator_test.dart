@@ -4,7 +4,7 @@ import 'package:clinical_intelligence_dart/application/services/terminology_assi
 import 'package:clinical_intelligence_dart/application/services/transcript_cleanup_service.dart';
 import 'package:clinical_intelligence_dart/application/services/transcript_normalization_service.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
-import 'package:clinical_intelligence_dart/core/models/processing_mode.dart';
+import 'package:shared_models/shared_models.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/stub_llm_adapter.dart';
 import 'package:test/test.dart';
 
@@ -60,22 +60,23 @@ void main() {
       expect(response.generatedAt, isNotEmpty);
     });
 
+    test('processes SUMMARIZE mode successfully (now supported)', () async {
+      final request = ClinicalProcessingRequest(
+        inputText: 'Patient presents with headache and nausea.',
+        processingMode: ProcessingMode.summarize,
+      );
+
+      final response = await orchestrator.process(request);
+
+      expect(response.processedText, isNotEmpty);
+      expect(response.processingMode, equals(ProcessingMode.summarize));
+      expect(response.generatedAt, isNotEmpty);
+    });
+
     test('rejects empty input', () async {
       final request = ClinicalProcessingRequest(
         inputText: '',
         processingMode: ProcessingMode.vocabAssist,
-      );
-
-      expect(
-        () => orchestrator.process(request),
-        throwsA(isA<ValidationException>()),
-      );
-    });
-
-    test('rejects unsupported mode', () async {
-      final request = ClinicalProcessingRequest(
-        inputText: 'Some clinical text.',
-        processingMode: ProcessingMode.summarize,
       );
 
       expect(

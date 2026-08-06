@@ -1,5 +1,5 @@
-import '../../application/ports/transcript_repository.dart';
-import '../../core/models/consultation_transcript.dart';
+import 'package:clinical_intelligence_dart/application/ports/transcript_repository.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// In-memory implementation of [TranscriptRepository].
 ///

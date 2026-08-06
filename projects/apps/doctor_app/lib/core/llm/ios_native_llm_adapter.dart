@@ -26,10 +26,16 @@ import 'prompts/clinical_prompts.dart';
 ///   EventChannel('com.example.clinical/llm_stream'):
 ///     - Emits String tokens, ends with '[DONE]' sentinel
 class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
-  static const _methodChannel =
-      MethodChannel('com.example.clinical/llm');
-  static const _streamChannel =
-      EventChannel('com.example.clinical/llm_stream');
+  static const _codec = StandardMethodCodec();
+  static const _methodChannel = MethodChannel(
+    'com.example.clinical/llm',
+    _codec,
+  );
+  static const _streamChannel = EventChannel(
+    'com.example.clinical/llm_stream',
+    _codec,
+  );
+  static const _generationTimeout = Duration(seconds: 20);
 
   @override
   Future<String> processText(String input, ProcessingMode mode) async {
@@ -80,16 +86,13 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
   /// 2. Listens to the EventChannel for token-by-token output.
   /// 3. Completes when '[DONE]' sentinel is received.
   Future<String> _generate(String prompt) async {
+    StreamSubscription? subscription;
+
     try {
       final completer = Completer<String>();
       final buffer = StringBuffer();
 
-      // Start generation on the native side
-      await _methodChannel.invokeMethod('generateStream', {
-        'prompt': prompt,
-      });
-
-      StreamSubscription? subscription;
+      // Subscribe first so native has an EventSink before generation starts.
       subscription = _streamChannel.receiveBroadcastStream().listen(
         (event) {
           if (event is String) {
@@ -121,7 +124,20 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
         },
       );
 
-      return completer.future;
+      await _methodChannel
+          .invokeMethod<void>('generateStream', {'prompt': prompt})
+          .timeout(_generationTimeout);
+
+      return await completer.future.timeout(_generationTimeout);
+    } on TimeoutException catch (e) {
+      await subscription?.cancel();
+      await _cancelNativeGeneration();
+      throw LlmException(
+        'MLC LLM inference timed out after '
+        '${_generationTimeout.inSeconds}s.',
+        cause: e,
+        provider: LlmProvider.mlc,
+      );
     } on PlatformException catch (e) {
       throw LlmException(
         'MLC LLM platform error: ${e.message}',
@@ -142,6 +158,8 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
         cause: e,
         provider: LlmProvider.mlc,
       );
+    } finally {
+      await subscription?.cancel();
     }
   }
 
@@ -159,7 +177,16 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
   /// Initialize the MLC engine on the native side.
   Future<void> initialize() async {
     try {
-      await _methodChannel.invokeMethod<void>('initialize');
+      await _methodChannel
+          .invokeMethod<void>('initialize')
+          .timeout(_generationTimeout);
+    } on TimeoutException catch (e) {
+      throw LlmInitializationException(
+        'Timed out initializing MLC engine after '
+        '${_generationTimeout.inSeconds}s.',
+        cause: e,
+        provider: LlmProvider.mlc,
+      );
     } on PlatformException catch (e) {
       throw LlmInitializationException(
         'Failed to initialize MLC engine: ${e.message}',
@@ -173,5 +200,26 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
         provider: LlmProvider.mlc,
       );
     }
+  }
+
+  /// Cancel the active native generation, if one is running.
+  Future<void> cancelActiveGeneration() async {
+    await _cancelNativeGeneration();
+  }
+
+  Future<void> _cancelNativeGeneration() async {
+    try {
+      await _methodChannel.invokeMethod<void>('cancel');
+    } catch (_) {
+      // Best effort. The caller will surface the original error.
+    }
+  }
+
+  /// Return native model metadata exposed by MLCLLMHandler.
+  Future<Map<String, Object?>> getModelInfo() async {
+    final result = await _methodChannel
+        .invokeMapMethod<String, Object?>('getModelInfo')
+        .timeout(_generationTimeout);
+    return result ?? const <String, Object?>{};
   }
 }

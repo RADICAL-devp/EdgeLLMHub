@@ -1,4 +1,4 @@
-import '../../core/models/processing_mode.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Response DTO for the generic clinical text processing endpoint.
 class ClinicalProcessingResponse {

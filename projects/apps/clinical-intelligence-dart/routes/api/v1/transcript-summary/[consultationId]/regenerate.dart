@@ -3,12 +3,23 @@ import 'dart:io';
 
 import 'package:clinical_intelligence_dart/application/services/summary_orchestrator.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
+import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// POST /api/v1/transcript-summary/[consultationId]/regenerate
 ///
 /// Regenerate a summary for an existing transcript (Milestone 2).
 Future<Response> onRequest(
+  RequestContext context,
+  String consultationId,
+) async {
+  return requireAuth(_handleRegenerate, scopes: ['clinical:write'])(
+    context,
+    consultationId,
+  );
+}
+
+Future<Response> _handleRegenerate(
   RequestContext context,
   String consultationId,
 ) async {

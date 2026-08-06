@@ -1,4 +1,4 @@
-import '../../core/models/transcript_summary_bundle.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Port for transcript summary persistence.
 abstract class TranscriptSummaryRepository {

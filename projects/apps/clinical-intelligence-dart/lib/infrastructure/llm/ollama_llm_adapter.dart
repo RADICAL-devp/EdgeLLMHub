@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../application/ports/llm_port.dart';
-import '../../core/models/processing_mode.dart';
-import '../../core/models/structured_summary.dart';
+import 'package:shared_models/shared_models.dart';
 import 'prompts/clinical_prompts.dart';
 
 /// Ollama LLM adapter for on-device model execution.

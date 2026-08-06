@@ -1,4 +1,4 @@
-import '../../core/models/consultation_transcript.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Port for transcript persistence.
 ///

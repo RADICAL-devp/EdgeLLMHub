@@ -1,4 +1,4 @@
-import '../../core/models/consultation_mode.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Request DTO for the transcript summary endpoint (Milestone 2).
 class TranscriptSummaryRequest {

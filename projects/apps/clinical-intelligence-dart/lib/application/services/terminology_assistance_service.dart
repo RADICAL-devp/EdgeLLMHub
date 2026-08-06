@@ -1,5 +1,5 @@
 import '../ports/llm_port.dart';
-import '../../core/models/processing_mode.dart';
+import 'package:shared_models/shared_models.dart';
 import 'transcript_normalization_service.dart';
 
 /// VOCAB_ASSIST processing service.

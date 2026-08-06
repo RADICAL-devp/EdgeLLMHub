@@ -1,9 +1,9 @@
 import 'package:uuid/uuid.dart';
+import 'package:shared_models/shared_models.dart';
 
 import '../../api/dto/transcript_summary_request.dart';
 import '../../api/dto/transcript_summary_response.dart';
-import '../../core/models/consultation_transcript.dart';
-import '../../core/models/transcript_summary_bundle.dart';
+import '../../application/ports/vector_store_port.dart';
 import '../ports/transcript_repository.dart';
 import '../ports/transcript_summary_repository.dart';
 import 'doctor_note_generation_service.dart';
@@ -22,8 +22,9 @@ import 'validation_service.dart';
 ///   4. Chunk transcript if needed
 ///   5. Run LLM generation (structured summary, executive summary, doctor note)
 ///   6. Aggregate chunk outputs if chunked
-///   7. Persist summary bundle
-///   8. Return response
+///   7. Generate embeddings for vector store
+///   8. Persist summary bundle
+///   9. Return response
 ///
 /// Milestone 2: Partially implemented / scaffolded.
 class SummaryOrchestrator {
@@ -36,6 +37,8 @@ class SummaryOrchestrator {
     required this.aggregationService,
     required this.transcriptRepository,
     required this.summaryRepository,
+    required this.vectorStore,
+    required this.llmPort,
   });
 
   final ValidationService validationService;
@@ -46,6 +49,8 @@ class SummaryOrchestrator {
   final TranscriptSummaryAggregationService aggregationService;
   final TranscriptRepository transcriptRepository;
   final TranscriptSummaryRepository summaryRepository;
+  final VectorStorePort vectorStore;
+  final LlmPort llmPort;
 
   /// Generate a full summary bundle from a transcript.
   Future<TranscriptSummaryResponse> generateSummary(
@@ -94,7 +99,15 @@ class SummaryOrchestrator {
       doctorId: request.doctorId,
     );
 
-    // 7. Persist summary bundle
+    // 7. Generate embeddings and store in vector store for context-enriched summaries
+    await _storeEmbeddings(
+      consultationId: request.consultationId,
+      transcriptId: transcriptId,
+      transcriptText: normalizedText,
+      structuredSummary: structuredSummary,
+    );
+
+    // 8. Persist summary bundle
     final generatedAt = DateTime.now().toUtc().toIso8601String();
     final bundle = TranscriptSummaryBundle(
       consultationId: request.consultationId,
@@ -106,7 +119,7 @@ class SummaryOrchestrator {
     );
     await summaryRepository.save(bundle);
 
-    // 8. Return response
+    // 9. Return response
     return TranscriptSummaryResponse(
       consultationId: request.consultationId,
       transcriptId: transcriptId,
@@ -115,6 +128,48 @@ class SummaryOrchestrator {
       generatedAt: generatedAt,
       consultationMode: request.consultationMode,
     );
+  }
+
+  /// Store embeddings in vector store for future context-enriched queries.
+  Future<void> _storeEmbeddings({
+    required String consultationId,
+    required String transcriptId,
+    required String transcriptText,
+    required StructuredSummary structuredSummary,
+  }) async {
+    try {
+      // Create embedding from transcript text (in production, use a proper embedding model)
+      // For now, we'll use a simple hash-based approach as placeholder
+      final embedding = _createPlaceholderEmbedding(transcriptText);
+
+      await vectorStore.add(
+        id: consultationId,
+        embedding: embedding,
+        metadata: {
+          'consultationId': consultationId,
+          'transcriptId': transcriptId,
+          'transcriptText': transcriptText.substring(0, 500), // Truncate for storage
+          'structuredSummary': structuredSummary.toJson(),
+          'resource_type': 'consultation',
+          'resource_id': consultationId,
+        },
+      );
+    } catch (e) {
+      // Don't fail the request if vector store fails
+      print('[SummaryOrchestrator] Failed to store embedding: $e');
+    }
+  }
+
+  /// Placeholder embedding generation.
+  /// In production, replace with proper embedding model (e.g., sentence-transformers via Python bridge).
+  List<double> _createPlaceholderEmbedding(String text) {
+    final hash = text.codeUnits.fold(0, (a, b) => (a * 31 + b) & 0x7fffffff);
+    final random = List<double>.generate(960, (i) {
+      return ((hash * (i + 1) * 16807) % 2147483647) / 2147483647.0;
+    });
+    // Normalize
+    final norm = math.sqrt(random.fold(0.0, (a, b) => a + b * b));
+    return random.map((v) => v / norm).toList();
   }
 
   /// Retrieve a previously generated summary.

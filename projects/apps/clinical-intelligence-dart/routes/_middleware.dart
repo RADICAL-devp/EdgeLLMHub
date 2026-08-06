@@ -11,24 +11,41 @@ import 'package:clinical_intelligence_dart/application/services/transcript_clean
 import 'package:clinical_intelligence_dart/application/services/transcript_normalization_service.dart';
 import 'package:clinical_intelligence_dart/application/services/transcript_summary_aggregation_service.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
-import 'package:clinical_intelligence_dart/infrastructure/llm/stub_llm_adapter.dart';
+import 'package:clinical_intelligence_dart/core/audit/audit_logger.dart';
+import 'package:clinical_intelligence_dart/core/audit/audit_middleware.dart';
+import 'package:clinical_intelligence_dart/core/auth/auth_middleware.dart';
+import 'package:clinical_intelligence_dart/core/auth/jwt_service.dart';
+import 'package:clinical_intelligence_dart/core/crypto/aes_gcm_service.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/ollama_llm_adapter.dart';
-import 'package:clinical_intelligence_dart/infrastructure/persistence/in_memory_summary_repository.dart';
-import 'package:clinical_intelligence_dart/infrastructure/persistence/in_memory_transcript_repository.dart';
+import 'package:clinical_intelligence_dart/infrastructure/persistence/clinical_database.dart';
+import 'package:clinical_intelligence_dart/infrastructure/persistence/drift_summary_repository.dart';
+import 'package:clinical_intelligence_dart/infrastructure/persistence/drift_transcript_repository.dart';
 import 'package:dart_frog/dart_frog.dart';
 
-/// Root middleware: dependency injection and CORS.
-///
-/// Provides all services to route handlers via Dart Frog's
-/// [provider] middleware.
+/// Root middleware: dependency injection, auth, audit, and CORS.
 Handler middleware(Handler handler) {
   // --- Infrastructure ---
   final LlmPort llmPort = OllamaLlmAdapter();
-  // To use Ollama for on-device LLM, uncomment:
-  // final LlmPort llmPort = OllamaLlmAdapter();
 
-  final transcriptRepository = InMemoryTranscriptRepository();
-  final summaryRepository = InMemorySummaryRepository();
+  final database = ClinicalDatabase();
+
+  // --- Crypto ---
+  final aesGcmService = AesGcmService(
+    masterKeyB64: Platform.environment['AES_MASTER_KEY'] ?? _devMasterKey,
+  );
+
+  // --- Repositories (with encryption) ---
+  final transcriptRepository = DriftTranscriptRepository(database, aesGcmService);
+  final summaryRepository = DriftSummaryRepository(database, aesGcmService);
+
+  // --- Auth ---
+  final jwtService = JwtService(
+    privateKeyPem: Platform.environment['JWT_PRIVATE_KEY'] ?? _devPrivateKey,
+    publicKeyPem: Platform.environment['JWT_PUBLIC_KEY'] ?? _devPublicKey,
+  );
+
+  // --- Audit ---
+  final auditLogger = AuditLogger(database);
 
   // --- Application Services ---
   final validationService = ValidationService();
@@ -73,6 +90,8 @@ Handler middleware(Handler handler) {
   );
 
   return handler
+      .use(provider<JwtService>((_) => jwtService))
+      .use(provider<AuditLogger>((_) => auditLogger))
       .use(provider<ClinicalProcessingOrchestrator>(
         (_) => clinicalProcessingOrchestrator,
       ))
@@ -81,6 +100,8 @@ Handler middleware(Handler handler) {
       .use(provider<TranscriptSummaryRepository>(
         (_) => summaryRepository,
       ))
+      .use(authMiddleware(jwtService))
+      .use(auditMiddleware(auditLogger))
       .use(_corsMiddleware());
 }
 
@@ -100,3 +121,33 @@ Middleware _corsMiddleware() {
     };
   };
 }
+
+/// Development-only RSA keypair.
+/// In production, keys MUST come from environment variables.
+const _devPrivateKey = '''-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDZ9V8K9K9K9K9K
+9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K
+9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K
+9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K
+9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K
+9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K
+9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K
+9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K9K
+-----END PRIVATE KEY-----''';
+
+const _devPublicKey = '''-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2fVfCvSvgvSvgvSvgvSv
+gvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvg
+vSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgv
+SvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvS
+vgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvg
+vgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvg
+vgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvg
+vgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvgvSvg
+vg==
+-----END PUBLIC KEY-----''';
+
+/// Development-only AES master key (256-bit, base64url encoded).
+/// In production, key MUST come from environment variable.
+/// Generate with: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`
+const _devMasterKey = 'dev-master-key-32-bytes-base64url-encoded-for-testing-only';
