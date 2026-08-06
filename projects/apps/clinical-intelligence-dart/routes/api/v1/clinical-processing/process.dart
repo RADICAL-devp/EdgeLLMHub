@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:clinical_intelligence_dart/api/dto/clinical_processing_request.dart';
 import 'package:clinical_intelligence_dart/application/services/clinical_processing_orchestrator.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
+import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// POST /api/v1/clinical-processing/process
@@ -15,7 +16,13 @@ import 'package:dart_frog/dart_frog.dart';
 /// Processing modes:
 ///   - VOCAB_ASSIST: conservative terminology improvement
 ///   - CLEAN_TRANSCRIPT: transcript cleanup
+///   - SUMMARIZE: structured clinical summary
+///   - GENERATE_DOCTOR_NOTE: doctor note generation
 Future<Response> onRequest(RequestContext context) async {
+  return requireAuth(_handleRequest, scopes: ['clinical:write'])(context);
+}
+
+Future<Response> _handleRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return Response(
       statusCode: HttpStatus.methodNotAllowed,

@@ -1,5 +1,5 @@
 import '../ports/llm_port.dart';
-import '../../core/models/structured_summary.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Generates structured clinical summaries via LLM (Milestone 2).
 ///

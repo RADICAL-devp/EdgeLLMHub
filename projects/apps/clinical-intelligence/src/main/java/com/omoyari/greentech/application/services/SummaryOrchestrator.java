@@ -104,8 +104,9 @@ public class SummaryOrchestrator {
         String summaryId = UUID.randomUUID().toString();
         String generatedAt = Instant.now().toString();
 
+        StructuredSummary encryptedSummary = encryptSummary(structuredSummary);
         ClinicalSummary clinicalSummary = new ClinicalSummary(
-                summaryId, request.getPatientId(), request.getDoctorId(), structuredSummary, generatedAt);
+                summaryId, request.getPatientId(), request.getDoctorId(), encryptedSummary, generatedAt);
 
         repository.saveSummary(clinicalSummary);
 
@@ -136,7 +137,7 @@ public class SummaryOrchestrator {
                 .findSummaryById(summaryId)
                 .map(cs -> new SummaryResponse(
                         cs.getId(),
-                        cs.getStructuredSummary(),
+                        decryptSummary(cs.getStructuredSummary()),
                         cs.getGeneratedAt(),
                         cs.getDoctorId(),
                         cs.getPatientId(),
@@ -152,7 +153,7 @@ public class SummaryOrchestrator {
         return repository.findSummariesByDoctorId(doctorId).stream()
                 .map(cs -> new SummaryResponse(
                         cs.getId(),
-                        cs.getStructuredSummary(),
+                        decryptSummary(cs.getStructuredSummary()),
                         cs.getGeneratedAt(),
                         cs.getDoctorId(),
                         cs.getPatientId(),
@@ -180,5 +181,45 @@ public class SummaryOrchestrator {
                 + "Investigation Ordered: " + summary.getInvestigationOrdered() + "\n"
                 + "Diagnosis: " + summary.getDiagnosis() + "\n"
                 + "Advice: " + summary.getAdvice();
+    }
+
+    private StructuredSummary encryptSummary(StructuredSummary summary) {
+        if (summary == null) return null;
+        return new StructuredSummary(
+                safeEncrypt(summary.getComplaint()),
+                safeEncrypt(summary.getPastHistory()),
+                safeEncrypt(summary.getVitals()),
+                safeEncrypt(summary.getPhysicalExamination()),
+                safeEncrypt(summary.getInvestigationOrdered()),
+                safeEncrypt(summary.getDiagnosis()),
+                safeEncrypt(summary.getAdvice())
+        );
+    }
+
+    private StructuredSummary decryptSummary(StructuredSummary summary) {
+        if (summary == null) return null;
+        return new StructuredSummary(
+                safeDecrypt(summary.getComplaint()),
+                safeDecrypt(summary.getPastHistory()),
+                safeDecrypt(summary.getVitals()),
+                safeDecrypt(summary.getPhysicalExamination()),
+                safeDecrypt(summary.getInvestigationOrdered()),
+                safeDecrypt(summary.getDiagnosis()),
+                safeDecrypt(summary.getAdvice())
+        );
+    }
+
+    private String safeEncrypt(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        return encryptionPort.encrypt(text);
+    }
+
+    private String safeDecrypt(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        return encryptionPort.decrypt(text);
     }
 }

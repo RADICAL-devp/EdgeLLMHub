@@ -1,8 +1,6 @@
-import 'package:clinical_intelligence_dart/application/ports/llm_port.dart';
 import 'package:clinical_intelligence_dart/application/services/terminology_assistance_service.dart';
 import 'package:clinical_intelligence_dart/application/services/transcript_normalization_service.dart';
-import 'package:clinical_intelligence_dart/core/models/processing_mode.dart';
-import 'package:clinical_intelligence_dart/core/models/structured_summary.dart';
+import 'package:shared_models/shared_models.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/stub_llm_adapter.dart';
 import 'package:test/test.dart';
 

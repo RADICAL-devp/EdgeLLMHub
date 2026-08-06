@@ -1,5 +1,5 @@
 import '../ports/llm_port.dart';
-import '../../core/models/doctor_note.dart';
+import 'package:shared_models/shared_models.dart';
 import 'package:uuid/uuid.dart';
 
 /// Generates doctor notes via LLM (Milestone 2).

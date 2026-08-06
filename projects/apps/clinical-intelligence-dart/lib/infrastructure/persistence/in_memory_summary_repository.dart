@@ -1,5 +1,5 @@
-import '../../application/ports/transcript_summary_repository.dart';
-import '../../core/models/transcript_summary_bundle.dart';
+import 'package:clinical_intelligence_dart/application/ports/transcript_summary_repository.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// In-memory implementation of [TranscriptSummaryRepository].
 class InMemorySummaryRepository implements TranscriptSummaryRepository {

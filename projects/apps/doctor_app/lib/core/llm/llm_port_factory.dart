@@ -6,7 +6,7 @@ import 'package:doctor_app/core/config/environment.dart';
 import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 import 'package:doctor_app/core/llm/ios_native_llm_adapter.dart';
-import 'package:doctor_app/core/llm/android_native_llm_adapter.dart';
+import 'package:doctor_app/core/llm/smol_llm_adapter.dart';
 import 'package:doctor_app/core/llm/cloud_llm_adapter.dart';
 import 'package:doctor_app/core/llm/hybrid_llm_adapter.dart';
 import 'package:doctor_app/core/llm/stub_llm_adapter.dart';
@@ -15,7 +15,7 @@ import 'package:doctor_app/core/llm/stub_llm_adapter.dart';
 /// device capabilities, platform, and compliance settings.
 ///
 /// Always returns a [HybridLlmAdapter] wrapping:
-///   - Platform-appropriate native adapter (iOS → MLC, Android → Gemma)
+///   - Platform-appropriate native adapter (iOS → MLC, Android → MLC)
 ///   - Cloud adapter (Dart Frog backend, compliance-gated)
 ///   - Stub adapter (offline fallback)
 class LlmPortFactory {
@@ -57,7 +57,7 @@ class LlmPortFactory {
     if (Platform.isIOS) {
       nativeAdapter = IosNativeLlmAdapter();
     } else if (Platform.isAndroid) {
-      nativeAdapter = AndroidNativeLlmAdapter();
+      nativeAdapter = SmolLLMAdapter();
     } else {
       // Desktop/web — native LLM not supported, stub will handle it
       nativeAdapter = stubAdapter;

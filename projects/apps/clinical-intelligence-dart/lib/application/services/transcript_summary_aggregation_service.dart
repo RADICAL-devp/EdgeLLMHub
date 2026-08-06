@@ -1,5 +1,4 @@
-import '../../core/models/structured_summary.dart';
-import '../../core/models/transcript_chunk_summary.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Aggregates summaries from multiple chunks into a single summary.
 ///

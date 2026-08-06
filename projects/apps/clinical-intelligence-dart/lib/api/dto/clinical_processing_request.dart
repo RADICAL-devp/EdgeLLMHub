@@ -1,6 +1,4 @@
-import '../../core/models/consultation_mode.dart';
-import '../../core/models/processing_mode.dart';
-import '../../core/models/processing_source.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Request DTO for the generic clinical text processing endpoint.
 ///

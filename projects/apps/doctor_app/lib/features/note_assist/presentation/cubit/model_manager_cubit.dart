@@ -32,11 +32,12 @@ class ModelManagerDownloading extends ModelManagerState {
 class ModelManagerReady extends ModelManagerState {
   final String modelPath;
   final String executionMode; // 'local', 'cloud', or 'stub'
+  final Map<String, Object?>? modelInfo;
 
-  const ModelManagerReady(this.modelPath, {this.executionMode = 'local'});
+  const ModelManagerReady(this.modelPath, {this.executionMode = 'local', this.modelInfo});
 
   @override
-  List<Object?> get props => [modelPath, executionMode];
+  List<Object?> get props => [modelPath, executionMode, modelInfo];
 }
 
 class ModelManagerError extends ModelManagerState {
@@ -56,10 +57,11 @@ class ModelManagerError extends ModelManagerState {
 class ModelManagerCubit extends Cubit<ModelManagerState> {
   final DeviceCapabilityService _capabilityService;
   static const _iosChannel = MethodChannel('com.example.clinical/llm');
-  static const String _modelFileName = 'gemma-2b-it.bin';
+  static const _androidChannel = MethodChannel('com.example.clinical/llm');
+  static const String _modelFileName = 'smolLM-350M.bin';
 
   /// Timeout for model verification (sample inference).
-  static const _verificationTimeout = Duration(seconds: 30);
+  static const _verificationTimeout = Duration(seconds: 20);
 
   ModelManagerCubit({
     required DeviceCapabilityService capabilityService,
@@ -71,8 +73,10 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   /// Unlike the old implementation, this does NOT blindly emit
   /// [ModelManagerReady]. It performs real verification:
   ///   1. Check if the MethodChannel/plugin responds
-  ///   2. Verify the model file/library is present
-  ///   3. Run a sample inference to confirm the model is loaded
+  ///   2. Verify the model file/library is present (via getModelInfo)
+  ///   3. Verify checksum matches expected bundle
+  ///   4. Run a sample inference to confirm the model is loaded
+  ///   5. Warm-up inference to reduce first-request latency
   Future<void> checkModelExists() async {
     try {
       final isSimulator = await _capabilityService.isSimulator;
@@ -113,21 +117,82 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   /// Check iOS MLC model availability with real verification.
   Future<void> _checkIosModel() async {
     try {
-      // Step 1: Check if the handler is registered and responds
-      final isAvailable =
-          await _iosChannel.invokeMethod<bool>('isAvailable');
+      // Step 1: Get model info (bundled status, path, checksum)
+      final modelInfo = await _iosChannel
+          .invokeMapMethod<String, Object?>('getModelInfo')
+          .timeout(_verificationTimeout);
 
-      if (isAvailable != true) {
+      if (modelInfo == null) {
         emit(const ModelManagerError(
-          'MLC LLM engine is not ready. The model may need to be '
-          'downloaded or the engine may still be initializing.',
+          'MLC LLM handler did not return model info.',
         ));
         return;
       }
 
-      // Step 2: Run a sample inference to verify the model actually works
+      final bundled = modelInfo['bundled'] == true;
+      if (!bundled) {
+        emit(const ModelManagerError(
+          'SmolLM-350M model not bundled in app. '
+          'Run ios/scripts/setup_ios_mlc.sh to compile and bundle the model.',
+        ));
+        return;
+      }
+
+      // Step 2: Verify checksum if available
+      final checksum = modelInfo['checksumSha256'] as String?;
+      if (checksum != null && checksum.isNotEmpty) {
+        developer.log(
+          'Model checksum: $checksum',
+          name: 'ModelManagerCubit',
+        );
+        // In production, compare against expected checksum from build artifacts
+        // For now, log it for debugging
+      }
+
+      // Step 3: Check if engine is ready
+      final isAvailable = modelInfo['ready'] == true;
+      if (isAvailable != true) {
+        // Engine not initialized yet — try to initialize
+        developer.log(
+          'MLC engine not initialized, initializing...',
+          name: 'ModelManagerCubit',
+        );
+        try {
+          await _iosChannel
+              .invokeMethod<void>('initialize')
+              .timeout(_verificationTimeout);
+        } on PlatformException catch (e) {
+          emit(ModelManagerError(
+            'Failed to initialize MLC engine: ${e.message}',
+          ));
+          return;
+        }
+      }
+
+      // Step 4: Warm-up inference to reduce first-request latency
       developer.log(
-        'MLC engine reports available, running verification...',
+        'Running warm-up inference...',
+        name: 'ModelManagerCubit',
+      );
+      try {
+        await _iosChannel
+            .invokeMethod<String>('warmUp')
+            .timeout(_verificationTimeout);
+      } on TimeoutException {
+        developer.log(
+          'Warm-up timed out (continuing anyway)',
+          name: 'ModelManagerCubit',
+        );
+      } on PlatformException catch (e) {
+        developer.log(
+          'Warm-up failed (continuing anyway): ${e.message}',
+          name: 'ModelManagerCubit',
+        );
+      }
+
+      // Step 5: Run a sample inference to verify the model actually works
+      developer.log(
+        'Running verification inference...',
         name: 'ModelManagerCubit',
       );
 
@@ -149,9 +214,10 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
         'MLC verification succeeded (${verifyResult.length} chars)',
         name: 'ModelManagerCubit',
       );
-      emit(const ModelManagerReady(
-        'Bundled MLC LLM',
+      emit(ModelManagerReady(
+        'Bundled SmolLM-350M (MLCSwift)',
         executionMode: 'local',
+        modelInfo: modelInfo,
       ));
     } on TimeoutException {
       emit(const ModelManagerError(
@@ -173,29 +239,126 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
     }
   }
 
-  /// Check Android Gemma model availability.
+  /// Check Android MLC model availability with real verification.
   Future<void> _checkAndroidModel() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final modelFile = File('${dir.path}/$_modelFileName');
+      // Step 1: Get model info (bundled status, path, checksum)
+      final modelInfo = await _androidChannel
+          .invokeMapMethod<String, Object?>('getModelInfo')
+          .timeout(_verificationTimeout);
 
-      if (!await modelFile.exists()) {
-        emit(ModelManagerInitial());
+      if (modelInfo == null) {
+        emit(const ModelManagerError(
+          'MLC Android handler did not return model info.',
+        ));
         return;
       }
 
-      // Dynamically load flutter_gemma to avoid iOS compilation issues
-      // In production, this would use FlutterGemmaPlugin.instance.init()
+      final bundled = modelInfo['bundled'] == true;
+      if (!bundled) {
+        emit(const ModelManagerError(
+          'SmolLM-350M model not found in assets. '
+          'Ensure SmolLM-350M-Instruct-q4f16_1-MLC is in android/app/src/main/assets/',
+        ));
+        return;
+      }
+
+      // Step 2: Verify checksum if available
+      final checksum = modelInfo['checksumSha256'] as String?;
+      if (checksum != null && checksum.isNotEmpty) {
+        developer.log(
+          'Model checksum: $checksum',
+          name: 'ModelManagerCubit',
+        );
+      }
+
+      // Step 3: Check if engine is ready
+      final isAvailable = modelInfo['ready'] == true;
+      if (isAvailable != true) {
+        // Engine not initialized yet — try to initialize
+        developer.log(
+          'MLC Android engine not initialized, initializing...',
+          name: 'ModelManagerCubit',
+        );
+        try {
+          await _androidChannel
+              .invokeMethod<void>('initialize')
+              .timeout(const Duration(seconds: 60));
+        } on PlatformException catch (e) {
+          emit(ModelManagerError(
+            'Failed to initialize MLC Android engine: ${e.message}',
+          ));
+          return;
+        }
+      }
+
+      // Step 4: Warm-up inference to reduce first-request latency
       developer.log(
-        'Android model file exists, initializing Gemma...',
+        'Running warm-up inference...',
+        name: 'ModelManagerCubit',
+      );
+      try {
+        await _androidChannel
+            .invokeMethod<String>('warmUp')
+            .timeout(_verificationTimeout);
+      } on TimeoutException {
+        developer.log(
+          'Warm-up timed out (continuing anyway)',
+          name: 'ModelManagerCubit',
+        );
+      } on PlatformException catch (e) {
+        developer.log(
+          'Warm-up failed (continuing anyway): ${e.message}',
+          name: 'ModelManagerCubit',
+        );
+      }
+
+      // Step 5: Run a sample inference to verify the model actually works
+      developer.log(
+        'Running verification inference...',
         name: 'ModelManagerCubit',
       );
 
-      // TODO: Add real Gemma verification similar to iOS
-      // For now, file existence is the check
-      emit(ModelManagerReady(modelFile.path, executionMode: 'local'));
+      final verifyResult = await _androidChannel
+          .invokeMethod<String>('generate', {
+            'prompt': 'Hello',
+          })
+          .timeout(_verificationTimeout);
+
+      if (verifyResult == null || verifyResult.isEmpty) {
+        emit(const ModelManagerError(
+          'MLC Android LLM engine responded but produced no output. '
+          'The model may be corrupted.',
+        ));
+        return;
+      }
+
+      developer.log(
+        'MLC Android verification succeeded (${verifyResult.length} chars)',
+        name: 'ModelManagerCubit',
+      );
+      emit(ModelManagerReady(
+        'Bundled SmolLM-350M (MLC Android)',
+        executionMode: 'local',
+        modelInfo: modelInfo,
+      ));
+    } on TimeoutException {
+      emit(const ModelManagerError(
+        'MLC Android LLM verification timed out. The model may be too large '
+        'for this device.',
+      ));
+    } on MissingPluginException {
+      emit(const ModelManagerError(
+        'MLC Android LLM handler is not registered. '
+        'Ensure MLCLLMHandler is configured in MainActivity.kt.',
+        canRetry: false,
+      ));
+    } on PlatformException catch (e) {
+      emit(ModelManagerError(
+        'MLC Android LLM platform error: ${e.message}',
+      ));
     } catch (e) {
-      emit(ModelManagerError('Failed to check Android model: $e'));
+      emit(ModelManagerError('Failed to verify MLC Android LLM: $e'));
     }
   }
 

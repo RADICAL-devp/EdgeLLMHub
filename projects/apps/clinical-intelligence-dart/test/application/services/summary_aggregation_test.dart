@@ -1,6 +1,5 @@
 import 'package:clinical_intelligence_dart/application/services/transcript_summary_aggregation_service.dart';
-import 'package:clinical_intelligence_dart/core/models/structured_summary.dart';
-import 'package:clinical_intelligence_dart/core/models/transcript_chunk_summary.dart';
+import 'package:shared_models/shared_models.dart';
 import 'package:test/test.dart';
 
 void main() {

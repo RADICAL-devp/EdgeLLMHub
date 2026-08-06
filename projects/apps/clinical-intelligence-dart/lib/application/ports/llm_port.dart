@@ -1,5 +1,4 @@
-import '../../core/models/processing_mode.dart';
-import '../../core/models/structured_summary.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Port for LLM-based text processing.
 ///

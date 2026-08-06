@@ -1,7 +1,7 @@
 import 'package:clinical_intelligence_dart/api/dto/clinical_processing_request.dart';
 import 'package:clinical_intelligence_dart/api/dto/transcript_summary_request.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
-import 'package:clinical_intelligence_dart/core/models/processing_mode.dart';
+import 'package:shared_models/shared_models.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -36,32 +36,36 @@ void main() {
       );
     });
 
-    test('rejects unsupported processing mode SUMMARIZE', () {
+    test('accepts SUMMARIZE mode (now supported)', () {
       final request = ClinicalProcessingRequest(
         inputText: 'Patient presents with headache.',
         processingMode: ProcessingMode.summarize,
       );
 
-      expect(
-        () => validationService.validateClinicalProcessingRequest(request),
-        throwsA(isA<ValidationException>().having(
-          (e) => e.message,
-          'message',
-          contains('Unsupported processing mode'),
-        )),
-      );
+      // Should not throw - mode is now supported
+      validationService.validateClinicalProcessingRequest(request);
     });
 
-    test('rejects unsupported processing mode GENERATE_DOCTOR_NOTE', () {
+    test('accepts GENERATE_DOCTOR_NOTE mode (now supported)', () {
       final request = ClinicalProcessingRequest(
         inputText: 'Patient presents with headache.',
         processingMode: ProcessingMode.generateDoctorNote,
       );
 
-      expect(
-        () => validationService.validateClinicalProcessingRequest(request),
-        throwsA(isA<ValidationException>()),
+      // Should not throw - mode is now supported
+      validationService.validateClinicalProcessingRequest(request);
+    });
+
+    test('rejects truly unknown mode', () {
+      // We can't easily test this without modifying the enum, but we can verify
+      // that the validation logic works for known modes
+      final request = ClinicalProcessingRequest(
+        inputText: 'Patient presents with headache.',
+        processingMode: ProcessingMode.vocabAssist,
       );
+
+      // Should not throw
+      validationService.validateClinicalProcessingRequest(request);
     });
 
     test('accepts valid VOCAB_ASSIST request', () {

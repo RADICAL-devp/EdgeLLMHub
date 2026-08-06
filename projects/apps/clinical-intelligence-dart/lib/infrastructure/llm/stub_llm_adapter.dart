@@ -1,6 +1,5 @@
 import '../../application/ports/llm_port.dart';
-import '../../core/models/processing_mode.dart';
-import '../../core/models/structured_summary.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Stub LLM adapter that performs on-device text processing without
 /// requiring any external API or model.
@@ -129,7 +128,7 @@ class StubLlmAdapter implements LlmPort {
 
     // 4. Standardize speaker labels
     result = result.replaceAllMapped(
-      RegExp(r'^(doctor|patient|nurse|clinician)\s*:\s*', 
+      RegExp(r'^(doctor|patient|nurse|clinician)\s*:\s*',
         multiLine: true, caseSensitive: false),
       (m) {
         final speaker = m.group(1)!;

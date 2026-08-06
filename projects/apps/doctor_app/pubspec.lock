@@ -350,14 +350,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.1.1"
-  flutter_gemma:
-    dependency: "direct main"
-    description:
-      name: flutter_gemma
-      sha256: "7335e0451f489d2675c9bdf7c021f90b13e32bd4311181bd5bc74ff14d5981a4"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.4"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -448,14 +440,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
-  js:
-    dependency: transitive
-    description:
-      name: js
-      sha256: c1b2e9b5ea78c45e1a0788d29606ba27dc5f71f019f32ca5140f61ef071838cf
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.1"
   json_annotation:
     dependency: transitive
     description:
@@ -712,6 +696,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.0"
+  shared_models:
+    dependency: "direct main"
+    description:
+      path: "../../packages/shared_models"
+      relative: true
+    source: path
+    version: "1.0.0"
   shared_preferences:
     dependency: "direct main"
     description:

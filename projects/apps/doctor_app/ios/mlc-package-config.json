@@ -2,10 +2,13 @@
   "device": "iphone",
   "model_list": [
     {
-      "model": "HF://mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC",
+      "model": "HF://HuggingFaceTB/SmolLM-350M-Instruct",
       "bundle_weight": true,
       "overrides": {
-        "context_window_size": 2048
+        "context_window_size": 2048,
+        "prefill_chunk_size": 512,
+        "model_type": "smolLM",
+        "quantization": "q4f16_1"
       }
     }
   ]

@@ -1,7 +1,4 @@
-import '../../core/models/consultation_mode.dart';
-import '../../core/models/doctor_note.dart';
-import '../../core/models/executive_summary.dart';
-import '../../core/models/structured_summary.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Response DTO for the transcript summary endpoint (Milestone 2).
 class TranscriptSummaryResponse {

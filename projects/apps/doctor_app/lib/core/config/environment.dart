@@ -71,7 +71,6 @@ class EnvironmentConfig {
 
   /// Supported model tiers for on-device inference.
   static const List<String> supportedModels = [
-    'Llama-3.2-3B-Instruct-q4f16_1-MLC',
-    'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+    'SmolLM-350M-Instruct-q4f16_1-MLC',
   ];
 }
