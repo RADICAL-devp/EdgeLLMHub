@@ -18,7 +18,11 @@ class CloudSpeechService implements SpeechService {
   CloudSpeechService(this._dio);
 
   @override
-  Future<bool> initialize() async {
+  Future<bool> initialize({
+    String locale = 'en_US',
+    Duration? silenceTimeout,
+    double? listenTimeout,
+  }) async {
     // Verify the backend is reachable
     try {
       // A simple health check — in production, this would ping a
@@ -58,6 +62,16 @@ class CloudSpeechService implements SpeechService {
         _isListening = false;
       }
     });
+  }
+
+  @override
+  void setSilenceTimeout(Duration timeout) {
+    // Not applicable for cloud STT
+  }
+
+  @override
+  void setListenTimeout(double seconds) {
+    // Not applicable for cloud STT
   }
 
   @override

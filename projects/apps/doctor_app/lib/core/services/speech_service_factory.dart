@@ -1,6 +1,9 @@
 import 'dart:developer' as developer;
+import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import 'speech_service.dart';
 import 'local_speech_service.dart';
 import 'cloud_speech_service.dart';
@@ -20,18 +23,40 @@ class SpeechServiceFactory {
   ///
   /// [deviceService] is used to detect simulator vs. physical device.
   /// [dio] is passed to [CloudSpeechService] for HTTP-based STT.
+  /// [locale] - BCP-47 locale code (e.g., 'en_US', 'en_GB', 'es_ES')
+  /// [silenceTimeout] - VAD silence timeout for local STT
+  /// [listenTimeout] - Maximum listening duration in seconds
   static Future<SpeechService> create(
     DeviceCapabilityService deviceService, {
     Dio? dio,
+    String locale = 'en_US',
+    Duration? silenceTimeout,
+    double? listenTimeout,
   }) async {
     final canUseLocalStt = await deviceService.canUseSpeechToText();
 
     if (canUseLocalStt) {
+      // Request microphone permission on physical devices
+      if (Platform.isIOS || Platform.isAndroid) {
+        final status = await Permission.microphone.request();
+        if (!status.isGranted) {
+          throw SpeechException(
+            'Microphone permission is required for speech recognition.',
+          );
+        }
+      }
+
       developer.log(
         'Using LocalSpeechService (physical device)',
         name: 'SpeechServiceFactory',
       );
-      return LocalSpeechService();
+      final local = LocalSpeechService();
+      await local.initialize(
+        locale: locale,
+        silenceTimeout: silenceTimeout,
+        listenTimeout: listenTimeout,
+      );
+      return local;
     }
 
     developer.log(
@@ -41,7 +66,12 @@ class SpeechServiceFactory {
 
     // Use provided Dio or create a minimal one
     final dioInstance = dio ?? Dio();
-    return CloudSpeechService(dioInstance);
+    final cloud = CloudSpeechService(dioInstance);
+    await cloud.initialize(
+      locale: locale,
+      listenTimeout: listenTimeout,
+    );
+    return cloud;
   }
 
   /// Create with explicit fallback: try local first, fall back to cloud
@@ -49,13 +79,20 @@ class SpeechServiceFactory {
   static Future<SpeechService> createWithFallback(
     DeviceCapabilityService deviceService, {
     Dio? dio,
+    String locale = 'en_US',
+    Duration? silenceTimeout,
+    double? listenTimeout,
   }) async {
     final canUseLocalStt = await deviceService.canUseSpeechToText();
 
     if (canUseLocalStt) {
       final local = LocalSpeechService();
       try {
-        await local.initialize();
+        await local.initialize(
+          locale: locale,
+          silenceTimeout: silenceTimeout,
+          listenTimeout: listenTimeout,
+        );
         developer.log(
           'LocalSpeechService initialized successfully',
           name: 'SpeechServiceFactory',
@@ -71,6 +108,11 @@ class SpeechServiceFactory {
     }
 
     final dioInstance = dio ?? Dio();
-    return CloudSpeechService(dioInstance);
+    final cloud = CloudSpeechService(dioInstance);
+    await cloud.initialize(
+      locale: locale,
+      listenTimeout: listenTimeout,
+    );
+    return cloud;
   }
 }
