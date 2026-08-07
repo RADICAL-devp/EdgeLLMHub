@@ -52,14 +52,33 @@ class TranscriptSummaries extends Table {
   Set<Column> get primaryKey => {consultationId};
 }
 
-@DriftDatabase(tables: [DoctorNotes, Transcripts, TranscriptSummaries])
+@DataClassName('SyncQueueEntryEntity')
+class SyncQueueEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get noteId => text()();
+  TextColumn get consultationId => text()();
+  TextColumn get operation => text()(); // 'create', 'update', 'delete'
+  TextColumn get payloadJson => text()(); // Serialized DoctorNote
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+  IntColumn get maxRetries => integer().withDefault(const Constant(5))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  DateTimeColumn get nextRetryAt => dateTime().nullable()();
+  TextColumn get lastError => text().nullable()();
+  BoolColumn get isDeadLetter => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DriftDatabase(tables: [DoctorNotes, Transcripts, TranscriptSummaries, SyncQueueEntries])
 class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
   
   LocalDatabase.connect(QueryExecutor e) : super(e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -70,14 +89,15 @@ class LocalDatabase extends _$LocalDatabase {
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
           // v1 → v2: Added TranscriptSummaries table.
-          // DoctorNotes and Transcripts tables are unchanged.
           await m.createTable(transcriptSummaries);
+        }
+        if (from < 3) {
+          // v2 → v3: Added SyncQueueEntries table for persistent sync queue.
+          await m.createTable(syncQueueEntries);
         }
       },
       beforeOpen: (details) async {
         // Validate schema integrity on every launch.
-        // This ensures foreign keys are enabled and the schema matches
-        // what Drift expects (catches corruption early).
         await customStatement('PRAGMA foreign_keys = ON');
       },
     );
