@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:doctor_app/features/note_assist/data/local/local_database.dart';
@@ -90,6 +89,71 @@ void main() {
         .map((row) => row['name'] as String)
         .toList();
     expect(columns, contains('is_conflict'));
+
+    await db.close();
+  });
+
+  test('migration from v4 to v5 adds richTextDelta without data loss',
+      () async {
+    final rawDb = sqlite3.openInMemory();
+
+    // Simulate the v4 schema (doctor_notes WITHOUT rich_text_delta, but with
+    // the v4 sync queue table).
+    rawDb.execute('''
+      CREATE TABLE doctor_notes (
+        note_id TEXT NOT NULL PRIMARY KEY,
+        consultation_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        doctor_id TEXT NOT NULL,
+        raw_text TEXT NOT NULL,
+        status INTEGER NOT NULL,
+        extracted_fields TEXT,
+        patient_recap TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    ''');
+    rawDb.execute('''
+      CREATE TABLE sync_queue_entries (
+        id TEXT NOT NULL PRIMARY KEY,
+        note_id TEXT NOT NULL,
+        consultation_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        max_retries INTEGER NOT NULL DEFAULT 5,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        next_retry_at INTEGER,
+        last_error TEXT,
+        is_dead_letter INTEGER NOT NULL DEFAULT 0,
+        is_conflict INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+    rawDb.execute('''
+      INSERT INTO doctor_notes (note_id, consultation_id, patient_id,
+        doctor_id, raw_text, status, created_at, updated_at)
+      VALUES ('note-1', 'cons-1', 'pat-1', 'doc-1',
+              'Patient reports persistent cough.', 0, 10000, 10000);
+    ''');
+    rawDb.execute('PRAGMA user_version = 4;');
+
+    final db = LocalDatabase.connect(NativeDatabase.opened(rawDb));
+
+    // Reading triggers the lazy open → v4→v5 migration.
+    final rows = await db.select(db.doctorNotes).get();
+    expect(rows.length, 1);
+    expect(rows.first.noteId, 'note-1');
+    expect(rows.first.rawText, 'Patient reports persistent cough.');
+    expect(rows.first.richTextDelta, isNull,
+        reason: 'legacy notes have no rich text delta yet');
+
+    // v5 adds the rich_text_delta column; existing rows stay readable.
+    final columns = rawDb
+        .select('PRAGMA table_info(doctor_notes)')
+        .map((row) => row['name'] as String)
+        .toList();
+    expect(columns, contains('rich_text_delta'));
 
     await db.close();
   });

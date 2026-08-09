@@ -38,6 +38,12 @@ class $DoctorNotesTable extends DoctorNotes
   late final GeneratedColumn<String> rawText = GeneratedColumn<String>(
       'raw_text', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _richTextDeltaMeta =
+      const VerificationMeta('richTextDelta');
+  @override
+  late final GeneratedColumn<String> richTextDelta = GeneratedColumn<String>(
+      'rich_text_delta', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<int> status = GeneratedColumn<int>(
@@ -74,6 +80,7 @@ class $DoctorNotesTable extends DoctorNotes
         patientId,
         doctorId,
         rawText,
+        richTextDelta,
         status,
         extractedFields,
         patientRecap,
@@ -121,6 +128,12 @@ class $DoctorNotesTable extends DoctorNotes
           rawText.isAcceptableOrUnknown(data['raw_text']!, _rawTextMeta));
     } else if (isInserting) {
       context.missing(_rawTextMeta);
+    }
+    if (data.containsKey('rich_text_delta')) {
+      context.handle(
+          _richTextDeltaMeta,
+          richTextDelta.isAcceptableOrUnknown(
+              data['rich_text_delta']!, _richTextDeltaMeta));
     }
     if (data.containsKey('status')) {
       context.handle(_statusMeta,
@@ -171,6 +184,8 @@ class $DoctorNotesTable extends DoctorNotes
           .read(DriftSqlType.string, data['${effectivePrefix}doctor_id'])!,
       rawText: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}raw_text'])!,
+      richTextDelta: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}rich_text_delta']),
       status: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}status'])!,
       extractedFields: attachedDatabase.typeMapping.read(
@@ -197,6 +212,7 @@ class DoctorNoteEntity extends DataClass
   final String patientId;
   final String doctorId;
   final String rawText;
+  final String? richTextDelta;
   final int status;
   final String? extractedFields;
   final String? patientRecap;
@@ -208,6 +224,7 @@ class DoctorNoteEntity extends DataClass
       required this.patientId,
       required this.doctorId,
       required this.rawText,
+      this.richTextDelta,
       required this.status,
       this.extractedFields,
       this.patientRecap,
@@ -221,6 +238,9 @@ class DoctorNoteEntity extends DataClass
     map['patient_id'] = Variable<String>(patientId);
     map['doctor_id'] = Variable<String>(doctorId);
     map['raw_text'] = Variable<String>(rawText);
+    if (!nullToAbsent || richTextDelta != null) {
+      map['rich_text_delta'] = Variable<String>(richTextDelta);
+    }
     map['status'] = Variable<int>(status);
     if (!nullToAbsent || extractedFields != null) {
       map['extracted_fields'] = Variable<String>(extractedFields);
@@ -240,6 +260,9 @@ class DoctorNoteEntity extends DataClass
       patientId: Value(patientId),
       doctorId: Value(doctorId),
       rawText: Value(rawText),
+      richTextDelta: richTextDelta == null && nullToAbsent
+          ? const Value.absent()
+          : Value(richTextDelta),
       status: Value(status),
       extractedFields: extractedFields == null && nullToAbsent
           ? const Value.absent()
@@ -261,6 +284,7 @@ class DoctorNoteEntity extends DataClass
       patientId: serializer.fromJson<String>(json['patientId']),
       doctorId: serializer.fromJson<String>(json['doctorId']),
       rawText: serializer.fromJson<String>(json['rawText']),
+      richTextDelta: serializer.fromJson<String?>(json['richTextDelta']),
       status: serializer.fromJson<int>(json['status']),
       extractedFields: serializer.fromJson<String?>(json['extractedFields']),
       patientRecap: serializer.fromJson<String?>(json['patientRecap']),
@@ -277,6 +301,7 @@ class DoctorNoteEntity extends DataClass
       'patientId': serializer.toJson<String>(patientId),
       'doctorId': serializer.toJson<String>(doctorId),
       'rawText': serializer.toJson<String>(rawText),
+      'richTextDelta': serializer.toJson<String?>(richTextDelta),
       'status': serializer.toJson<int>(status),
       'extractedFields': serializer.toJson<String?>(extractedFields),
       'patientRecap': serializer.toJson<String?>(patientRecap),
@@ -291,6 +316,7 @@ class DoctorNoteEntity extends DataClass
           String? patientId,
           String? doctorId,
           String? rawText,
+          Value<String?> richTextDelta = const Value.absent(),
           int? status,
           Value<String?> extractedFields = const Value.absent(),
           Value<String?> patientRecap = const Value.absent(),
@@ -302,6 +328,8 @@ class DoctorNoteEntity extends DataClass
         patientId: patientId ?? this.patientId,
         doctorId: doctorId ?? this.doctorId,
         rawText: rawText ?? this.rawText,
+        richTextDelta:
+            richTextDelta.present ? richTextDelta.value : this.richTextDelta,
         status: status ?? this.status,
         extractedFields: extractedFields.present
             ? extractedFields.value
@@ -320,6 +348,9 @@ class DoctorNoteEntity extends DataClass
       patientId: data.patientId.present ? data.patientId.value : this.patientId,
       doctorId: data.doctorId.present ? data.doctorId.value : this.doctorId,
       rawText: data.rawText.present ? data.rawText.value : this.rawText,
+      richTextDelta: data.richTextDelta.present
+          ? data.richTextDelta.value
+          : this.richTextDelta,
       status: data.status.present ? data.status.value : this.status,
       extractedFields: data.extractedFields.present
           ? data.extractedFields.value
@@ -340,6 +371,7 @@ class DoctorNoteEntity extends DataClass
           ..write('patientId: $patientId, ')
           ..write('doctorId: $doctorId, ')
           ..write('rawText: $rawText, ')
+          ..write('richTextDelta: $richTextDelta, ')
           ..write('status: $status, ')
           ..write('extractedFields: $extractedFields, ')
           ..write('patientRecap: $patientRecap, ')
@@ -350,8 +382,18 @@ class DoctorNoteEntity extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(noteId, consultationId, patientId, doctorId,
-      rawText, status, extractedFields, patientRecap, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      noteId,
+      consultationId,
+      patientId,
+      doctorId,
+      rawText,
+      richTextDelta,
+      status,
+      extractedFields,
+      patientRecap,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -361,6 +403,7 @@ class DoctorNoteEntity extends DataClass
           other.patientId == this.patientId &&
           other.doctorId == this.doctorId &&
           other.rawText == this.rawText &&
+          other.richTextDelta == this.richTextDelta &&
           other.status == this.status &&
           other.extractedFields == this.extractedFields &&
           other.patientRecap == this.patientRecap &&
@@ -374,6 +417,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
   final Value<String> patientId;
   final Value<String> doctorId;
   final Value<String> rawText;
+  final Value<String?> richTextDelta;
   final Value<int> status;
   final Value<String?> extractedFields;
   final Value<String?> patientRecap;
@@ -386,6 +430,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     this.patientId = const Value.absent(),
     this.doctorId = const Value.absent(),
     this.rawText = const Value.absent(),
+    this.richTextDelta = const Value.absent(),
     this.status = const Value.absent(),
     this.extractedFields = const Value.absent(),
     this.patientRecap = const Value.absent(),
@@ -399,6 +444,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     required String patientId,
     required String doctorId,
     required String rawText,
+    this.richTextDelta = const Value.absent(),
     required int status,
     this.extractedFields = const Value.absent(),
     this.patientRecap = const Value.absent(),
@@ -419,6 +465,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     Expression<String>? patientId,
     Expression<String>? doctorId,
     Expression<String>? rawText,
+    Expression<String>? richTextDelta,
     Expression<int>? status,
     Expression<String>? extractedFields,
     Expression<String>? patientRecap,
@@ -432,6 +479,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
       if (patientId != null) 'patient_id': patientId,
       if (doctorId != null) 'doctor_id': doctorId,
       if (rawText != null) 'raw_text': rawText,
+      if (richTextDelta != null) 'rich_text_delta': richTextDelta,
       if (status != null) 'status': status,
       if (extractedFields != null) 'extracted_fields': extractedFields,
       if (patientRecap != null) 'patient_recap': patientRecap,
@@ -447,6 +495,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
       Value<String>? patientId,
       Value<String>? doctorId,
       Value<String>? rawText,
+      Value<String?>? richTextDelta,
       Value<int>? status,
       Value<String?>? extractedFields,
       Value<String?>? patientRecap,
@@ -459,6 +508,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
       patientId: patientId ?? this.patientId,
       doctorId: doctorId ?? this.doctorId,
       rawText: rawText ?? this.rawText,
+      richTextDelta: richTextDelta ?? this.richTextDelta,
       status: status ?? this.status,
       extractedFields: extractedFields ?? this.extractedFields,
       patientRecap: patientRecap ?? this.patientRecap,
@@ -485,6 +535,9 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     }
     if (rawText.present) {
       map['raw_text'] = Variable<String>(rawText.value);
+    }
+    if (richTextDelta.present) {
+      map['rich_text_delta'] = Variable<String>(richTextDelta.value);
     }
     if (status.present) {
       map['status'] = Variable<int>(status.value);
@@ -515,6 +568,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
           ..write('patientId: $patientId, ')
           ..write('doctorId: $doctorId, ')
           ..write('rawText: $rawText, ')
+          ..write('richTextDelta: $richTextDelta, ')
           ..write('status: $status, ')
           ..write('extractedFields: $extractedFields, ')
           ..write('patientRecap: $patientRecap, ')
@@ -2062,6 +2116,7 @@ typedef $$DoctorNotesTableCreateCompanionBuilder = DoctorNotesCompanion
   required String patientId,
   required String doctorId,
   required String rawText,
+  Value<String?> richTextDelta,
   required int status,
   Value<String?> extractedFields,
   Value<String?> patientRecap,
@@ -2076,6 +2131,7 @@ typedef $$DoctorNotesTableUpdateCompanionBuilder = DoctorNotesCompanion
   Value<String> patientId,
   Value<String> doctorId,
   Value<String> rawText,
+  Value<String?> richTextDelta,
   Value<int> status,
   Value<String?> extractedFields,
   Value<String?> patientRecap,
@@ -2108,6 +2164,9 @@ class $$DoctorNotesTableFilterComposer
 
   ColumnFilters<String> get rawText => $composableBuilder(
       column: $table.rawText, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get status => $composableBuilder(
       column: $table.status, builder: (column) => ColumnFilters(column));
@@ -2151,6 +2210,10 @@ class $$DoctorNotesTableOrderingComposer
   ColumnOrderings<String> get rawText => $composableBuilder(
       column: $table.rawText, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get status => $composableBuilder(
       column: $table.status, builder: (column) => ColumnOrderings(column));
 
@@ -2192,6 +2255,9 @@ class $$DoctorNotesTableAnnotationComposer
 
   GeneratedColumn<String> get rawText =>
       $composableBuilder(column: $table.rawText, builder: (column) => column);
+
+  GeneratedColumn<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta, builder: (column) => column);
 
   GeneratedColumn<int> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
@@ -2240,6 +2306,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             Value<String> patientId = const Value.absent(),
             Value<String> doctorId = const Value.absent(),
             Value<String> rawText = const Value.absent(),
+            Value<String?> richTextDelta = const Value.absent(),
             Value<int> status = const Value.absent(),
             Value<String?> extractedFields = const Value.absent(),
             Value<String?> patientRecap = const Value.absent(),
@@ -2253,6 +2320,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             patientId: patientId,
             doctorId: doctorId,
             rawText: rawText,
+            richTextDelta: richTextDelta,
             status: status,
             extractedFields: extractedFields,
             patientRecap: patientRecap,
@@ -2266,6 +2334,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             required String patientId,
             required String doctorId,
             required String rawText,
+            Value<String?> richTextDelta = const Value.absent(),
             required int status,
             Value<String?> extractedFields = const Value.absent(),
             Value<String?> patientRecap = const Value.absent(),
@@ -2279,6 +2348,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             patientId: patientId,
             doctorId: doctorId,
             rawText: rawText,
+            richTextDelta: richTextDelta,
             status: status,
             extractedFields: extractedFields,
             patientRecap: patientRecap,

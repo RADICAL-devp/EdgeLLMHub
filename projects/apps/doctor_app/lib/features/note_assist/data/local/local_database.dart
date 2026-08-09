@@ -14,6 +14,7 @@ class DoctorNotes extends Table {
   TextColumn get patientId => text()();
   TextColumn get doctorId => text()();
   TextColumn get rawText => text()();
+  TextColumn get richTextDelta => text().nullable()(); // Quill Delta JSON
   IntColumn get status => integer()(); // Store enum as integer
   TextColumn get extractedFields => text().nullable()();
   TextColumn get patientRecap => text().nullable()();
@@ -79,7 +80,7 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase.connect(QueryExecutor e) : super(e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -101,6 +102,10 @@ class LocalDatabase extends _$LocalDatabase {
         if (from == 3) {
           // v3 → v4: Added isConflict flag for manual merge UI.
           await m.addColumn(syncQueueEntries, syncQueueEntries.isConflict);
+        }
+        if (from == 4) {
+          // v4 → v5: Added richTextDelta for the Quill rich-text editor.
+          await m.addColumn(doctorNotes, doctorNotes.richTextDelta);
         }
       },
       beforeOpen: (details) async {

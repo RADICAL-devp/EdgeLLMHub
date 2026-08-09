@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get_it/get_it.dart';
+import 'package:dio/dio.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 import '../cubit/model_manager_cubit.dart';
 
@@ -13,6 +14,7 @@ class ModelManagerPage extends StatelessWidget {
     return BlocProvider(
       create: (context) => ModelManagerCubit(
         capabilityService: GetIt.I<DeviceCapabilityService>(),
+        downloader: DioModelDownloader(dio: GetIt.I<Dio>()),
       )..checkModelExists(),
       child: Scaffold(
         appBar: AppBar(
@@ -81,14 +83,37 @@ class ModelManagerPage extends StatelessWidget {
 
   Widget _buildDownloading(
       BuildContext context, ModelManagerDownloading state) {
+    final percent = (state.progress * 100).clamp(0, 100).toStringAsFixed(0);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        CircularProgressIndicator(value: state.progress),
+        if (state.isVerifying)
+          const CircularProgressIndicator()
+        else
+          CircularProgressIndicator(value: state.progress),
         const SizedBox(height: 16),
         Text(
-          'Downloading... ${(state.progress * 100).toStringAsFixed(0)}%',
+          '${state.isVerifying ? 'Verifying' : 'Downloading'}... $percent%',
+          key: const Key('model_download_progress'),
         ),
+        const SizedBox(height: 8),
+        if (state.isVerifying)
+          Text(
+            state.phaseLabel,
+            style: const TextStyle(color: Colors.grey),
+          )
+        else ...[
+          Text(
+            '${_formatBytes(state.downloadedBytes)} of '
+            '${state.totalBytes > 0 ? _formatBytes(state.totalBytes) : '…'}',
+            style: const TextStyle(color: Colors.grey),
+          ),
+          if (state.speedBytesPerSec > 0)
+            Text(
+              '${_formatBytes(state.speedBytesPerSec.toInt())}/s',
+              style: const TextStyle(color: Colors.grey),
+            ),
+        ],
         const SizedBox(height: 8),
         const Text(
           'Please keep the app open.',
@@ -96,6 +121,18 @@ class ModelManagerPage extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    var value = bytes.toDouble();
+    var unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit++;
+    }
+    return '${value.toStringAsFixed(value >= 10 || unit == 0 ? 0 : 1)} ${units[unit]}';
   }
 
   Widget _buildReady(BuildContext context, ModelManagerReady state) {

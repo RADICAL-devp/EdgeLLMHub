@@ -85,11 +85,12 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
     });
   }
 
-  void updateText(String text) {
+  void updateText(String text, {String? richTextDelta}) {
     if (state is NoteEditorLoaded) {
       final currentState = state as NoteEditorLoaded;
       final updatedNote = currentState.note.copyWith(
         rawText: text,
+        richTextDelta: richTextDelta,
         updatedAt: DateTime.now(),
       );
       

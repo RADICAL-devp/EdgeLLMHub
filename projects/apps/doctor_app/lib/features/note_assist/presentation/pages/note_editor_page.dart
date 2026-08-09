@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import '../cubit/note_editor_cubit.dart';
 import '../cubit/note_editor_state.dart';
 import '../cubit/ai_assist_cubit.dart';
@@ -29,14 +30,27 @@ class NoteEditorPage extends StatefulWidget {
 }
 
 class _NoteEditorPageState extends State<NoteEditorPage> {
-  late TextEditingController _textController;
+  late QuillController _quillController;
   final _speechService = GetIt.I<SpeechService>();
   double _fontSize = 16;
   static const _minFontSize = 12.0;
   static const _maxFontSize = 24.0;
 
+  /// Set once the note content has been restored into the editor so
+  /// subsequent state re-emissions never clobber the user's typing.
+  bool _initialized = false;
+
+  /// While true, programmatic document changes are not re-broadcast to
+  /// the cubit (avoids feedback loops during content restore).
+  bool _suspended = false;
+
+  /// Last serialized delta — used to skip no-op changes (e.g. cursor moves).
+  String _lastDelta = '';
+
+  String get _plainText => _quillController.document.toPlainText();
+
   int get _wordCount {
-    final text = _textController.text.trim();
+    final text = _plainText.trim();
     if (text.isEmpty) return 0;
     return text.split(RegExp(r'\s+')).length;
   }
@@ -44,7 +58,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   @override
   void initState() {
     super.initState();
-    _textController = TextEditingController();
+    _quillController = QuillController.basic();
+    _quillController.addListener(_onEditorChanged);
 
     context.read<NoteEditorCubit>().loadOrCreateNote(
           consultationId: widget.consultationId,
@@ -55,8 +70,75 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   @override
   void dispose() {
-    _textController.dispose();
+    _quillController.dispose();
     super.dispose();
+  }
+
+  /// Keep the cubit (and therefore persistence + sync queue) in sync with
+  /// the rich-text document. Content changes only — cursor moves are
+  /// filtered out by comparing the serialized delta.
+  void _onEditorChanged() {
+    if (_suspended) return;
+    final deltaJson = jsonEncode(_quillController.document.toDelta().toJson());
+    if (deltaJson == _lastDelta) return;
+    _lastDelta = deltaJson;
+    setState(() {});
+    context.read<NoteEditorCubit>().updateText(_plainText,
+        richTextDelta: deltaJson);
+  }
+
+  /// Restore note content into the editor on first load. Rich text is
+  /// restored from the persisted Delta when available, otherwise the plain
+  /// text is inserted (formatting starts fresh).
+  void _restoreContent(DoctorNote note) {
+    _suspended = true;
+    try {
+      if (note.richTextDelta != null && note.richTextDelta!.isNotEmpty) {
+        _quillController.document = Document.fromJson(
+          (jsonDecode(note.richTextDelta!) as List)
+              .cast<Map<String, dynamic>>(),
+        );
+      } else if (note.rawText.isNotEmpty) {
+        _quillController.replaceText(
+          0,
+          _quillController.document.length,
+          note.rawText,
+          TextSelection.collapsed(offset: note.rawText.length),
+        );
+      }
+    } catch (_) {
+      // Corrupt delta — fall back to plain text.
+      _quillController.document = Document();
+      _quillController.replaceText(
+        0,
+        0,
+        note.rawText,
+        TextSelection.collapsed(offset: note.rawText.length),
+      );
+    } finally {
+      _suspended = false;
+      _lastDelta = jsonEncode(_quillController.document.toDelta().toJson());
+      setState(() {});
+    }
+  }
+
+  /// Insert [text] at the end of the document (dictation / AI suggestion).
+  void _insertAtEnd(String text, {String separator = ' '}) {
+    final doc = _quillController.document;
+    final plain = doc.toPlainText();
+    if (plain.isNotEmpty &&
+        !plain.endsWith(' ') &&
+        !plain.endsWith('\n') &&
+        separator.isNotEmpty) {
+      text = '$separator$text';
+    }
+    final newOffset = doc.length + text.length;
+    _quillController.replaceText(
+      doc.length,
+      0,
+      text,
+      TextSelection.collapsed(offset: newOffset),
+    );
   }
 
   void _toggleListening(NoteEditorLoaded state) async {
@@ -67,12 +149,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     } else {
       cubit.setListening(true);
       await _speechService.startListening((text) {
-        if (text.isNotEmpty) {
-          final currentText = _textController.text;
-          final newText = currentText.isEmpty ? text : '$currentText $text';
-          _textController.text = newText;
-          cubit.updateText(newText);
-        }
+        if (text.isNotEmpty) _insertAtEnd(text);
       });
     }
   }
@@ -81,12 +158,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Widget build(BuildContext context) {
     return BlocConsumer<NoteEditorCubit, NoteEditorState>(
       listener: (context, state) {
-        if (state is NoteEditorLoaded &&
-            _textController.text != state.note.rawText) {
-          // Only update if it's not the user currently typing
-          if (!FocusScope.of(context).hasFocus) {
-            _textController.text = state.note.rawText;
-          }
+        if (state is NoteEditorLoaded && !_initialized) {
+          _initialized = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _restoreContent(state.note);
+          });
         }
       },
       builder: (context, state) {
@@ -99,11 +175,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         }
 
         if (state is NoteEditorLoaded) {
-          // Set initial text once it's loaded if controller is empty
-          if (_textController.text.isEmpty && state.note.rawText.isNotEmpty) {
-            _textController.text = state.note.rawText;
-          }
-
           return Scaffold(
             appBar: AppBar(
               title: const Text('Consultation Notes'),
@@ -150,12 +221,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                             .read<NoteEditorCubit>()
                             .saveNoteFields(updatedNote);
                       } else {
-                        final currentText = _textController.text;
-                        final newText = currentText.isEmpty
-                            ? suggestion
-                            : '$currentText\n\n$suggestion';
-                        _textController.text = newText;
-                        context.read<NoteEditorCubit>().updateText(newText);
+                        _insertAtEnd(suggestion, separator: '\n\n');
                       }
                     }
                   },
@@ -169,35 +235,61 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           status: state.note.status,
                           fontSize: _fontSize,
                           onDecreaseFont: () => setState(() {
-                            _fontSize =
-                                (_fontSize - 2).clamp(_minFontSize, _maxFontSize);
+                            _fontSize = (_fontSize - 2)
+                                .clamp(_minFontSize, _maxFontSize);
                           }),
                           onIncreaseFont: () => setState(() {
-                            _fontSize =
-                                (_fontSize + 2).clamp(_minFontSize, _maxFontSize);
+                            _fontSize = (_fontSize + 2)
+                                .clamp(_minFontSize, _maxFontSize);
                           }),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
+                        QuillSimpleToolbar(
+                          controller: _quillController,
+                          config: const QuillSimpleToolbarConfig(
+                            multiRowsDisplay: true,
+                            showDividers: false,
+                            showFontFamily: false,
+                            showFontSize: false,
+                            showHeaderStyle: true,
+                            showColorButton: true,
+                            showBackgroundColorButton: false,
+                            showInlineCode: false,
+                            showStrikeThrough: true,
+                            showUnderLineButton: true,
+                            showClearFormat: true,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            maxLines: null,
-                            expands: true,
-                            style: TextStyle(fontSize: _fontSize, height: 1.4),
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'Start typing or dictating your notes...',
-                              border: OutlineInputBorder(),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
+                              ),
+                              borderRadius: BorderRadius.circular(4),
                             ),
-                            onChanged: (text) => setState(() {
-                              context
-                                  .read<NoteEditorCubit>()
-                                  .updateText(text);
-                            }),
+                            child: QuillEditor.basic(
+                              controller: _quillController,
+                              config: QuillEditorConfig(
+                                placeholder:
+                                    'Start typing or dictating your notes...',
+                                expands: true,
+                                padding: const EdgeInsets.all(12),
+                                customStyles: DefaultStyles(
+                                  paragraph: TextStyle(
+                                    fontSize: _fontSize,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        AiToolbar(currentText: _textController.text),
+                        AiToolbar(currentText: _plainText),
                         if (state.note.extractedFields != null) ...[
                           const SizedBox(height: 16),
                           ExpansionTile(
@@ -228,7 +320,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           label: '$_wordCount words',
                           child: Text(
                             '$_wordCount words · '
-                            '${_textController.text.characters.length} chars',
+                            '${_plainText.characters.length} chars',
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: Colors.grey,

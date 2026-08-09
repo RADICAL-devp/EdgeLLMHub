@@ -16,6 +16,7 @@ class NoteLocalRepository {
             patientId: Value(note.patientId),
             doctorId: Value(note.doctorId),
             rawText: Value(note.rawText),
+            richTextDelta: Value(note.richTextDelta),
             status: Value(note.status.index),
             extractedFields: Value(note.extractedFields != null
                 ? jsonEncode(note.extractedFields!.toJson())
@@ -40,6 +41,7 @@ class NoteLocalRepository {
       patientId: record.patientId,
       doctorId: record.doctorId,
       rawText: record.rawText,
+      richTextDelta: record.richTextDelta,
       status: NoteStatus.values[record.status],
       extractedFields: record.extractedFields != null
           ? ExtractedFields.fromJson(jsonDecode(record.extractedFields!))
@@ -63,6 +65,7 @@ class NoteLocalRepository {
               patientId: r.patientId,
               doctorId: r.doctorId,
               rawText: r.rawText,
+              richTextDelta: r.richTextDelta,
               status: NoteStatus.values[r.status],
               extractedFields: r.extractedFields != null
                   ? ExtractedFields.fromJson(jsonDecode(r.extractedFields!))
@@ -92,6 +95,7 @@ class NoteLocalRepository {
               patientId: r.patientId,
               doctorId: r.doctorId,
               rawText: r.rawText,
+              richTextDelta: r.richTextDelta,
               status: NoteStatus.values[r.status],
               extractedFields: r.extractedFields != null
                   ? ExtractedFields.fromJson(jsonDecode(r.extractedFields!))

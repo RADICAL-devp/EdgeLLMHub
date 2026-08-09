@@ -63,6 +63,10 @@ class DoctorNote extends Equatable {
   final String patientId;
   final String doctorId;
   final String rawText;
+
+  /// Serialized Quill Delta JSON for the rich-text editor.
+  /// Null for notes written before the rich-text editor existed.
+  final String? richTextDelta;
   final NoteStatus status;
   final ExtractedFields? extractedFields;
   final String? patientRecap;
@@ -75,6 +79,7 @@ class DoctorNote extends Equatable {
     required this.patientId,
     required this.doctorId,
     required this.rawText,
+    this.richTextDelta,
     this.status = NoteStatus.draft,
     this.extractedFields,
     this.patientRecap,
@@ -88,6 +93,7 @@ class DoctorNote extends Equatable {
     String? patientId,
     String? doctorId,
     String? rawText,
+    String? richTextDelta,
     NoteStatus? status,
     ExtractedFields? extractedFields,
     String? patientRecap,
@@ -100,6 +106,7 @@ class DoctorNote extends Equatable {
       patientId: patientId ?? this.patientId,
       doctorId: doctorId ?? this.doctorId,
       rawText: rawText ?? this.rawText,
+      richTextDelta: richTextDelta ?? this.richTextDelta,
       status: status ?? this.status,
       extractedFields: extractedFields ?? this.extractedFields,
       patientRecap: patientRecap ?? this.patientRecap,
@@ -114,6 +121,7 @@ class DoctorNote extends Equatable {
         'patientId': patientId,
         'doctorId': doctorId,
         'rawText': rawText,
+        'richTextDelta': richTextDelta,
         'status': status.name,
         'extractedFields': extractedFields?.toJson(),
         'patientRecap': patientRecap,
@@ -128,6 +136,7 @@ class DoctorNote extends Equatable {
       patientId: json['patientId'] as String,
       doctorId: json['doctorId'] as String,
       rawText: json['rawText'] as String? ?? '',
+      richTextDelta: json['richTextDelta'] as String?,
       status: NoteStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => NoteStatus.draft,
@@ -150,6 +159,7 @@ class DoctorNote extends Equatable {
         patientId,
         doctorId,
         rawText,
+        richTextDelta,
         status,
         extractedFields,
         patientRecap,

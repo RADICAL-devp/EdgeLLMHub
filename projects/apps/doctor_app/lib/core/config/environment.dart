@@ -73,4 +73,24 @@ class EnvironmentConfig {
   static const List<String> supportedModels = [
     'SmolLM-350M-Instruct-q4f16_1-MLC',
   ];
+
+  /// URL the SmolLM model binary is downloaded from (Android).
+  ///
+  /// Override via `--dart-define=MODEL_DOWNLOAD_URL=...`. Empty in release
+  /// builds until a signed GCP bucket URL is provisioned.
+  static String get modelDownloadUrl {
+    const explicit = String.fromEnvironment('MODEL_DOWNLOAD_URL');
+    return explicit;
+  }
+
+  /// Expected SHA-256 of the model binary (hex), used to verify downloads.
+  ///
+  /// Override via `--dart-define=MODEL_CHECKSUM_SHA256=...`.
+  static String get modelChecksumSha256 {
+    const explicit = String.fromEnvironment('MODEL_CHECKSUM_SHA256');
+    return explicit;
+  }
+
+  /// File name of the on-device model binary (Android).
+  static const String modelFileName = 'smolLM-350M.bin';
 }
