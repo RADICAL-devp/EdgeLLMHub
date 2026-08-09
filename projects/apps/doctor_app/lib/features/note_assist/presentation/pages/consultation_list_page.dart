@@ -317,7 +317,9 @@ class _ConsultationTile extends StatelessWidget {
     if (diff.inHours < 1) return '${diff.inMinutes}m ago';
     if (diff.inDays < 1) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return item.updatedAt.toString().split('.').first;
+    final dt = item.updatedAt.toLocal();
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-'
+        '${dt.day.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -398,11 +400,15 @@ class _ConsultationTile extends StatelessWidget {
                   color: scheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  _relativeTime,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                Flexible(
+                  child: Text(
+                    _relativeTime,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
                 ),
               ],
             ),
