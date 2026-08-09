@@ -20,19 +20,15 @@ class NoteRemoteDatasource {
         'patientId': note.patientId,
         'doctorId': note.doctorId,
         'rawText': note.rawText,
+        'richTextDelta': note.richTextDelta,
         'status': note.status.name,
         'extractedFields': note.extractedFields?.toJson(),
-        'recap': note.patientRecap,
+        'patientRecap': note.patientRecap,
         'createdAt': note.createdAt.toIso8601String(),
         'updatedAt': note.updatedAt.toIso8601String(),
       };
 
-      // The backend does not yet implement the sync endpoint,
-      // so we will just pretend it succeeded to avoid 404 errors in UI.
-      // await _dio.post(
-      //   '/api/doctor-notes/sync',
-      //   data: payload,
-      // );
+      await _dio.post('/api/v1/notes/sync', data: payload);
     } on DioException catch (e) {
       throw DioErrorHandler.handle(e, context: 'syncNote');
     } catch (e) {
@@ -47,13 +43,12 @@ class NoteRemoteDatasource {
 
   Future<DoctorNote?> fetchNoteForConsultation(String consultationId) async {
     try {
-      final response =
-          await _dio.get('/api/doctor-notes/consultation/$consultationId');
-      if (response.data != null) {
-        // Parse logic would go here
-        return null; // For simplicity in this scaffold
-      }
-      return null;
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/notes/consultation/$consultationId',
+      );
+      final data = response.data;
+      if (data == null) return null;
+      return DoctorNote.fromJson(data);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         return null; // Not found is an expected case

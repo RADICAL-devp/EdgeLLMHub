@@ -22,6 +22,8 @@ import 'core/repositories/drift_transcript_repository.dart';
 import 'core/repositories/drift_summary_repository.dart';
 import 'core/network/retry_interceptor.dart';
 import 'core/network/circuit_breaker.dart';
+import 'core/network/auth_interceptor.dart';
+import 'core/auth/auth_token_service.dart';
 import 'core/validation/input_validator.dart';
 
 import 'core/application_services/transcript_chunking_service.dart';
@@ -90,7 +92,10 @@ Future<void> setupDependencies() async {
     sendTimeout: const Duration(seconds: 30),
   ));
 
-  // Add interceptors in order: retry → logging (debug only)
+  // Add interceptors in order: auth → retry → logging (debug only)
+  final authTokenService = AuthTokenService(dio);
+  getIt.registerLazySingleton<AuthTokenService>(() => authTokenService);
+  dio.interceptors.add(AuthInterceptor(dio, authTokenService));
   dio.interceptors.add(RetryInterceptor(dio));
   if (EnvironmentConfig.enableNetworkLogging) {
     dio.interceptors.add(LogInterceptor(
