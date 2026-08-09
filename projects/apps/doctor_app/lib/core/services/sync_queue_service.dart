@@ -79,6 +79,12 @@ class SyncQueueService {
   }
 
   /// Enqueue a note for sync with LWW conflict resolution.
+  ///
+  /// Conflict policy:
+  ///  - Newer local note (strictly newer [DoctorNote.updatedAt]) replaces the
+  ///    queued version (LWW).
+  ///  - Same timestamp from a different edit → flagged as [isConflict] so the
+  ///    user can pick which version to keep in the merge UI.
   Future<void> enqueueNote(DoctorNote note, {String operation = 'update'}) async {
     // Remove existing entry for same noteId to implement LWW
     final existingEntries = await _syncQueueRepository.getPendingEntries();
@@ -87,8 +93,13 @@ class SyncQueueService {
       // Keep the newer version (LWW)
       if (note.updatedAt.isAfter(existing.note.updatedAt)) {
         await _syncQueueRepository.remove(existing.id);
-      } else {
+      } else if (note.updatedAt.isBefore(existing.note.updatedAt)) {
         // Existing is newer, don't enqueue
+        return;
+      } else {
+        // Same timestamp but different content → concurrent edit conflict.
+        final updatedEntry = existing.copyWith(isConflict: true);
+        await _syncQueueRepository.updateEntry(updatedEntry);
         return;
       }
     }
@@ -214,6 +225,40 @@ class SyncQueueService {
   /// Immediately attempt to flush all pending entries (used by the
   /// settings UI "Sync now" action).
   Future<void> syncNow() => _processPendingQueue();
+
+  /// Live stream of all queue entries (pending, dead-letter, conflicted).
+  Stream<List<SyncQueueEntry>> watchEntries() {
+    return _syncQueueRepository.watchAllEntries();
+  }
+
+  /// The pending/conflicted entry for a consultation, if any.
+  Future<SyncQueueEntry?> getEntryForConsultation(String consultationId) {
+    return _syncQueueRepository.getByConsultationId(consultationId);
+  }
+
+  /// Resolve a conflicted entry by keeping [chosenNote].
+  ///
+  /// Persists the chosen version locally (replacing the queued payload) and
+  /// clears the conflict flag so the next sync pushes the chosen content.
+  Future<void> resolveConflict(String entryId, DoctorNote chosenNote) async {
+    final entry = await _syncQueueRepository.getById(entryId);
+    if (entry == null) return;
+
+    await _syncQueueRepository.updateEntry(entry.copyWith(
+      note: chosenNote,
+      isConflict: false,
+      lastError: null,
+      retryCount: 0,
+      nextRetryAt: null,
+      updatedAt: DateTime.now().toUtc(),
+    ));
+    await _processPendingQueue();
+  }
+
+  /// Discard the queued version entirely (keep only what is on disk).
+  Future<void> discardQueuedVersion(String entryId) async {
+    await _syncQueueRepository.remove(entryId);
+  }
 
   void dispose() {
     _disposed = true;

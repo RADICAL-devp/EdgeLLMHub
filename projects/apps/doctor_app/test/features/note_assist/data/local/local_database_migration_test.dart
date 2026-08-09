@@ -46,4 +46,51 @@ void main() {
     
     await db.close();
   });
+
+  test('migration from v3 to v4 adds isConflict without data loss', () async {
+    final rawDb = sqlite3.openInMemory();
+
+    // Simulate the v3 schema (sync queue WITHOUT the is_conflict column).
+    rawDb.execute('''
+      CREATE TABLE sync_queue_entries (
+        id TEXT NOT NULL PRIMARY KEY,
+        note_id TEXT NOT NULL,
+        consultation_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        max_retries INTEGER NOT NULL DEFAULT 5,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        next_retry_at INTEGER,
+        last_error TEXT,
+        is_dead_letter INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+    rawDb.execute('''
+      INSERT INTO sync_queue_entries
+        (id, note_id, consultation_id, operation, payload_json,
+         created_at, updated_at)
+      VALUES
+        ('q-1', 'n-1', 'c-1', 'update', '{}', 10000, 10000);
+    ''');
+    rawDb.execute('PRAGMA user_version = 3;');
+
+    final db = LocalDatabase.connect(NativeDatabase.opened(rawDb));
+
+    // Reading triggers the lazy open → v3→v4 migration.
+    final rows = await db.select(db.syncQueueEntries).get();
+    expect(rows.length, 1);
+    expect(rows.first.id, 'q-1');
+    expect(rows.first.isConflict, isFalse);
+
+    // v4 adds the is_conflict column; existing rows keep default false.
+    final columns = rawDb
+        .select('PRAGMA table_info(sync_queue_entries)')
+        .map((row) => row['name'] as String)
+        .toList();
+    expect(columns, contains('is_conflict'));
+
+    await db.close();
+  });
 }

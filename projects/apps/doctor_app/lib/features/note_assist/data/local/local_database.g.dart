@@ -1465,6 +1465,16 @@ class $SyncQueueEntriesTable extends SyncQueueEntries
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_dead_letter" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _isConflictMeta =
+      const VerificationMeta('isConflict');
+  @override
+  late final GeneratedColumn<bool> isConflict = GeneratedColumn<bool>(
+      'is_conflict', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_conflict" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -1478,7 +1488,8 @@ class $SyncQueueEntriesTable extends SyncQueueEntries
         updatedAt,
         nextRetryAt,
         lastError,
-        isDeadLetter
+        isDeadLetter,
+        isConflict
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1564,6 +1575,12 @@ class $SyncQueueEntriesTable extends SyncQueueEntries
           isDeadLetter.isAcceptableOrUnknown(
               data['is_dead_letter']!, _isDeadLetterMeta));
     }
+    if (data.containsKey('is_conflict')) {
+      context.handle(
+          _isConflictMeta,
+          isConflict.isAcceptableOrUnknown(
+              data['is_conflict']!, _isConflictMeta));
+    }
     return context;
   }
 
@@ -1597,6 +1614,8 @@ class $SyncQueueEntriesTable extends SyncQueueEntries
           .read(DriftSqlType.string, data['${effectivePrefix}last_error']),
       isDeadLetter: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_dead_letter'])!,
+      isConflict: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_conflict'])!,
     );
   }
 
@@ -1620,6 +1639,7 @@ class SyncQueueEntryEntity extends DataClass
   final DateTime? nextRetryAt;
   final String? lastError;
   final bool isDeadLetter;
+  final bool isConflict;
   const SyncQueueEntryEntity(
       {required this.id,
       required this.noteId,
@@ -1632,7 +1652,8 @@ class SyncQueueEntryEntity extends DataClass
       required this.updatedAt,
       this.nextRetryAt,
       this.lastError,
-      required this.isDeadLetter});
+      required this.isDeadLetter,
+      required this.isConflict});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1652,6 +1673,7 @@ class SyncQueueEntryEntity extends DataClass
       map['last_error'] = Variable<String>(lastError);
     }
     map['is_dead_letter'] = Variable<bool>(isDeadLetter);
+    map['is_conflict'] = Variable<bool>(isConflict);
     return map;
   }
 
@@ -1673,6 +1695,7 @@ class SyncQueueEntryEntity extends DataClass
           ? const Value.absent()
           : Value(lastError),
       isDeadLetter: Value(isDeadLetter),
+      isConflict: Value(isConflict),
     );
   }
 
@@ -1692,6 +1715,7 @@ class SyncQueueEntryEntity extends DataClass
       nextRetryAt: serializer.fromJson<DateTime?>(json['nextRetryAt']),
       lastError: serializer.fromJson<String?>(json['lastError']),
       isDeadLetter: serializer.fromJson<bool>(json['isDeadLetter']),
+      isConflict: serializer.fromJson<bool>(json['isConflict']),
     );
   }
   @override
@@ -1710,6 +1734,7 @@ class SyncQueueEntryEntity extends DataClass
       'nextRetryAt': serializer.toJson<DateTime?>(nextRetryAt),
       'lastError': serializer.toJson<String?>(lastError),
       'isDeadLetter': serializer.toJson<bool>(isDeadLetter),
+      'isConflict': serializer.toJson<bool>(isConflict),
     };
   }
 
@@ -1725,7 +1750,8 @@ class SyncQueueEntryEntity extends DataClass
           DateTime? updatedAt,
           Value<DateTime?> nextRetryAt = const Value.absent(),
           Value<String?> lastError = const Value.absent(),
-          bool? isDeadLetter}) =>
+          bool? isDeadLetter,
+          bool? isConflict}) =>
       SyncQueueEntryEntity(
         id: id ?? this.id,
         noteId: noteId ?? this.noteId,
@@ -1739,6 +1765,7 @@ class SyncQueueEntryEntity extends DataClass
         nextRetryAt: nextRetryAt.present ? nextRetryAt.value : this.nextRetryAt,
         lastError: lastError.present ? lastError.value : this.lastError,
         isDeadLetter: isDeadLetter ?? this.isDeadLetter,
+        isConflict: isConflict ?? this.isConflict,
       );
   SyncQueueEntryEntity copyWithCompanion(SyncQueueEntriesCompanion data) {
     return SyncQueueEntryEntity(
@@ -1762,6 +1789,8 @@ class SyncQueueEntryEntity extends DataClass
       isDeadLetter: data.isDeadLetter.present
           ? data.isDeadLetter.value
           : this.isDeadLetter,
+      isConflict:
+          data.isConflict.present ? data.isConflict.value : this.isConflict,
     );
   }
 
@@ -1779,7 +1808,8 @@ class SyncQueueEntryEntity extends DataClass
           ..write('updatedAt: $updatedAt, ')
           ..write('nextRetryAt: $nextRetryAt, ')
           ..write('lastError: $lastError, ')
-          ..write('isDeadLetter: $isDeadLetter')
+          ..write('isDeadLetter: $isDeadLetter, ')
+          ..write('isConflict: $isConflict')
           ..write(')'))
         .toString();
   }
@@ -1797,7 +1827,8 @@ class SyncQueueEntryEntity extends DataClass
       updatedAt,
       nextRetryAt,
       lastError,
-      isDeadLetter);
+      isDeadLetter,
+      isConflict);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1813,7 +1844,8 @@ class SyncQueueEntryEntity extends DataClass
           other.updatedAt == this.updatedAt &&
           other.nextRetryAt == this.nextRetryAt &&
           other.lastError == this.lastError &&
-          other.isDeadLetter == this.isDeadLetter);
+          other.isDeadLetter == this.isDeadLetter &&
+          other.isConflict == this.isConflict);
 }
 
 class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
@@ -1829,6 +1861,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
   final Value<DateTime?> nextRetryAt;
   final Value<String?> lastError;
   final Value<bool> isDeadLetter;
+  final Value<bool> isConflict;
   final Value<int> rowid;
   const SyncQueueEntriesCompanion({
     this.id = const Value.absent(),
@@ -1843,6 +1876,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
     this.nextRetryAt = const Value.absent(),
     this.lastError = const Value.absent(),
     this.isDeadLetter = const Value.absent(),
+    this.isConflict = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SyncQueueEntriesCompanion.insert({
@@ -1858,6 +1892,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
     this.nextRetryAt = const Value.absent(),
     this.lastError = const Value.absent(),
     this.isDeadLetter = const Value.absent(),
+    this.isConflict = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         noteId = Value(noteId),
@@ -1879,6 +1914,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
     Expression<DateTime>? nextRetryAt,
     Expression<String>? lastError,
     Expression<bool>? isDeadLetter,
+    Expression<bool>? isConflict,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1894,6 +1930,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
       if (nextRetryAt != null) 'next_retry_at': nextRetryAt,
       if (lastError != null) 'last_error': lastError,
       if (isDeadLetter != null) 'is_dead_letter': isDeadLetter,
+      if (isConflict != null) 'is_conflict': isConflict,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1911,6 +1948,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
       Value<DateTime?>? nextRetryAt,
       Value<String?>? lastError,
       Value<bool>? isDeadLetter,
+      Value<bool>? isConflict,
       Value<int>? rowid}) {
     return SyncQueueEntriesCompanion(
       id: id ?? this.id,
@@ -1925,6 +1963,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
       nextRetryAt: nextRetryAt ?? this.nextRetryAt,
       lastError: lastError ?? this.lastError,
       isDeadLetter: isDeadLetter ?? this.isDeadLetter,
+      isConflict: isConflict ?? this.isConflict,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1968,6 +2007,9 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
     if (isDeadLetter.present) {
       map['is_dead_letter'] = Variable<bool>(isDeadLetter.value);
     }
+    if (isConflict.present) {
+      map['is_conflict'] = Variable<bool>(isConflict.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1989,6 +2031,7 @@ class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
           ..write('nextRetryAt: $nextRetryAt, ')
           ..write('lastError: $lastError, ')
           ..write('isDeadLetter: $isDeadLetter, ')
+          ..write('isConflict: $isConflict, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2703,6 +2746,7 @@ typedef $$SyncQueueEntriesTableCreateCompanionBuilder
   Value<DateTime?> nextRetryAt,
   Value<String?> lastError,
   Value<bool> isDeadLetter,
+  Value<bool> isConflict,
   Value<int> rowid,
 });
 typedef $$SyncQueueEntriesTableUpdateCompanionBuilder
@@ -2719,6 +2763,7 @@ typedef $$SyncQueueEntriesTableUpdateCompanionBuilder
   Value<DateTime?> nextRetryAt,
   Value<String?> lastError,
   Value<bool> isDeadLetter,
+  Value<bool> isConflict,
   Value<int> rowid,
 });
 
@@ -2767,6 +2812,9 @@ class $$SyncQueueEntriesTableFilterComposer
 
   ColumnFilters<bool> get isDeadLetter => $composableBuilder(
       column: $table.isDeadLetter, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isConflict => $composableBuilder(
+      column: $table.isConflict, builder: (column) => ColumnFilters(column));
 }
 
 class $$SyncQueueEntriesTableOrderingComposer
@@ -2815,6 +2863,9 @@ class $$SyncQueueEntriesTableOrderingComposer
   ColumnOrderings<bool> get isDeadLetter => $composableBuilder(
       column: $table.isDeadLetter,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isConflict => $composableBuilder(
+      column: $table.isConflict, builder: (column) => ColumnOrderings(column));
 }
 
 class $$SyncQueueEntriesTableAnnotationComposer
@@ -2861,6 +2912,9 @@ class $$SyncQueueEntriesTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeadLetter => $composableBuilder(
       column: $table.isDeadLetter, builder: (column) => column);
+
+  GeneratedColumn<bool> get isConflict => $composableBuilder(
+      column: $table.isConflict, builder: (column) => column);
 }
 
 class $$SyncQueueEntriesTableTableManager extends RootTableManager<
@@ -2903,6 +2957,7 @@ class $$SyncQueueEntriesTableTableManager extends RootTableManager<
             Value<DateTime?> nextRetryAt = const Value.absent(),
             Value<String?> lastError = const Value.absent(),
             Value<bool> isDeadLetter = const Value.absent(),
+            Value<bool> isConflict = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               SyncQueueEntriesCompanion(
@@ -2918,6 +2973,7 @@ class $$SyncQueueEntriesTableTableManager extends RootTableManager<
             nextRetryAt: nextRetryAt,
             lastError: lastError,
             isDeadLetter: isDeadLetter,
+            isConflict: isConflict,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -2933,6 +2989,7 @@ class $$SyncQueueEntriesTableTableManager extends RootTableManager<
             Value<DateTime?> nextRetryAt = const Value.absent(),
             Value<String?> lastError = const Value.absent(),
             Value<bool> isDeadLetter = const Value.absent(),
+            Value<bool> isConflict = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               SyncQueueEntriesCompanion.insert(
@@ -2948,6 +3005,7 @@ class $$SyncQueueEntriesTableTableManager extends RootTableManager<
             nextRetryAt: nextRetryAt,
             lastError: lastError,
             isDeadLetter: isDeadLetter,
+            isConflict: isConflict,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

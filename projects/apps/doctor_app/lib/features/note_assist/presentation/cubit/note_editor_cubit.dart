@@ -147,6 +147,15 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
     }
   }
 
+  /// Force an immediate sync retry (used by the sync status indicator).
+  void retrySync() {
+    if (state is NoteEditorLoaded) {
+      final currentState = state as NoteEditorLoaded;
+      emit(currentState.copyWith(error: null));
+      _triggerSync(currentState.note.consultationId);
+    }
+  }
+
   @override
   Future<void> close() {
     _debounce?.cancel();

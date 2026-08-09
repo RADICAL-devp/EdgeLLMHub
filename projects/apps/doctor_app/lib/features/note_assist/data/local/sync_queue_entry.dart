@@ -1,25 +1,10 @@
-import 'package:drift/drift.dart';
 import 'package:doctor_app/features/note_assist/domain/models/doctor_note.dart';
 
-@DataClassName('SyncQueueEntryEntity')
-class SyncQueueEntries extends Table {
-  TextColumn get id => text()(); // UUID
-  TextColumn get noteId => text()();
-  TextColumn get consultationId => text()();
-  TextColumn get operation => text()(); // 'create', 'update', 'delete'
-  TextColumn get payloadJson => text()(); // Serialized DoctorNote
-  IntColumn get retryCount => integer().withDefault(const Constant(0))();
-  IntColumn get maxRetries => integer().withDefault(const Constant(5))();
-  DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime()();
-  DateTimeColumn get nextRetryAt => dateTime().nullable()();
-  TextColumn get lastError => text().nullable()();
-  BoolColumn get isDeadLetter => boolean().withDefault(const Constant(false))();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
+/// A queued note sync operation.
+///
+/// The backing Drift table lives in [LocalDatabase] (registered under
+/// `SyncQueueEntries`); this class is the domain model plus JSON
+/// (de)serialization for the `payloadJson` column.
 class SyncQueueEntry {
   final String id;
   final String noteId;
@@ -33,6 +18,7 @@ class SyncQueueEntry {
   final DateTime? nextRetryAt;
   final String? lastError;
   final bool isDeadLetter;
+  final bool isConflict;
 
   SyncQueueEntry({
     required this.id,
@@ -47,6 +33,7 @@ class SyncQueueEntry {
     this.nextRetryAt,
     this.lastError,
     this.isDeadLetter = false,
+    this.isConflict = false,
   });
 
   SyncQueueEntry copyWith({
@@ -62,6 +49,7 @@ class SyncQueueEntry {
     DateTime? nextRetryAt,
     String? lastError,
     bool? isDeadLetter,
+    bool? isConflict,
   }) {
     return SyncQueueEntry(
       id: id ?? this.id,
@@ -76,6 +64,7 @@ class SyncQueueEntry {
       nextRetryAt: nextRetryAt ?? this.nextRetryAt,
       lastError: lastError ?? this.lastError,
       isDeadLetter: isDeadLetter ?? this.isDeadLetter,
+      isConflict: isConflict ?? this.isConflict,
     );
   }
 
@@ -92,6 +81,7 @@ class SyncQueueEntry {
     'nextRetryAt': nextRetryAt?.toIso8601String(),
     'lastError': lastError,
     'isDeadLetter': isDeadLetter,
+    'isConflict': isConflict,
   };
 
   static SyncQueueEntry fromJson(Map<String, dynamic> json) {
@@ -110,6 +100,7 @@ class SyncQueueEntry {
           : null,
       lastError: json['lastError'] as String?,
       isDeadLetter: json['isDeadLetter'] as bool? ?? false,
+      isConflict: json['isConflict'] as bool? ?? false,
     );
   }
 }

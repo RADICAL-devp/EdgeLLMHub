@@ -10,6 +10,7 @@ import 'package:get_it/get_it.dart';
 import 'dart:convert';
 import '../widgets/ai_toolbar.dart';
 import '../widgets/suggestion_panel.dart';
+import '../widgets/sync_status_indicator.dart';
 
 class NoteEditorPage extends StatefulWidget {
   final String consultationId;
@@ -107,38 +108,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             appBar: AppBar(
               title: const Text('Consultation Notes'),
               actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 16.0),
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (state.isSyncing)
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          else if (state.error != null)
-                            const Icon(Icons.cloud_off,
-                                size: 16, color: Colors.red)
-                          else
-                            const Icon(Icons.cloud_done,
-                                size: 16, color: Colors.green),
-                          const SizedBox(width: 8),
-                          Text(
-                            state.isSyncing
-                                ? 'Syncing...'
-                                : (state.error != null ? 'Offline' : 'Saved'),
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey,
-                                    ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                SyncStatusIndicator(
+                  consultationId: widget.consultationId,
+                  isSyncing: state.isSyncing,
+                  syncError: state.error,
+                  onRetry: () =>
+                      context.read<NoteEditorCubit>().retrySync(),
+                ),
               ],
             ),
             body: Column(

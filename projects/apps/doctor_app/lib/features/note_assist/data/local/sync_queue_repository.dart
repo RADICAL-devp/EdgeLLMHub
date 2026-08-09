@@ -1,8 +1,7 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:doctor_app/features/note_assist/data/local/sync_queue_entry.dart'
-    hide SyncQueueEntries;
+import 'package:doctor_app/features/note_assist/data/local/sync_queue_entry.dart';
 import 'local_database.dart';
 
 class SyncQueueRepository {
@@ -25,6 +24,7 @@ class SyncQueueRepository {
         nextRetryAt: Value(entry.nextRetryAt),
         lastError: Value(entry.lastError),
         isDeadLetter: Value(entry.isDeadLetter),
+        isConflict: Value(entry.isConflict),
       ),
     );
   }
@@ -32,6 +32,17 @@ class SyncQueueRepository {
   Future<SyncQueueEntry?> getById(String id) async {
     final row = await (_db.select(_db.syncQueueEntries)
           ..where((t) => t.id.equals(id))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null ? _toEntry(row) : null;
+  }
+
+  /// Latest entry for a consultation regardless of retry scheduling or
+  /// dead-letter state.
+  Future<SyncQueueEntry?> getByConsultationId(String consultationId) async {
+    final row = await (_db.select(_db.syncQueueEntries)
+          ..where((t) => t.consultationId.equals(consultationId))
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
           ..limit(1))
         .getSingleOrNull();
     return row != null ? _toEntry(row) : null;
@@ -68,6 +79,7 @@ class SyncQueueRepository {
         nextRetryAt: Value(entry.nextRetryAt),
         lastError: Value(entry.lastError),
         isDeadLetter: Value(entry.isDeadLetter),
+        isConflict: Value(entry.isConflict),
       ),
     );
   }
@@ -100,6 +112,14 @@ class SyncQueueRepository {
     return count.read(tbl.id.count()) ?? 0;
   }
 
+  /// Stream of all queue entries, newest first, for live sync indicators.
+  Stream<List<SyncQueueEntry>> watchAllEntries() {
+    return (_db.select(_db.syncQueueEntries)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .watch()
+        .map((rows) => rows.map(_toEntry).toList());
+  }
+
   SyncQueueEntry _toEntry(SyncQueueEntryEntity row) {
     return SyncQueueEntry.fromJson({
       'id': row.id,
@@ -114,6 +134,7 @@ class SyncQueueRepository {
       'nextRetryAt': row.nextRetryAt?.toIso8601String(),
       'lastError': row.lastError,
       'isDeadLetter': row.isDeadLetter,
+      'isConflict': row.isConflict,
     });
   }
 }

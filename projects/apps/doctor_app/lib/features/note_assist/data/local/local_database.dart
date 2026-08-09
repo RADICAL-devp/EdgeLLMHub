@@ -66,6 +66,7 @@ class SyncQueueEntries extends Table {
   DateTimeColumn get nextRetryAt => dateTime().nullable()();
   TextColumn get lastError => text().nullable()();
   BoolColumn get isDeadLetter => boolean().withDefault(const Constant(false))();
+  BoolColumn get isConflict => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -78,7 +79,7 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase.connect(QueryExecutor e) : super(e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -93,7 +94,13 @@ class LocalDatabase extends _$LocalDatabase {
         }
         if (from < 3) {
           // v2 → v3: Added SyncQueueEntries table for persistent sync queue.
+          // The table is created with the current definition, which already
+          // includes the v4 isConflict column.
           await m.createTable(syncQueueEntries);
+        }
+        if (from == 3) {
+          // v3 → v4: Added isConflict flag for manual merge UI.
+          await m.addColumn(syncQueueEntries, syncQueueEntries.isConflict);
         }
       },
       beforeOpen: (details) async {
