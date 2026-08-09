@@ -68,14 +68,18 @@ class ConsultationListCubit extends Cubit<ConsultationListState> {
     ));
   }
 
-  /// Reveal the next page of results.
+  /// Reveal the next page of results (clamped to the full result set so the
+  /// final partial page is always reachable).
   void loadMore() {
     final current = state;
     if (current is! ConsultationListLoaded) return;
+    if (current.visibleCount >= current.filtered.length) return;
     final next = current.visibleCount + _pageSize;
-    if (next < current.filtered.length) {
-      emit(current.copyWith(visibleCount: next));
-    }
+    emit(current.copyWith(
+      visibleCount: next > current.filtered.length
+          ? current.filtered.length
+          : next,
+    ));
   }
 
   /// Whether there are more filtered results to load.

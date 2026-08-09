@@ -4,6 +4,7 @@ import 'package:doctor_app/features/note_assist/presentation/cubit/model_manager
 import 'package:flutter_test/flutter_test.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:mocktail/mocktail.dart';
 
 const _modelFileName = 'smolLM-350M.bin';
 
@@ -43,11 +44,61 @@ class _FakeDownloader implements ModelDownloader {
 String _sha256OfFakeBytes(int count) =>
     sha256.convert(List.filled(count, 7)).toString();
 
+class _MockCapabilityService extends Mock implements DeviceCapabilityService {}
+
 void main() {
   late DeviceCapabilityService capabilityService;
 
   setUp(() {
     capabilityService = DeviceCapabilityService();
+  });
+
+  group('ModelManagerCubit.checkModelExists', () {
+    test('emits ready in cloud mode on simulators', () async {
+      final cap = _MockCapabilityService();
+      when(() => cap.isSimulator).thenAnswer((_) async => true);
+      when(() => cap.canRunLocalLlm()).thenAnswer((_) async => false);
+      when(() => cap.getRecommendedExecutionMode())
+          .thenAnswer((_) async => ExecutionMode.cloud);
+      final cubit = ModelManagerCubit(capabilityService: cap);
+
+      await cubit.checkModelExists();
+
+      final state = cubit.state;
+      expect(state, isA<ModelManagerReady>());
+      expect((state as ModelManagerReady).executionMode, 'cloud');
+      await cubit.close();
+    });
+
+    test('emits unsupported-platform error on desktop hosts', () async {
+      final cap = _MockCapabilityService();
+      when(() => cap.isSimulator).thenAnswer((_) async => false);
+      when(() => cap.canRunLocalLlm()).thenAnswer((_) async => true);
+      when(() => cap.getRecommendedExecutionMode())
+          .thenAnswer((_) async => ExecutionMode.local);
+      final cubit = ModelManagerCubit(capabilityService: cap);
+
+      // Test hosts run on macOS → neither iOS nor Android branch applies.
+      await cubit.checkModelExists();
+
+      expect(cubit.state, isA<ModelManagerError>());
+      expect((cubit.state as ModelManagerError).message,
+          contains('Unsupported platform'));
+      await cubit.close();
+    });
+
+    test('emits error when capability probing fails', () async {
+      final cap = _MockCapabilityService();
+      when(() => cap.isSimulator).thenThrow(Exception('plugin missing'));
+      final cubit = ModelManagerCubit(capabilityService: cap);
+
+      await cubit.checkModelExists();
+
+      expect(cubit.state, isA<ModelManagerError>());
+      expect((cubit.state as ModelManagerError).message,
+          contains('Failed to check model'));
+      await cubit.close();
+    });
   });
 
   group('ModelManagerCubit.downloadModel (simulated path)', () {

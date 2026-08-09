@@ -149,5 +149,97 @@ void main() {
 
       expect(cubit.state, isA<ConsultationListError>());
     });
+
+    test('loadMore reveals the next page up to the full result set',
+        () async {
+      final notes = List.generate(25, (i) => note(
+            consultationId: 'c$i',
+            updatedAt: DateTime(2026, 1, 1).add(Duration(days: i)),
+          ));
+      when(() => repository.getAllConsultations())
+          .thenAnswer((_) async => notes);
+
+      await cubit.load();
+
+      var state = cubit.state as ConsultationListLoaded;
+      expect(state.filtered, hasLength(25));
+      expect(state.visibleCount, 20);
+      expect(cubit.hasMore, isTrue);
+
+      cubit.loadMore();
+      state = cubit.state as ConsultationListLoaded;
+      expect(state.visibleCount, 25);
+      expect(cubit.hasMore, isFalse);
+
+      // Loading more beyond the end is a no-op.
+      cubit.loadMore();
+      expect((cubit.state as ConsultationListLoaded).visibleCount, 25);
+    });
+
+    test('refresh preserves search query and status filter', () async {
+      when(() => repository.getAllConsultations()).thenAnswer((_) async => [
+            note(
+              consultationId: 'c1',
+              updatedAt: DateTime(2026, 1, 1),
+              status: NoteStatus.finalized,
+              rawText: 'Fractured wrist',
+            ),
+            note(consultationId: 'c2', updatedAt: DateTime(2026, 1, 2)),
+          ]);
+
+      await cubit.load();
+      cubit.search('fractured');
+
+      await cubit.refresh();
+
+      final state = cubit.state as ConsultationListLoaded;
+      expect(state.searchQuery, 'fractured');
+      expect(state.filtered, hasLength(1));
+      expect(state.isRefreshing, isFalse);
+    });
+
+    test('refresh falls back to a full load when not loaded yet', () async {
+      when(() => repository.getAllConsultations())
+          .thenAnswer((_) async => [note(
+                consultationId: 'c1',
+                updatedAt: DateTime(2026, 1, 1),
+              )]);
+
+      await cubit.refresh();
+
+      expect(cubit.state, isA<ConsultationListLoaded>());
+    });
+
+    test('refresh failure keeps the current list visible', () async {
+      when(() => repository.getAllConsultations()).thenAnswer((_) async => [
+            note(consultationId: 'c1', updatedAt: DateTime(2026, 1, 1)),
+          ]);
+      await cubit.load();
+
+      when(() => repository.getAllConsultations())
+          .thenThrow(Exception('disk error'));
+
+      await cubit.refresh();
+
+      final state = cubit.state as ConsultationListLoaded;
+      expect(state.isRefreshing, isFalse);
+      expect(state.all, hasLength(1));
+    });
+
+    test('search and filter reset pagination to the first page', () async {
+      final notes = List.generate(25, (i) => note(
+            consultationId: 'c$i',
+            updatedAt: DateTime(2026, 1, 1).add(Duration(days: i)),
+          ));
+      when(() => repository.getAllConsultations())
+          .thenAnswer((_) async => notes);
+
+      await cubit.load();
+      cubit.loadMore();
+      expect((cubit.state as ConsultationListLoaded).visibleCount, 25);
+
+      cubit.search('c');
+      expect((cubit.state as ConsultationListLoaded).visibleCount, 20);
+    });
   });
 }
