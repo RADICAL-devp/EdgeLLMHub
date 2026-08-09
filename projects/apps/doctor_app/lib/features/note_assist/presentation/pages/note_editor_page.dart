@@ -30,6 +30,15 @@ class NoteEditorPage extends StatefulWidget {
 class _NoteEditorPageState extends State<NoteEditorPage> {
   late TextEditingController _textController;
   final _speechService = GetIt.I<SpeechService>();
+  double _fontSize = 16;
+  static const _minFontSize = 12.0;
+  static const _maxFontSize = 24.0;
+
+  int get _wordCount {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return 0;
+    return text.split(RegExp(r'\s+')).length;
+  }
 
   @override
   void initState() {
@@ -98,9 +107,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             appBar: AppBar(
               title: const Text('Consultation Notes'),
               actions: [
-                if (state is NoteEditorLoaded)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16.0),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16.0),
                     child: Center(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -181,22 +189,38 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       children: [
+                        _EditorStatusBar(
+                          status: state.note.status,
+                          fontSize: _fontSize,
+                          onDecreaseFont: () => setState(() {
+                            _fontSize =
+                                (_fontSize - 2).clamp(_minFontSize, _maxFontSize);
+                          }),
+                          onIncreaseFont: () => setState(() {
+                            _fontSize =
+                                (_fontSize + 2).clamp(_minFontSize, _maxFontSize);
+                          }),
+                        ),
+                        const SizedBox(height: 12),
                         Expanded(
                           child: TextField(
                             controller: _textController,
                             maxLines: null,
                             expands: true,
+                            style: TextStyle(fontSize: _fontSize, height: 1.4),
                             decoration: const InputDecoration(
                               hintText:
                                   'Start typing or dictating your notes...',
                               border: OutlineInputBorder(),
                             ),
-                            onChanged: (text) => context
-                                .read<NoteEditorCubit>()
-                                .updateText(text),
+                            onChanged: (text) => setState(() {
+                              context
+                                  .read<NoteEditorCubit>()
+                                  .updateText(text);
+                            }),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
                         AiToolbar(currentText: _textController.text),
                         if (state.note.extractedFields != null) ...[
                           const SizedBox(height: 16),
@@ -223,16 +247,39 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                             ],
                           ),
                         ],
+                        const Divider(height: 24),
+                        Semantics(
+                          label: '$_wordCount words',
+                          child: Text(
+                            '$_wordCount words · '
+                            '${_textController.text.characters.length} chars',
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey,
+                                    ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
               ],
             ),
-            floatingActionButton: FloatingActionButton(
-              onPressed: () => _toggleListening(state),
-              child: Icon(state.isListening ? Icons.mic : Icons.mic_none),
-              backgroundColor: state.isListening ? Colors.red : null,
+            floatingActionButton: Semantics(
+              label: state.isListening
+                  ? 'Stop listening'
+                  : 'Start voice dictation',
+              button: true,
+              child: FloatingActionButton(
+                onPressed: () => _toggleListening(state),
+                backgroundColor:
+                    state.isListening ? Colors.red : null,
+                tooltip: state.isListening
+                    ? 'Stop listening'
+                    : 'Start voice dictation',
+                child: Icon(
+                    state.isListening ? Icons.mic : Icons.mic_none),
+              ),
             ),
           );
         }
@@ -258,5 +305,91 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     if (fields.followUpActions.isNotEmpty)
       buffer.writeln('Follow Up: ${fields.followUpActions.join(', ')}');
     return buffer.toString().trim();
+  }
+}
+
+class _EditorStatusBar extends StatelessWidget {
+  final NoteStatus status;
+  final double fontSize;
+  final VoidCallback onDecreaseFont;
+  final VoidCallback onIncreaseFont;
+
+  const _EditorStatusBar({
+    required this.status,
+    required this.fontSize,
+    required this.onDecreaseFont,
+    required this.onIncreaseFont,
+  });
+
+  String get _statusLabel => switch (status) {
+        NoteStatus.draft => 'Draft',
+        NoteStatus.aiSuggested => 'AI Suggested',
+        NoteStatus.finalized => 'Finalized',
+      };
+
+  IconData get _statusIcon => switch (status) {
+        NoteStatus.draft => Icons.edit_outlined,
+        NoteStatus.aiSuggested => Icons.auto_awesome,
+        NoteStatus.finalized => Icons.verified_outlined,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = switch (status) {
+      NoteStatus.draft => scheme.tertiary,
+      NoteStatus.aiSuggested => scheme.primary,
+      NoteStatus.finalized => Colors.green.shade800,
+    };
+
+    return Row(
+      children: [
+        Semantics(
+          label: 'Note status: $_statusLabel',
+          container: true,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(_statusIcon, size: 14, color: color),
+                const SizedBox(width: 4),
+                Text(
+                  _statusLabel,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          tooltip: 'Decrease text size',
+          icon: const Icon(Icons.text_decrease),
+          onPressed: onDecreaseFont,
+          visualDensity: VisualDensity.compact,
+        ),
+        Semantics(
+          label: 'Text size ${fontSize.round()} pixels',
+          child: Text(
+            '${fontSize.round()}',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Increase text size',
+          icon: const Icon(Icons.text_increase),
+          onPressed: onIncreaseFont,
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
+    );
   }
 }

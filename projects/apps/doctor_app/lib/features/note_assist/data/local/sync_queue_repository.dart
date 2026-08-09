@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
-import 'package:doctor_app/features/note_assist/data/local/sync_queue_entry.dart';
+import 'package:doctor_app/features/note_assist/data/local/sync_queue_entry.dart'
+    hide SyncQueueEntries;
 import 'local_database.dart';
 
 class SyncQueueRepository {
@@ -14,7 +17,7 @@ class SyncQueueRepository {
         noteId: entry.noteId,
         consultationId: entry.consultationId,
         operation: entry.operation,
-        payloadJson: entry.note.toJson(),
+        payloadJson: jsonEncode(entry.note.toJson()),
         retryCount: Value(entry.retryCount),
         maxRetries: Value(entry.maxRetries),
         createdAt: entry.createdAt,
@@ -35,7 +38,6 @@ class SyncQueueRepository {
   }
 
   Future<List<SyncQueueEntry>> getPendingEntries() async {
-    final now = DateTime.now().toUtc();
     final rows = await (_db.select(_db.syncQueueEntries)
           ..where((t) => t.isDeadLetter.equals(false) &
               (t.nextRetryAt.isNull() | t.nextRetryAt.isSmallerThanValue(DateTime.now().toUtc())))
@@ -58,7 +60,7 @@ class SyncQueueRepository {
         noteId: Value(entry.noteId),
         consultationId: Value(entry.consultationId),
         operation: Value(entry.operation),
-        payloadJson: Value(entry.note.toJson()),
+        payloadJson: Value(jsonEncode(entry.note.toJson())),
         retryCount: Value(entry.retryCount),
         maxRetries: Value(entry.maxRetries),
         createdAt: Value(entry.createdAt),
@@ -87,13 +89,15 @@ class SyncQueueRepository {
   }
 
   Future<int> getPendingCount() async {
-    final now = DateTime.now().toUtc();
-    final count = await (_db.selectOnly(_db.syncQueueEntries)
-          ..where((t) => t.isDeadLetter.equals(false) &
-              (t.nextRetryAt.isNull() | t.nextRetryAt.isSmallerThanValue(DateTime.now().toUtc())))
-          ..addColumns([db.syncQueueEntries.id.count()]))
+    final tbl = _db.syncQueueEntries;
+    final count = await (_db.selectOnly(tbl)
+          ..where(tbl.isDeadLetter.equals(false) &
+              (tbl.nextRetryAt.isNull() |
+                  tbl.nextRetryAt
+                      .isSmallerThanValue(DateTime.now().toUtc())))
+          ..addColumns([tbl.id.count()]))
         .getSingle();
-    return count.read(db.syncQueueEntries.id.count()) ?? 0;
+    return count.read(tbl.id.count()) ?? 0;
   }
 
   SyncQueueEntry _toEntry(SyncQueueEntryEntity row) {
@@ -102,7 +106,7 @@ class SyncQueueRepository {
       'noteId': row.noteId,
       'consultationId': row.consultationId,
       'operation': row.operation,
-      'note': row.payloadJson,
+      'note': jsonDecode(row.payloadJson),
       'retryCount': row.retryCount,
       'maxRetries': row.maxRetries,
       'createdAt': row.createdAt.toIso8601String(),

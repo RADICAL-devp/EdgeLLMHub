@@ -211,6 +211,10 @@ class SyncQueueService {
     return _syncQueueRepository.getPendingCount();
   }
 
+  /// Immediately attempt to flush all pending entries (used by the
+  /// settings UI "Sync now" action).
+  Future<void> syncNow() => _processPendingQueue();
+
   void dispose() {
     _disposed = true;
     _connectivitySubscription?.cancel();

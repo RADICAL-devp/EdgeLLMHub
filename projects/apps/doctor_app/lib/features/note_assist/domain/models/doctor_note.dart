@@ -108,6 +108,41 @@ class DoctorNote extends Equatable {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+        'noteId': noteId,
+        'consultationId': consultationId,
+        'patientId': patientId,
+        'doctorId': doctorId,
+        'rawText': rawText,
+        'status': status.name,
+        'extractedFields': extractedFields?.toJson(),
+        'patientRecap': patientRecap,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  factory DoctorNote.fromJson(Map<String, dynamic> json) {
+    return DoctorNote(
+      noteId: json['noteId'] as String,
+      consultationId: json['consultationId'] as String,
+      patientId: json['patientId'] as String,
+      doctorId: json['doctorId'] as String,
+      rawText: json['rawText'] as String? ?? '',
+      status: NoteStatus.values.firstWhere(
+        (s) => s.name == json['status'],
+        orElse: () => NoteStatus.draft,
+      ),
+      extractedFields: json['extractedFields'] != null
+          ? ExtractedFields.fromJson(
+              json['extractedFields'] as Map<String, dynamic>,
+            )
+          : null,
+      patientRecap: json['patientRecap'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+    );
+  }
+
   @override
   List<Object?> get props => [
         noteId,

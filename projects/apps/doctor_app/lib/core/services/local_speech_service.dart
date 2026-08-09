@@ -1,3 +1,4 @@
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 import 'speech_service.dart';
@@ -13,7 +14,7 @@ import 'speech_service.dart';
 class LocalSpeechService implements SpeechService {
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isInitialized = false;
-  stt.SpeechRecognitionError? _lastError;
+  SpeechRecognitionError? _lastError;
   
   // VAD configuration
   Duration _silenceTimeout = const Duration(seconds: 3);
@@ -163,7 +164,7 @@ class LocalSpeechService implements SpeechService {
   bool get isListening => _speech.isListening;
 
   /// Get last error if any
-  stt.SpeechRecognitionError? get lastError => _lastError;
+  SpeechRecognitionError? get lastError => _lastError;
 
   /// Check if STT is available on this device
   static Future<bool> isAvailable() async {

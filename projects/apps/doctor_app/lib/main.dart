@@ -42,7 +42,9 @@ import 'features/note_assist/domain/services/note_assist_service.dart';
 import 'features/note_assist/presentation/cubit/note_editor_cubit.dart';
 import 'features/note_assist/presentation/cubit/ai_assist_cubit.dart';
 import 'features/note_assist/presentation/pages/consultation_detail_page.dart';
+import 'features/note_assist/presentation/pages/consultation_list_page.dart';
 import 'features/note_assist/presentation/pages/model_manager_page.dart';
+import 'features/note_assist/presentation/pages/settings_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -122,8 +124,11 @@ Future<void> setupDependencies() async {
   getIt.registerLazySingleton<NoteSyncRepository>(() => NoteSyncRepository(
       getIt<NoteLocalRepository>(), getIt<NoteRemoteDatasource>()));
 
-  final syncQueue = SyncQueueService(getIt<NoteSyncRepository>());
-  syncQueue.startListening();
+  final syncQueue = SyncQueueService(
+    syncRepository: getIt<NoteSyncRepository>(),
+    database: db,
+  );
+  await syncQueue.initialize();
   getIt.registerSingleton<SyncQueueService>(syncQueue);
 
   getIt.registerLazySingleton<TranscriptRepository>(
@@ -187,8 +192,16 @@ Future<void> setupDependencies() async {
 // ═══════════════════════════════════════════════════════════════════════════
 
 final GoRouter _router = GoRouter(
-  initialLocation: '/model_manager',
+  initialLocation: '/consultations',
   routes: [
+    GoRoute(
+      path: '/consultations',
+      builder: (context, state) => const ConsultationListPage(),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsPage(),
+    ),
     GoRoute(
       path: '/model_manager',
       builder: (context, state) => const ModelManagerPage(),
