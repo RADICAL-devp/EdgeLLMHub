@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dart_frog/dart_frog.dart';
 import 'package:clinical_intelligence_dart/core/auth/jwt_service.dart';
 import 'package:clinical_intelligence_dart/core/auth/auth_context.dart';
@@ -23,7 +25,7 @@ Middleware authMiddleware(JwtService jwtService) {
       }
 
       try {
-        final claims = jwtService.verify(token);
+        final claims = await jwtService.verify(token);
         if (claims.isExpired) {
           return Response(
             statusCode: HttpStatus.unauthorized,
@@ -31,7 +33,7 @@ Middleware authMiddleware(JwtService jwtService) {
           );
         }
         final authContext = AuthContext.fromClaims(claims);
-        return handler(context.provide<AuthContext>(authContext));
+        return handler(context.provide<AuthContext>(() => authContext));
       } on JwtException catch (e) {
         return Response(
           statusCode: HttpStatus.unauthorized,

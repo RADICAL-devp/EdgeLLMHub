@@ -1,13 +1,13 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:pointycastle/pointycastle.dart';
-import 'package:pointycastle/aead/aead.dart';
-import 'package:pointycastle/aead/chacha20_poly1305.dart';
-import 'package:pointycastle/key_derivators/api.dart';
 import 'package:pointycastle/key_derivators/pbkdf2.dart';
 import 'package:pointycastle/digests/sha256.dart';
 import 'package:pointycastle/macs/hmac.dart';
-import 'package:pointycastle/random/secure_random.dart';
+import 'package:pointycastle/macs/poly1305.dart';
+import 'package:pointycastle/stream/chacha20poly1305.dart';
+import 'package:pointycastle/stream/chacha7539.dart';
 
 /// AES-GCM-256 encryption service for data at rest.
 ///
@@ -17,14 +17,25 @@ class AesGcmService {
   AesGcmService({
     required String masterKeyB64,
     this.keyDerivationIterations = 100000,
-  }) : _masterKey = base64Url.decode(masterKeyB64) {
-    if (_masterKey.length != 32) {
-      throw ArgumentError('Master key must be 256 bits (32 bytes) base64url encoded');
-    }
-  }
+  }) : _masterKey = _decodeMasterKey(masterKeyB64);
 
   final Uint8List _masterKey;
   final int keyDerivationIterations;
+
+  static Uint8List _decodeMasterKey(String masterKeyB64) {
+    final Uint8List bytes;
+    try {
+      bytes = base64Url.decode(masterKeyB64);
+    } catch (_) {
+      throw ArgumentError(
+          'Master key must be 256 bits (32 bytes) base64url encoded');
+    }
+    if (bytes.length != 32) {
+      throw ArgumentError(
+          'Master key must be 256 bits (32 bytes) base64url encoded');
+    }
+    return bytes;
+  }
 
   /// Derive a field-specific DEK from master key using PBKDF2.
   Uint8List deriveDek(String fieldName, {Uint8List? salt}) {
@@ -51,21 +62,21 @@ class AesGcmService {
 
     final dek = deriveDek(fieldName);
     final nonce = _generateNonce();
-    final aead = _createAead(dek);
-    
-    final plaintextBytes = utf8.encode(plaintext);
     final aad = utf8.encode('clinical_intel'); // Additional authenticated data
-    
-    final ciphertext = aead.process(
-      AeadParameters(nonce, 128, aad),
-      plaintextBytes,
+
+    final ciphertext = _processAead(
+      key: dek,
+      nonce: nonce,
+      aad: aad,
+      data: Uint8List.fromList(utf8.encode(plaintext)),
+      forEncryption: true,
     );
-    
+
     // Combine: nonce (12) || ciphertext || tag (16)
     final result = Uint8List(nonce.length + ciphertext.length);
     result.setRange(0, nonce.length, nonce);
     result.setRange(nonce.length, result.length, ciphertext);
-    
+
     return base64Url.encode(result);
   }
 
@@ -76,37 +87,57 @@ class AesGcmService {
     try {
       final dek = deriveDek(fieldName);
       final combined = base64Url.decode(ciphertextB64);
-      
+
       if (combined.length < 12 + 16) {
         throw ArgumentError('Invalid ciphertext: too short');
       }
-      
+
       final nonce = combined.sublist(0, 12);
       final ciphertextWithTag = combined.sublist(12);
-      
-      final aead = _createAead(dek);
       final aad = utf8.encode('clinical_intel');
-      
-      final plaintextBytes = aead.process(
-        AeadParameters(Uint8List.fromList(nonce), 128, aad),
-        ciphertextWithTag,
+
+      final plaintextBytes = _processAead(
+        key: dek,
+        nonce: Uint8List.fromList(nonce),
+        aad: aad,
+        data: Uint8List.fromList(ciphertextWithTag),
+        forEncryption: false,
       );
-      
+
       return utf8.decode(plaintextBytes);
     } catch (e) {
       throw ArgumentError('Decryption failed: $e');
     }
   }
 
-  AeadAlgorithm _createAead(Uint8List key) {
-    return ChaCha20Poly1305()
-      ..init(true, KeyParameter(key));
+  static Uint8List _processAead({
+    required Uint8List key,
+    required Uint8List nonce,
+    required List<int> aad,
+    required Uint8List data,
+    required bool forEncryption,
+  }) {
+    final aead = ChaCha20Poly1305(ChaCha7539Engine(), Poly1305());
+    aead.init(
+      forEncryption,
+      AEADParameters(
+        KeyParameter(key),
+        128,
+        nonce,
+        Uint8List.fromList(aad),
+      ),
+    );
+    final out = Uint8List(aead.getOutputSize(data.length));
+    final written = aead.processBytes(data, 0, data.length, out, 0);
+    final finalized = written + aead.doFinal(out, written);
+    return Uint8List.sublistView(out, 0, finalized);
   }
 
   Uint8List _generateNonce() {
-    final random = SecureRandom('Fortuna')
-      ..seed(KeyParameter(_masterKey.sublist(0, 16)));
-    return random.nextBytes(12); // 96-bit nonce for GCM
+    final random = Random.secure();
+    return Uint8List.fromList(
+      List<int>.generate(12, (_) => random.nextInt(256)),
+    ); // 96-bit nonce
   }
 }
 

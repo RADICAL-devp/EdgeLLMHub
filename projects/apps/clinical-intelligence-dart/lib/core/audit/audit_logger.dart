@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:drift/drift.dart';
 import 'package:clinical_intelligence_dart/core/audit/audit_event.dart';
 import 'package:clinical_intelligence_dart/core/audit/phi_redactor.dart';
+import 'package:clinical_intelligence_dart/core/auth/auth_context.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/clinical_database.dart';
 
 /// Async buffered audit logger with Drift persistence.
@@ -35,7 +38,7 @@ class AuditLogger {
     required AuthContext auth,
     required String action,
     required String resource,
-    required String resourceId,
+    String? resourceId,
     required String outcome,
     Map<String, dynamic>? metadata,
   }) {
@@ -48,7 +51,7 @@ class AuditLogger {
       resource: resource,
       resourceId: resourceId,
       outcome: outcome,
-      metadataJson: metadata != null ? _redactor.redactJson(metadata) as String? : null,
+      metadataJson: metadata != null ? jsonEncode(_redactor.redactJson(metadata)) : null,
       correlationId: correlationId,
     );
     log(event);
@@ -102,27 +105,4 @@ class AuditLogger {
   String _generateId() => DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
   final _redactor = PhiRedactor();
-}
-
-/// Auth context for audit logging (matches auth_middleware.dart).
-class AuthContext {
-  final String doctorId;
-  final String clinicId;
-  final List<String> roles;
-  final List<String> scopes;
-  final DateTime expiresAt;
-  final DateTime issuedAt;
-
-  AuthContext({
-    required this.doctorId,
-    required this.clinicId,
-    required this.roles,
-    required this.scopes,
-    required this.expiresAt,
-    required this.issuedAt,
-  });
-
-  bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt);
-  bool hasScope(String scope) => scopes.contains(scope);
-  bool hasAllScopes(List<String> required) => required.every((s) => scopes.contains(s));
 }

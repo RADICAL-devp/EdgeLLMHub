@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:jose/jose.dart';
+import 'package:pointycastle/digests/sha256.dart';
 
 /// RS256 JWT sign/verify with JWKS caching.
 class JwtService {
@@ -26,18 +28,16 @@ class JwtService {
     final now = DateTime.now().toUtc();
     final exp = now.add(expiresIn);
 
-    final payload = JsonWebToken.unregistered({
-      ...claims,
-      'iat': now.millisecondsSinceEpoch ~/ 1000,
-      'exp': exp.millisecondsSinceEpoch ~/ 1000,
-    });
-
     final builder = JsonWebSignatureBuilder()
-      ..jsonContent = payload
+      ..jsonContent = {
+        ...claims,
+        'iat': now.millisecondsSinceEpoch ~/ 1000,
+        'exp': exp.millisecondsSinceEpoch ~/ 1000,
+      }
+      ..setProtectedHeader('typ', 'JWT')
       ..addRecipient(
         JsonWebKey.fromPem(_privateKey),
         algorithm: 'RS256',
-        protectedHeader: {'alg': 'RS256', 'typ': 'JWT'},
       );
 
     final jws = builder.build();
@@ -45,18 +45,18 @@ class JwtService {
   }
 
   /// Verify a JWT and return the claims.
-  JwtClaims verify(String token) {
+  Future<JwtClaims> verify(String token) async {
     try {
-      final jws = JsonWebSignature.fromCompactSerialization(token);
-      final verified = jws.verify(
-        JsonWebKey.fromPem(_publicKey),
-        algorithms: ['RS256'],
+      final store = JsonWebKeyStore()..addKey(JsonWebKey.fromPem(_publicKey));
+      final jwt = await JsonWebToken.decodeAndVerify(
+        token,
+        store,
+        allowedArguments: ['RS256'],
       );
-      if (!verified) {
+      if (jwt.isVerified != true) {
         throw JwtException('Signature verification failed');
       }
-      final payload = jws.payload as Map<String, dynamic>;
-      return JwtClaims.fromJson(payload);
+      return JwtClaims.fromJson(jwt.claims.toJson());
     } catch (e) {
       if (e is JwtException) rethrow;
       throw JwtException('Invalid token: $e');
@@ -79,9 +79,9 @@ class JwtService {
           'kty': 'RSA',
           'use': 'sig',
           'alg': 'RS256',
-          'kid': jwk.thumbprint,
-          'n': base64UrlEncode(jwk.n!),
-          'e': base64UrlEncode(jwk.e!),
+          'kid': _computeThumbprint(jwk),
+          'n': jwk['n'],
+          'e': jwk['e'],
         }
       ]
     };
@@ -91,8 +91,20 @@ class JwtService {
     return jwks;
   }
 
-  String base64UrlEncode(List<int> bytes) {
-    return base64Url.encode(bytes).replaceAll('=', '');
+  /// RFC 7638 SHA-256 thumbprint of the public key.
+  String _computeThumbprint(JsonWebKey jwk) {
+    final canonical = jsonEncode({
+      'e': jwk['e'],
+      'kty': 'RSA',
+      'n': jwk['n'],
+    });
+    final digest = _sha256(utf8.encode(canonical));
+    return base64Url.encode(digest).replaceAll('=', '');
+  }
+
+  static List<int> _sha256(List<int> input) {
+    final digest = SHA256Digest();
+    return digest.process(Uint8List.fromList(input));
   }
 }
 
@@ -104,7 +116,7 @@ class JwtClaims {
 
   String get subject => _claims['sub'] as String;
   String get clinicId => _claims['org'] as String? ?? '';
-  List<String> get roles => List<String>.from(_claims['roles'] ?? []);
+  List<String> get roles => List<String>.from(_claims['roles'] as List? ?? []);
   List<String> get scopes =>
       (_claims['scope'] as String? ?? '').split(' ').where((s) => s.isNotEmpty).toList();
   DateTime get expiresAt => DateTime.fromMillisecondsSinceEpoch((_claims['exp'] as int) * 1000, isUtc: true);

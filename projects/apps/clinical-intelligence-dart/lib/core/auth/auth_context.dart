@@ -1,3 +1,5 @@
+import 'package:clinical_intelligence_dart/core/auth/jwt_service.dart';
+
 /// Authentication context extracted from validated JWT.
 class AuthContext {
   AuthContext({

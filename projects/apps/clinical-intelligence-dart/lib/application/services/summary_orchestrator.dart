@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:uuid/uuid.dart';
 import 'package:shared_models/shared_models.dart';
 
 import '../../api/dto/transcript_summary_request.dart';
 import '../../api/dto/transcript_summary_response.dart';
 import '../../application/ports/vector_store_port.dart';
+import '../ports/llm_port.dart';
 import '../ports/transcript_repository.dart';
 import '../ports/transcript_summary_repository.dart';
 import 'doctor_note_generation_service.dart';

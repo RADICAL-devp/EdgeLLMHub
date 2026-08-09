@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dart_frog/dart_frog.dart';
 import 'package:clinical_intelligence_dart/core/auth/auth_context.dart';
 
@@ -10,7 +12,7 @@ RouteHandler requireAuth(
   List<String> roles = const [],
 }) {
   return (context) async {
-    final auth = context.read<AuthContext?>();
+    final auth = _readAuth(context);
     if (auth == null) {
       return Response(
         statusCode: HttpStatus.unauthorized,
@@ -37,4 +39,16 @@ RouteHandler requireAuth(
     }
     return handler(context);
   };
+}
+
+/// Reads the [AuthContext] provided by [authMiddleware].
+///
+/// `context.read<AuthContext?>()` would look up a provider registered under
+/// the `AuthContext?` key, so we use the non-nullable type instead.
+AuthContext? _readAuth(RequestContext context) {
+  try {
+    return context.read<AuthContext>();
+  } on StateError {
+    return null;
+  }
 }

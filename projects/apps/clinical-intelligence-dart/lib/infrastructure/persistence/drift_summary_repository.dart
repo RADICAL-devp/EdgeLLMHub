@@ -65,12 +65,19 @@ class DriftSummaryRepository implements TranscriptSummaryRepository {
   }
 
   TranscriptSummaryBundle _toBundle(SummaryBundle row) {
+    final structured =
+        _decryptJson('structuredMedicalSummary', row.structuredMedicalSummary);
+    final executive =
+        _decryptJson('executiveSummary', row.executiveSummary);
+    final doctorNote = _decryptJson('doctorNote', row.doctorNote);
     return TranscriptSummaryBundle(
       consultationId: row.consultationId,
       transcriptId: row.transcriptId,
-      structuredMedicalSummary: _decryptJson('structuredMedicalSummary', row.structuredMedicalSummary),
-      executiveSummary: _decryptJson('executiveSummary', row.executiveSummary),
-      doctorNote: _decryptJson('doctorNote', row.doctorNote),
+      structuredMedicalSummary:
+          structured == null ? null : StructuredSummary.fromJson(structured),
+      executiveSummary:
+          executive == null ? null : ExecutiveSummary.fromJson(executive),
+      doctorNote: doctorNote == null ? null : DoctorNote.fromJson(doctorNote),
       generatedAt: row.generatedAt.toIso8601String(),
       consultationMode: ConsultationMode.tryParse(row.consultationMode) ?? ConsultationMode.inPerson,
     );

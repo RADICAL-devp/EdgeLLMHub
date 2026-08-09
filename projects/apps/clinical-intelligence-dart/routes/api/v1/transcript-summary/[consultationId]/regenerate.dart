@@ -12,11 +12,11 @@ import 'package:dart_frog/dart_frog.dart';
 Future<Response> onRequest(
   RequestContext context,
   String consultationId,
-) async {
-  return requireAuth(_handleRegenerate, scopes: ['clinical:write'])(
-    context,
-    consultationId,
-  );
+) {
+  return requireAuth(
+    (ctx) => _handleRegenerate(ctx, consultationId),
+    scopes: ['clinical:write'],
+  )(context);
 }
 
 Future<Response> _handleRegenerate(

@@ -29,7 +29,7 @@ mixin EncryptedRepositoryMixin {
       if (config.encrypt && result.containsKey(fieldName)) {
         final value = result[fieldName];
         if (value is String) {
-          result[fieldName] = _crypto.encrypt(value, config.fieldName);
+          result[fieldName] = crypto.encrypt(value, config.fieldName);
         }
       }
     }

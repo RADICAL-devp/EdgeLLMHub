@@ -1,43 +1,33 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
-import 'package:drift/drift.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
-import 'package:sqlite3/open.dart';
 import 'package:clinical_intelligence_dart/application/ports/vector_store_port.dart';
-import 'package:clinical_intelligence_dart/core/crypto/aes_gcm_service.dart';
-import 'clinical_database.dart';
 
 /// SQLite-vec vector store implementation for context-enriched summaries.
 ///
 /// Uses the sqlite-vec extension for HNSW vector indexing.
 /// Embedding dimension: 960 (SmolLM-360M hidden size).
 class SqliteVecStore implements VectorStorePort {
-  SqliteVecStore(this._database, {
-    this.embeddingDimension = 960,
-  });
+  SqliteVecStore([String? dbPath])
+      : _dbPath = dbPath ?? p.join(Directory.current.path, 'vec_store.sqlite');
 
-  final ClinicalDatabase _database;
-  final int embeddingDimension;
+  final String _dbPath;
+  final int embeddingDimension = 960;
 
-  late final CommonDatabase _sqlite3;
+  late final Database _sqlite3;
   bool _initialized = false;
 
   /// Initialize the sqlite-vec extension and create virtual table.
   Future<void> initialize() async {
     if (_initialized) return;
 
-    // Get the underlying sqlite3 database
-    final db = _database.executor.database;
-    if (db is! SqliteDatabase) {
-      throw StateError('Vector store requires sqlite3 database');
-    }
-    _sqlite3 = db;
+    _sqlite3 = sqlite3.open(_dbPath);
 
     // Load sqlite-vec extension
     try {
-      _sqlite3.enableLoadExtension(true);
-      _sqlite3.loadExtension('vec0'); // or 'vec' depending on build
-      _sqlite3.enableLoadExtension(false);
+      _sqlite3.execute("SELECT load_extension('vec0')");
     } catch (e) {
       print('[SqliteVecStore] Warning: Could not load vec extension: $e');
       print('[SqliteVecStore] Vector search will use fallback (brute force)');
@@ -130,8 +120,8 @@ class SqliteVecStore implements VectorStorePort {
     if (filter != null && filter.isNotEmpty) {
       final conditions = <String>[];
       for (final entry in filter.entries) {
-        conditions.push('json_extract(metadata, "\$.${entry.key}") = ?');
-        params.add(entry.value);
+        conditions.add('json_extract(metadata, "\$.${entry.key}") = ?');
+        params.add(entry.value as Object);
       }
       whereClause = 'WHERE ' + conditions.join(' AND ');
     }

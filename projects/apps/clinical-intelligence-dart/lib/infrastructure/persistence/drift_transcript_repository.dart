@@ -26,7 +26,7 @@ class DriftTranscriptRepository implements TranscriptRepository {
         patientId: Value(_encryptField('patientId', transcript.patientId)),
         doctorId: Value(_encryptField('doctorId', transcript.doctorId)),
         sleepLabId: Value(_encryptField('sleepLabId', transcript.sleepLabId)),
-        transcriptText: _encryptField('transcriptText', transcript.transcriptText),
+        transcriptText: _encryptField('transcriptText', transcript.transcriptText) ?? '',
         consultationMode: transcript.consultationMode?.toJson() ?? ConsultationMode.inPerson.toJson(),
         createdAt: transcript.createdAt ?? DateTime.now().toUtc(),
       ),
@@ -87,7 +87,7 @@ class DriftTranscriptRepository implements TranscriptRepository {
       patientId: _decryptField('patientId', row.patientId),
       doctorId: _decryptField('doctorId', row.doctorId),
       sleepLabId: _decryptField('sleepLabId', row.sleepLabId),
-      transcriptText: _decryptField('transcriptText', row.transcriptText),
+      transcriptText: _decryptField('transcriptText', row.transcriptText) ?? '',
       consultationMode: ConsultationMode.tryParse(row.consultationMode) ?? ConsultationMode.inPerson,
       createdAt: row.createdAt,
     );
