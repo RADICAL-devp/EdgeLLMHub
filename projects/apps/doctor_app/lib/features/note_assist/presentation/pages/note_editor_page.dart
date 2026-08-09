@@ -101,7 +101,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       } else if (note.rawText.isNotEmpty) {
         _quillController.replaceText(
           0,
-          _quillController.document.length,
+          _lastValidIndex,
           note.rawText,
           TextSelection.collapsed(offset: note.rawText.length),
         );
@@ -122,6 +122,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
+  /// Last valid edit index — Quill reserves the trailing newline, so edits
+  /// must never target [Document.length] itself (container invariant).
+  int get _lastValidIndex =>
+      (_quillController.document.length - 1).clamp(0, 1 << 32);
+
   /// Insert [text] at the end of the document (dictation / AI suggestion).
   void _insertAtEnd(String text, {String separator = ' '}) {
     final doc = _quillController.document;
@@ -132,9 +137,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         separator.isNotEmpty) {
       text = '$separator$text';
     }
-    final newOffset = doc.length + text.length;
+    final insertAt = _lastValidIndex;
+    final newOffset = insertAt + text.length;
     _quillController.replaceText(
-      doc.length,
+      insertAt,
       0,
       text,
       TextSelection.collapsed(offset: newOffset),
@@ -279,9 +285,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                 expands: true,
                                 padding: const EdgeInsets.all(12),
                                 customStyles: DefaultStyles(
-                                  paragraph: TextStyle(
-                                    fontSize: _fontSize,
-                                    height: 1.4,
+                                  paragraph: DefaultTextBlockStyle(
+                                    Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium!
+                                        .copyWith(
+                                          fontSize: _fontSize,
+                                          height: 1.4,
+                                        ),
+                                    const HorizontalSpacing(0, 0),
+                                    const VerticalSpacing(8, 0),
+                                    const VerticalSpacing(0, 0),
+                                    null,
                                   ),
                                 ),
                               ),
