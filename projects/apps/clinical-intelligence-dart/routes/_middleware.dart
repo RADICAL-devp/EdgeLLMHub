@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:clinical_intelligence_dart/application/ports/doctor_note_repository.dart';
 import 'package:clinical_intelligence_dart/application/ports/llm_port.dart';
 import 'package:clinical_intelligence_dart/application/ports/transcript_repository.dart';
 import 'package:clinical_intelligence_dart/application/ports/transcript_summary_repository.dart';
@@ -21,6 +22,7 @@ import 'package:clinical_intelligence_dart/core/crypto/aes_gcm_service.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/ollama_llm_adapter.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/stub_llm_adapter.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/clinical_database.dart';
+import 'package:clinical_intelligence_dart/infrastructure/persistence/drift_doctor_note_repository.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/drift_summary_repository.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/drift_transcript_repository.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/sqlite_vec_store.dart';
@@ -45,6 +47,8 @@ Handler middleware(Handler handler) {
   // --- Repositories (with encryption) ---
   final transcriptRepository = DriftTranscriptRepository(database, aesGcmService);
   final summaryRepository = DriftSummaryRepository(database, aesGcmService);
+  final doctorNoteRepository =
+      DriftDoctorNoteRepository(database, aesGcmService);
 
   // --- Auth ---
   final jwtService = JwtService(
@@ -102,6 +106,7 @@ Handler middleware(Handler handler) {
   return handler
       .use(provider<JwtService>((_) => jwtService))
       .use(provider<AuditLogger>((_) => auditLogger))
+      .use(provider<LlmPort>((_) => llmPort))
       .use(provider<ClinicalProcessingOrchestrator>(
         (_) => clinicalProcessingOrchestrator,
       ))
@@ -110,7 +115,11 @@ Handler middleware(Handler handler) {
       .use(provider<TranscriptSummaryRepository>(
         (_) => summaryRepository,
       ))
-      .use(authMiddleware(jwtService))
+      .use(provider<DoctorNoteRepository>((_) => doctorNoteRepository))
+      .use(authMiddleware(
+        jwtService,
+        exemptPaths: ['api/v1/auth/token'],
+      ))
       .use(auditMiddleware(auditLogger))
       .use(_corsMiddleware());
 }

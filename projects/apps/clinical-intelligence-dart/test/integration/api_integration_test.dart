@@ -337,4 +337,275 @@ void main() {
       expect(status, 400);
     });
   });
+
+  group('POST /api/v1/auth/token', () {
+    test('mints a token without auth (200)', () async {
+      final (status, _, body) = await _request('POST', '/api/v1/auth/token');
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['token'], isA<String>());
+      expect(json['tokenType'], 'Bearer');
+      expect(json['scopes'], containsAll(['clinical:read', 'clinical:write']));
+      expect(DateTime.tryParse(json['expiresAt'] as String), isNotNull);
+    });
+
+    test('minted token passes auth on a real endpoint', () async {
+      final (_, _, body) = await _request('POST', '/api/v1/auth/token');
+      final token = (jsonDecode(body) as Map<String, dynamic>)['token'] as String;
+      final (status, _, responseBody) = await _request(
+        'POST',
+        '/api/v1/clinical-processing/process',
+        token: token,
+        body: {
+          'inputText': 'Patient stable.',
+          'processingMode': 'VOCAB_ASSIST',
+        },
+      );
+      expect(status, 200);
+      expect(responseBody, contains('processedText'));
+    });
+
+    test('rejects GET (405)', () async {
+      final (status, _, _) = await _request('GET', '/api/v1/auth/token');
+      expect(status, 405);
+    });
+  });
+
+  group('POST /api/v1/transcript-summary/structured', () {
+    test('generates a 7-field structured summary (200)', () async {
+      final (status, _, body) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/structured',
+        token: keys.signToken(),
+        body: {
+          'transcriptText': '56 year old male with SOB and DOE for 2 weeks.',
+        },
+      );
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['complaint'], isA<String>());
+      expect(json['pastHistory'], isA<String>());
+      expect(json['vitals'], isA<String>());
+      expect(json['physicalExamination'], isA<String>());
+      expect(json['investigationOrdered'], isA<String>());
+      expect(json['diagnosis'], isA<String>());
+      expect(json['advice'], isA<String>());
+    });
+
+    test('rejects empty transcriptText (400)', () async {
+      final (status, _, _) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/structured',
+        token: keys.signToken(),
+        body: {'transcriptText': '   '},
+      );
+      expect(status, 400);
+    });
+
+    test('rejects read-only scope (403)', () async {
+      final (status, _, _) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/structured',
+        token: keys.signToken(scopes: ['clinical:read']),
+        body: {'transcriptText': 'Patient stable.'},
+      );
+      expect(status, 403);
+    });
+
+    test('rejects missing body (400)', () async {
+      final (status, _, _) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/structured',
+        token: keys.signToken(),
+      );
+      expect(status, 400);
+    });
+  });
+
+  group('POST /api/v1/transcript-summary/context-enriched', () {
+    test('generates a structured summary with past context (200)', () async {
+      final (status, _, body) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/context-enriched',
+        token: keys.signToken(),
+        body: {
+          'transcriptText': 'Patient reports headaches.',
+          'pastContext': 'Known migraine history.',
+        },
+      );
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['complaint'], isNotEmpty);
+    });
+
+    test('rejects missing pastContext (400)', () async {
+      final (status, _, _) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/context-enriched',
+        token: keys.signToken(),
+        body: {'transcriptText': 'Patient reports headaches.'},
+      );
+      expect(status, 400);
+    });
+  });
+
+  group('POST /api/v1/transcript-summary/executive', () {
+    test('generates an executive summary (200)', () async {
+      final (status, _, body) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/executive',
+        token: keys.signToken(),
+        body: {'transcriptText': '56 year old male with SOB for 2 weeks.'},
+      );
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['summary'], isA<String>());
+      expect(json['summary'], isNotEmpty);
+    });
+  });
+
+  group('POST /api/v1/transcript-summary/doctor-note', () {
+    test('generates a doctor note (200)', () async {
+      final (status, _, body) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/doctor-note',
+        token: keys.signToken(),
+        body: {'transcriptText': '56 year old male with SOB for 2 weeks.'},
+      );
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['note'], isA<String>());
+      expect(json['note'], isNotEmpty);
+    });
+  });
+
+  group('POST /api/v1/notes/sync + GET /api/v1/notes/consultation/{id}', () {
+    test('roundtrips a synced note including rich text and fields', () async {
+      final payload = {
+        'noteId': 'itest-note-1',
+        'consultationId': 'itest-note-consult-1',
+        'patientId': 'p-1',
+        'doctorId': 'dr-smith',
+        'rawText': 'Patient stable. HbA1c 7.2.',
+        'richTextDelta': '{"ops":[{"insert":"Patient stable"}]}',
+        'status': 'finalized',
+        'extractedFields': {
+          'symptoms': ['SOB'],
+          'duration': '2 weeks',
+          'medications': ['metformin'],
+          'allergies': [],
+          'testsRecommended': ['HbA1c'],
+          'followUpActions': ['review in 3 months'],
+          'provisionalDiagnosis': 'DM2',
+        },
+        'patientRecap': 'Known DM2.',
+        'createdAt': '2026-08-01T10:00:00.000Z',
+        'updatedAt': '2026-08-01T10:00:00.000Z',
+      };
+
+      final (syncStatus, _, syncBody) = await _request(
+        'POST',
+        '/api/v1/notes/sync',
+        token: keys.signToken(),
+        body: payload,
+      );
+      expect(syncStatus, 200);
+      expect(syncBody, contains('synced'));
+
+      final (status, _, body) = await _request(
+        'GET',
+        '/api/v1/notes/consultation/itest-note-consult-1',
+        token: keys.signToken(),
+      );
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['noteId'], 'itest-note-1');
+      expect(json['rawText'], 'Patient stable. HbA1c 7.2.');
+      expect(json['richTextDelta'], contains('Patient stable'));
+      expect(json['status'], 'finalized');
+      expect(json['patientRecap'], 'Known DM2.');
+      final fields = json['extractedFields'] as Map<String, dynamic>;
+      expect(fields['symptoms'], contains('SOB'));
+      expect(fields['provisionalDiagnosis'], 'DM2');
+    });
+
+    test('upserts by noteId (last-write-wins)', () async {
+      await _request(
+        'POST',
+        '/api/v1/notes/sync',
+        token: keys.signToken(),
+        body: {
+          'noteId': 'itest-note-upd',
+          'consultationId': 'itest-note-consult-upd',
+          'patientId': 'p-1',
+          'doctorId': 'dr-smith',
+          'rawText': 'v1',
+          'status': 'draft',
+          'createdAt': '2026-08-01T10:00:00.000Z',
+          'updatedAt': '2026-08-01T10:00:00.000Z',
+        },
+      );
+      final (status, _, body) = await _request(
+        'POST',
+        '/api/v1/notes/sync',
+        token: keys.signToken(),
+        body: {
+          'noteId': 'itest-note-upd',
+          'consultationId': 'itest-note-consult-upd',
+          'patientId': 'p-1',
+          'doctorId': 'dr-smith',
+          'rawText': 'v2',
+          'status': 'finalized',
+          'createdAt': '2026-08-01T10:00:00.000Z',
+          'updatedAt': '2026-08-02T10:00:00.000Z',
+        },
+      );
+      expect(status, 200);
+
+      final (getStatus, _, getBody) = await _request(
+        'GET',
+        '/api/v1/notes/consultation/itest-note-consult-upd',
+        token: keys.signToken(),
+      );
+      expect(getStatus, 200);
+      final json = jsonDecode(getBody) as Map<String, dynamic>;
+      expect(json['rawText'], 'v2');
+    });
+
+    test('returns 404 for an unknown consultation', () async {
+      final (status, _, _) = await _request(
+        'GET',
+        '/api/v1/notes/consultation/itest-note-missing',
+        token: keys.signToken(),
+      );
+      expect(status, 404);
+    });
+
+    test('rejects a sync payload without noteId (400)', () async {
+      final (status, _, _) = await _request(
+        'POST',
+        '/api/v1/notes/sync',
+        token: keys.signToken(),
+        body: {
+          'consultationId': 'itest-note-bad',
+          'rawText': 'text',
+        },
+      );
+      expect(status, 400);
+    });
+
+    test('rejects read-only scope on sync (403)', () async {
+      final (status, _, _) = await _request(
+        'POST',
+        '/api/v1/notes/sync',
+        token: keys.signToken(scopes: ['clinical:read']),
+        body: {
+          'noteId': 'itest-note-scope',
+          'consultationId': 'itest-note-consult-scope',
+          'rawText': 'text',
+        },
+      );
+      expect(status, 403);
+    });
+  });
 }

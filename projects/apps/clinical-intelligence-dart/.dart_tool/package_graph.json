@@ -142,6 +142,15 @@
       "dependencies": []
     },
     {
+      "name": "pointycastle",
+      "version": "3.9.1",
+      "dependencies": [
+        "collection",
+        "convert",
+        "js"
+      ]
+    },
+    {
       "name": "jose",
       "version": "0.3.5+2",
       "dependencies": [
@@ -706,6 +715,13 @@
       ]
     },
     {
+      "name": "convert",
+      "version": "3.1.2",
+      "dependencies": [
+        "typed_data"
+      ]
+    },
+    {
       "name": "archive",
       "version": "4.0.9",
       "dependencies": [
@@ -738,6 +754,16 @@
       ]
     },
     {
+      "name": "crypto_keys",
+      "version": "0.3.0+1",
+      "dependencies": [
+        "collection",
+        "meta",
+        "pointycastle",
+        "quiver"
+      ]
+    },
+    {
       "name": "equatable",
       "version": "2.1.0",
       "dependencies": [
@@ -754,13 +780,6 @@
       "name": "ffi",
       "version": "2.2.0",
       "dependencies": []
-    },
-    {
-      "name": "convert",
-      "version": "3.1.2",
-      "dependencies": [
-        "typed_data"
-      ]
     },
     {
       "name": "fixnum",
@@ -913,25 +932,6 @@
         "stream_transform",
         "vm_service",
         "watcher"
-      ]
-    },
-    {
-      "name": "crypto_keys",
-      "version": "0.3.0+1",
-      "dependencies": [
-        "collection",
-        "meta",
-        "pointycastle",
-        "quiver"
-      ]
-    },
-    {
-      "name": "pointycastle",
-      "version": "3.9.1",
-      "dependencies": [
-        "collection",
-        "convert",
-        "js"
       ]
     }
   ],
