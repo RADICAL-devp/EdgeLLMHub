@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
@@ -42,7 +44,9 @@ import 'features/note_assist/domain/services/note_assist_service.dart';
 import 'features/note_assist/presentation/cubit/note_editor_cubit.dart';
 import 'features/note_assist/presentation/cubit/ai_assist_cubit.dart';
 import 'features/note_assist/presentation/pages/consultation_detail_page.dart';
+import 'features/note_assist/presentation/pages/consultation_list_page.dart';
 import 'features/note_assist/presentation/pages/model_manager_page.dart';
+import 'features/note_assist/presentation/pages/settings_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -122,8 +126,11 @@ Future<void> setupDependencies() async {
   getIt.registerLazySingleton<NoteSyncRepository>(() => NoteSyncRepository(
       getIt<NoteLocalRepository>(), getIt<NoteRemoteDatasource>()));
 
-  final syncQueue = SyncQueueService(getIt<NoteSyncRepository>());
-  syncQueue.startListening();
+  final syncQueue = SyncQueueService(
+    syncRepository: getIt<NoteSyncRepository>(),
+    database: db,
+  );
+  await syncQueue.initialize();
   getIt.registerSingleton<SyncQueueService>(syncQueue);
 
   getIt.registerLazySingleton<TranscriptRepository>(
@@ -187,8 +194,16 @@ Future<void> setupDependencies() async {
 // ═══════════════════════════════════════════════════════════════════════════
 
 final GoRouter _router = GoRouter(
-  initialLocation: '/model_manager',
+  initialLocation: '/consultations',
   routes: [
+    GoRoute(
+      path: '/consultations',
+      builder: (context, state) => const ConsultationListPage(),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsPage(),
+    ),
     GoRoute(
       path: '/model_manager',
       builder: (context, state) => const ModelManagerPage(),
@@ -315,6 +330,16 @@ class _DoctorAppState extends State<DoctorApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
+      localizationsDelegates: const [
+        FlutterQuillLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'),
+        Locale('es'),
+      ],
       routerConfig: _router,
     );
   }

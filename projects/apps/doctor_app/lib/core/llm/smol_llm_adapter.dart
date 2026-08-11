@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';

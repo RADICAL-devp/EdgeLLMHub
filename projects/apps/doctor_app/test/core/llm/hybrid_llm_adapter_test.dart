@@ -177,5 +177,79 @@ void main() {
 
       expect(result, '[STUB] note');
     });
+
+    test('generateContextEnrichedSummary uses native when available', () async {
+      when(() => mockNative.generateContextEnrichedSummary(any(), any()))
+          .thenAnswer((_) async => StructuredSummary(
+                complaint: 'native',
+                pastHistory: 'native',
+                vitals: 'native',
+                physicalExamination: 'native',
+                investigationOrdered: 'native',
+                diagnosis: 'native',
+                advice: 'native',
+              ));
+
+      final adapter = createAdapter();
+      final result =
+          await adapter.generateContextEnrichedSummary('text', 'context');
+
+      expect(result.complaint, 'native');
+      verifyNever(() => mockStub.generateContextEnrichedSummary(any(), any()));
+    });
+
+    test('generateContextEnrichedSummary falls back to cloud', () async {
+      when(() => mockNative.generateContextEnrichedSummary(any(), any()))
+          .thenThrow(const LlmInitializationException('fail'));
+      when(() => mockCloud.generateContextEnrichedSummary(any(), any()))
+          .thenAnswer((_) async => StructuredSummary(
+                complaint: 'cloud',
+                pastHistory: 'cloud',
+                vitals: 'cloud',
+                physicalExamination: 'cloud',
+                investigationOrdered: 'cloud',
+                diagnosis: 'cloud',
+                advice: 'cloud',
+              ));
+
+      final adapter = createAdapter(cloudEnabled: true);
+      final result =
+          await adapter.generateContextEnrichedSummary('text', 'context');
+
+      expect(result.complaint, 'cloud');
+    });
+
+    test('generateStructuredSummary falls back to cloud', () async {
+      when(() => mockNative.generateStructuredSummary(any()))
+          .thenThrow(const LlmInitializationException('fail'));
+      when(() => mockCloud.generateStructuredSummary(any()))
+          .thenAnswer((_) async => StructuredSummary(
+                complaint: 'cloud',
+                pastHistory: 'cloud',
+                vitals: 'cloud',
+                physicalExamination: 'cloud',
+                investigationOrdered: 'cloud',
+                diagnosis: 'cloud',
+                advice: 'cloud',
+              ));
+
+      final adapter = createAdapter(cloudEnabled: true);
+      final result = await adapter.generateStructuredSummary('text');
+
+      expect(result.complaint, 'cloud');
+    });
+
+    test('generateExecutiveSummary falls back to stub when cloud fails',
+        () async {
+      when(() => mockNative.generateExecutiveSummary(any()))
+          .thenThrow(const LlmException('native died'));
+      when(() => mockCloud.generateExecutiveSummary(any()))
+          .thenThrow(const NetworkException('cloud died', isTransient: false));
+
+      final adapter = createAdapter(cloudEnabled: true);
+      final result = await adapter.generateExecutiveSummary('text');
+
+      expect(result, '[STUB] summary');
+    });
   });
 }

@@ -85,11 +85,12 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
     });
   }
 
-  void updateText(String text) {
+  void updateText(String text, {String? richTextDelta}) {
     if (state is NoteEditorLoaded) {
       final currentState = state as NoteEditorLoaded;
       final updatedNote = currentState.note.copyWith(
         rawText: text,
+        richTextDelta: richTextDelta,
         updatedAt: DateTime.now(),
       );
       
@@ -144,6 +145,15 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
     if (state is NoteEditorLoaded) {
       final currentState = state as NoteEditorLoaded;
       emit(currentState.copyWith(isListening: isListening));
+    }
+  }
+
+  /// Force an immediate sync retry (used by the sync status indicator).
+  void retrySync() {
+    if (state is NoteEditorLoaded) {
+      final currentState = state as NoteEditorLoaded;
+      emit(currentState.copyWith(error: null));
+      _triggerSync(currentState.note.consultationId);
     }
   }
 

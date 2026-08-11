@@ -6,8 +6,7 @@ import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
-import 'package:doctor_app/core/llm/android_native_llm_adapter.dart'
-    show NativeLlmParsing;
+import 'package:doctor_app/core/llm/native_llm_parsing.dart';
 import 'prompts/clinical_prompts.dart';
 
 /// iOS native LLM adapter using MLC LLM via MethodChannel.

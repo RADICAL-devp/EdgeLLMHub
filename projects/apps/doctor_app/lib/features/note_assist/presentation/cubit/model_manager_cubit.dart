@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:doctor_app/core/config/environment.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -22,11 +25,30 @@ class ModelManagerInitial extends ModelManagerState {}
 
 class ModelManagerDownloading extends ModelManagerState {
   final double progress; // 0.0 to 1.0
+  final int downloadedBytes;
+  final int totalBytes;
+  final double speedBytesPerSec;
+  final bool isVerifying;
+  final String phaseLabel;
 
-  const ModelManagerDownloading(this.progress);
+  const ModelManagerDownloading(
+    this.progress, {
+    this.downloadedBytes = 0,
+    this.totalBytes = 0,
+    this.speedBytesPerSec = 0,
+    this.isVerifying = false,
+    this.phaseLabel = 'Downloading model…',
+  });
 
   @override
-  List<Object?> get props => [progress];
+  List<Object?> get props => [
+        progress,
+        downloadedBytes,
+        totalBytes,
+        speedBytesPerSec,
+        isVerifying,
+        phaseLabel,
+      ];
 }
 
 class ModelManagerReady extends ModelManagerState {
@@ -54,18 +76,57 @@ class ModelManagerError extends ModelManagerState {
 // Cubit
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Model downloader abstraction (real implementation uses Dio)
+// ---------------------------------------------------------------------------
+
+/// Abstraction over the binary download so the cubit stays unit-testable.
+abstract class ModelDownloader {
+  Future<void> download(
+    String url,
+    String savePath, {
+    void Function(int received, int total)? onReceiveProgress,
+  });
+}
+
+/// [ModelDownloader] backed by Dio.
+class DioModelDownloader implements ModelDownloader {
+  final Dio _dio;
+
+  DioModelDownloader({Dio? dio}) : _dio = dio ?? Dio();
+
+  @override
+  Future<void> download(
+    String url,
+    String savePath, {
+    void Function(int received, int total)? onReceiveProgress,
+  }) async {
+    await _dio.download(
+      url,
+      savePath,
+      onReceiveProgress: onReceiveProgress,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cubit
+// ---------------------------------------------------------------------------
+
 class ModelManagerCubit extends Cubit<ModelManagerState> {
   final DeviceCapabilityService _capabilityService;
+  final ModelDownloader _downloader;
   static const _iosChannel = MethodChannel('com.example.clinical/llm');
   static const _androidChannel = MethodChannel('com.example.clinical/llm');
-  static const String _modelFileName = 'smolLM-350M.bin';
 
   /// Timeout for model verification (sample inference).
   static const _verificationTimeout = Duration(seconds: 20);
 
   ModelManagerCubit({
     required DeviceCapabilityService capabilityService,
+    ModelDownloader? downloader,
   })  : _capabilityService = capabilityService,
+        _downloader = downloader ?? DioModelDownloader(),
         super(ModelManagerInitial());
 
   /// Check if the model is available and functional.
@@ -363,41 +424,127 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   }
 
   /// Download the model (Android only — iOS bundles the model).
-  Future<void> downloadModel() async {
-    try {
-      emit(const ModelManagerDownloading(0.0));
+  ///
+  /// When [downloadUrl] is configured, downloads for real with transfer-rate
+  /// tracking and verifies the SHA-256 checksum on completion. Otherwise
+  /// falls back to simulated progress for development. [downloadUrl] and
+  /// [checksumSha256] default to [EnvironmentConfig] values but may be
+  /// overridden (used by tests); [downloadDirectory] overrides the platform
+  /// documents directory.
+  Future<void> downloadModel({
+    String? downloadUrl,
+    String? checksumSha256,
+    Directory? downloadDirectory,
+  }) async {
+    final url = downloadUrl ?? EnvironmentConfig.modelDownloadUrl;
+    final expectedChecksum =
+        checksumSha256 ?? EnvironmentConfig.modelChecksumSha256;
+    final dir = downloadDirectory ?? await getApplicationDocumentsDirectory();
+    final modelFile = File('${dir.path}/${EnvironmentConfig.modelFileName}');
 
-      final dir = await getApplicationDocumentsDirectory();
-      final modelFile = File('${dir.path}/$_modelFileName');
-
-      // TODO: Replace with real model download from GCP bucket
-      // when a signed URL is available.
-      //
-      // await _dio.download(
-      //   modelDownloadUrl,
-      //   modelFile.path,
-      //   onReceiveProgress: (received, total) {
-      //     if (total != -1) {
-      //       emit(ModelManagerDownloading(received / total));
-      //     }
-      //   },
-      // );
-
-      // Simulate download progress for development
-      for (int i = 0; i <= 100; i += 10) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (isClosed) return;
-        emit(ModelManagerDownloading(i / 100.0));
-      }
-
-      // Create placeholder so subsequent checks pass
-      if (!await modelFile.exists()) {
-        await modelFile.writeAsString('placeholder_model_data');
-      }
-
-      emit(ModelManagerReady(modelFile.path, executionMode: 'local'));
-    } catch (e) {
-      emit(ModelManagerError('Failed to download model: $e'));
+    if (url.isEmpty) {
+      await _simulateDownload(modelFile);
+      return;
     }
+
+    try {
+      final stopwatch = Stopwatch()..start();
+      await _downloader.download(
+        url,
+        modelFile.path,
+        onReceiveProgress: (received, total) {
+          if (isClosed) return;
+          final elapsed = stopwatch.elapsedMilliseconds / 1000.0;
+          final speed = elapsed > 0 ? received / elapsed : 0.0;
+          emit(ModelManagerDownloading(
+            total == -1 ? 0.0 : received / total,
+            downloadedBytes: received,
+            totalBytes: total,
+            speedBytesPerSec: speed,
+          ));
+        },
+      );
+
+      await _verifyChecksum(modelFile, expectedChecksum);
+    } on DioException catch (e) {
+      await _cleanupPartialFile(modelFile);
+      emit(ModelManagerError('Download failed: ${e.message}'));
+    } catch (e) {
+      await _cleanupPartialFile(modelFile);
+      emit(ModelManagerError('Download failed: $e'));
+    }
+  }
+
+  /// Verify the downloaded file against the expected SHA-256 checksum.
+  Future<void> _verifyChecksum(File file, String expected) async {
+    if (expected.isEmpty) {
+      developer.log(
+        'No expected checksum configured — skipping verification.',
+        name: 'ModelManagerCubit',
+      );
+      emit(ModelManagerReady(file.path, executionMode: 'local'));
+      return;
+    }
+
+    final size = await file.length();
+    emit(ModelManagerDownloading(
+      1.0,
+      downloadedBytes: size,
+      totalBytes: size,
+      isVerifying: true,
+      phaseLabel: 'Verifying SHA-256 checksum…',
+    ));
+
+    final digest = sha256.convert(await file.readAsBytes());
+    final actual = digest.toString().toLowerCase();
+
+    if (actual != expected.toLowerCase()) {
+      developer.log(
+        'Checksum mismatch: expected $expected, got $actual',
+        name: 'ModelManagerCubit',
+      );
+      await file.delete();
+      emit(ModelManagerError(
+        'Checksum mismatch — the downloaded model is corrupt. '
+        'Expected $expected, got $actual. Please download again.',
+      ));
+      return;
+    }
+
+    developer.log('Checksum verified: $actual', name: 'ModelManagerCubit');
+    emit(ModelManagerReady(file.path, executionMode: 'local'));
+  }
+
+  Future<void> _cleanupPartialFile(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // Best effort — partial file cleanup is not critical.
+    }
+  }
+
+  /// Simulated download used when no signed download URL is configured.
+  Future<void> _simulateDownload(File modelFile) async {
+    developer.log(
+      'MODEL_DOWNLOAD_URL not set — using simulated progress.',
+      name: 'ModelManagerCubit',
+    );
+    for (int i = 0; i <= 100; i += 10) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (isClosed) return;
+      emit(ModelManagerDownloading(
+        i / 100.0,
+        downloadedBytes: i * 1024 * 1024,
+        totalBytes: 350 * 1024 * 1024,
+        speedBytesPerSec: (350 * 1024 * 1024 / 100.0) / 0.4,
+      ));
+    }
+
+    // Create placeholder so subsequent checks pass
+    if (!await modelFile.exists()) {
+      await modelFile.writeAsString('placeholder_model_data');
+    }
+
+    emit(ModelManagerReady(modelFile.path, executionMode: 'local'));
   }
 }

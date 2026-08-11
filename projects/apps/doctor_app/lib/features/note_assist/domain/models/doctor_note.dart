@@ -63,6 +63,10 @@ class DoctorNote extends Equatable {
   final String patientId;
   final String doctorId;
   final String rawText;
+
+  /// Serialized Quill Delta JSON for the rich-text editor.
+  /// Null for notes written before the rich-text editor existed.
+  final String? richTextDelta;
   final NoteStatus status;
   final ExtractedFields? extractedFields;
   final String? patientRecap;
@@ -75,6 +79,7 @@ class DoctorNote extends Equatable {
     required this.patientId,
     required this.doctorId,
     required this.rawText,
+    this.richTextDelta,
     this.status = NoteStatus.draft,
     this.extractedFields,
     this.patientRecap,
@@ -88,6 +93,7 @@ class DoctorNote extends Equatable {
     String? patientId,
     String? doctorId,
     String? rawText,
+    String? richTextDelta,
     NoteStatus? status,
     ExtractedFields? extractedFields,
     String? patientRecap,
@@ -100,11 +106,49 @@ class DoctorNote extends Equatable {
       patientId: patientId ?? this.patientId,
       doctorId: doctorId ?? this.doctorId,
       rawText: rawText ?? this.rawText,
+      richTextDelta: richTextDelta ?? this.richTextDelta,
       status: status ?? this.status,
       extractedFields: extractedFields ?? this.extractedFields,
       patientRecap: patientRecap ?? this.patientRecap,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'noteId': noteId,
+        'consultationId': consultationId,
+        'patientId': patientId,
+        'doctorId': doctorId,
+        'rawText': rawText,
+        'richTextDelta': richTextDelta,
+        'status': status.name,
+        'extractedFields': extractedFields?.toJson(),
+        'patientRecap': patientRecap,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  factory DoctorNote.fromJson(Map<String, dynamic> json) {
+    return DoctorNote(
+      noteId: json['noteId'] as String,
+      consultationId: json['consultationId'] as String,
+      patientId: json['patientId'] as String,
+      doctorId: json['doctorId'] as String,
+      rawText: json['rawText'] as String? ?? '',
+      richTextDelta: json['richTextDelta'] as String?,
+      status: NoteStatus.values.firstWhere(
+        (s) => s.name == json['status'],
+        orElse: () => NoteStatus.draft,
+      ),
+      extractedFields: json['extractedFields'] != null
+          ? ExtractedFields.fromJson(
+              json['extractedFields'] as Map<String, dynamic>,
+            )
+          : null,
+      patientRecap: json['patientRecap'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
   }
 
@@ -115,6 +159,7 @@ class DoctorNote extends Equatable {
         patientId,
         doctorId,
         rawText,
+        richTextDelta,
         status,
         extractedFields,
         patientRecap,

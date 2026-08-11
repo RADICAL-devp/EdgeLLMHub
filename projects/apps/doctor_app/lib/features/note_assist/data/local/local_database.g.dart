@@ -38,6 +38,12 @@ class $DoctorNotesTable extends DoctorNotes
   late final GeneratedColumn<String> rawText = GeneratedColumn<String>(
       'raw_text', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _richTextDeltaMeta =
+      const VerificationMeta('richTextDelta');
+  @override
+  late final GeneratedColumn<String> richTextDelta = GeneratedColumn<String>(
+      'rich_text_delta', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<int> status = GeneratedColumn<int>(
@@ -74,6 +80,7 @@ class $DoctorNotesTable extends DoctorNotes
         patientId,
         doctorId,
         rawText,
+        richTextDelta,
         status,
         extractedFields,
         patientRecap,
@@ -121,6 +128,12 @@ class $DoctorNotesTable extends DoctorNotes
           rawText.isAcceptableOrUnknown(data['raw_text']!, _rawTextMeta));
     } else if (isInserting) {
       context.missing(_rawTextMeta);
+    }
+    if (data.containsKey('rich_text_delta')) {
+      context.handle(
+          _richTextDeltaMeta,
+          richTextDelta.isAcceptableOrUnknown(
+              data['rich_text_delta']!, _richTextDeltaMeta));
     }
     if (data.containsKey('status')) {
       context.handle(_statusMeta,
@@ -171,6 +184,8 @@ class $DoctorNotesTable extends DoctorNotes
           .read(DriftSqlType.string, data['${effectivePrefix}doctor_id'])!,
       rawText: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}raw_text'])!,
+      richTextDelta: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}rich_text_delta']),
       status: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}status'])!,
       extractedFields: attachedDatabase.typeMapping.read(
@@ -197,6 +212,7 @@ class DoctorNoteEntity extends DataClass
   final String patientId;
   final String doctorId;
   final String rawText;
+  final String? richTextDelta;
   final int status;
   final String? extractedFields;
   final String? patientRecap;
@@ -208,6 +224,7 @@ class DoctorNoteEntity extends DataClass
       required this.patientId,
       required this.doctorId,
       required this.rawText,
+      this.richTextDelta,
       required this.status,
       this.extractedFields,
       this.patientRecap,
@@ -221,6 +238,9 @@ class DoctorNoteEntity extends DataClass
     map['patient_id'] = Variable<String>(patientId);
     map['doctor_id'] = Variable<String>(doctorId);
     map['raw_text'] = Variable<String>(rawText);
+    if (!nullToAbsent || richTextDelta != null) {
+      map['rich_text_delta'] = Variable<String>(richTextDelta);
+    }
     map['status'] = Variable<int>(status);
     if (!nullToAbsent || extractedFields != null) {
       map['extracted_fields'] = Variable<String>(extractedFields);
@@ -240,6 +260,9 @@ class DoctorNoteEntity extends DataClass
       patientId: Value(patientId),
       doctorId: Value(doctorId),
       rawText: Value(rawText),
+      richTextDelta: richTextDelta == null && nullToAbsent
+          ? const Value.absent()
+          : Value(richTextDelta),
       status: Value(status),
       extractedFields: extractedFields == null && nullToAbsent
           ? const Value.absent()
@@ -261,6 +284,7 @@ class DoctorNoteEntity extends DataClass
       patientId: serializer.fromJson<String>(json['patientId']),
       doctorId: serializer.fromJson<String>(json['doctorId']),
       rawText: serializer.fromJson<String>(json['rawText']),
+      richTextDelta: serializer.fromJson<String?>(json['richTextDelta']),
       status: serializer.fromJson<int>(json['status']),
       extractedFields: serializer.fromJson<String?>(json['extractedFields']),
       patientRecap: serializer.fromJson<String?>(json['patientRecap']),
@@ -277,6 +301,7 @@ class DoctorNoteEntity extends DataClass
       'patientId': serializer.toJson<String>(patientId),
       'doctorId': serializer.toJson<String>(doctorId),
       'rawText': serializer.toJson<String>(rawText),
+      'richTextDelta': serializer.toJson<String?>(richTextDelta),
       'status': serializer.toJson<int>(status),
       'extractedFields': serializer.toJson<String?>(extractedFields),
       'patientRecap': serializer.toJson<String?>(patientRecap),
@@ -291,6 +316,7 @@ class DoctorNoteEntity extends DataClass
           String? patientId,
           String? doctorId,
           String? rawText,
+          Value<String?> richTextDelta = const Value.absent(),
           int? status,
           Value<String?> extractedFields = const Value.absent(),
           Value<String?> patientRecap = const Value.absent(),
@@ -302,6 +328,8 @@ class DoctorNoteEntity extends DataClass
         patientId: patientId ?? this.patientId,
         doctorId: doctorId ?? this.doctorId,
         rawText: rawText ?? this.rawText,
+        richTextDelta:
+            richTextDelta.present ? richTextDelta.value : this.richTextDelta,
         status: status ?? this.status,
         extractedFields: extractedFields.present
             ? extractedFields.value
@@ -320,6 +348,9 @@ class DoctorNoteEntity extends DataClass
       patientId: data.patientId.present ? data.patientId.value : this.patientId,
       doctorId: data.doctorId.present ? data.doctorId.value : this.doctorId,
       rawText: data.rawText.present ? data.rawText.value : this.rawText,
+      richTextDelta: data.richTextDelta.present
+          ? data.richTextDelta.value
+          : this.richTextDelta,
       status: data.status.present ? data.status.value : this.status,
       extractedFields: data.extractedFields.present
           ? data.extractedFields.value
@@ -340,6 +371,7 @@ class DoctorNoteEntity extends DataClass
           ..write('patientId: $patientId, ')
           ..write('doctorId: $doctorId, ')
           ..write('rawText: $rawText, ')
+          ..write('richTextDelta: $richTextDelta, ')
           ..write('status: $status, ')
           ..write('extractedFields: $extractedFields, ')
           ..write('patientRecap: $patientRecap, ')
@@ -350,8 +382,18 @@ class DoctorNoteEntity extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(noteId, consultationId, patientId, doctorId,
-      rawText, status, extractedFields, patientRecap, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      noteId,
+      consultationId,
+      patientId,
+      doctorId,
+      rawText,
+      richTextDelta,
+      status,
+      extractedFields,
+      patientRecap,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -361,6 +403,7 @@ class DoctorNoteEntity extends DataClass
           other.patientId == this.patientId &&
           other.doctorId == this.doctorId &&
           other.rawText == this.rawText &&
+          other.richTextDelta == this.richTextDelta &&
           other.status == this.status &&
           other.extractedFields == this.extractedFields &&
           other.patientRecap == this.patientRecap &&
@@ -374,6 +417,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
   final Value<String> patientId;
   final Value<String> doctorId;
   final Value<String> rawText;
+  final Value<String?> richTextDelta;
   final Value<int> status;
   final Value<String?> extractedFields;
   final Value<String?> patientRecap;
@@ -386,6 +430,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     this.patientId = const Value.absent(),
     this.doctorId = const Value.absent(),
     this.rawText = const Value.absent(),
+    this.richTextDelta = const Value.absent(),
     this.status = const Value.absent(),
     this.extractedFields = const Value.absent(),
     this.patientRecap = const Value.absent(),
@@ -399,6 +444,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     required String patientId,
     required String doctorId,
     required String rawText,
+    this.richTextDelta = const Value.absent(),
     required int status,
     this.extractedFields = const Value.absent(),
     this.patientRecap = const Value.absent(),
@@ -419,6 +465,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     Expression<String>? patientId,
     Expression<String>? doctorId,
     Expression<String>? rawText,
+    Expression<String>? richTextDelta,
     Expression<int>? status,
     Expression<String>? extractedFields,
     Expression<String>? patientRecap,
@@ -432,6 +479,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
       if (patientId != null) 'patient_id': patientId,
       if (doctorId != null) 'doctor_id': doctorId,
       if (rawText != null) 'raw_text': rawText,
+      if (richTextDelta != null) 'rich_text_delta': richTextDelta,
       if (status != null) 'status': status,
       if (extractedFields != null) 'extracted_fields': extractedFields,
       if (patientRecap != null) 'patient_recap': patientRecap,
@@ -447,6 +495,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
       Value<String>? patientId,
       Value<String>? doctorId,
       Value<String>? rawText,
+      Value<String?>? richTextDelta,
       Value<int>? status,
       Value<String?>? extractedFields,
       Value<String?>? patientRecap,
@@ -459,6 +508,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
       patientId: patientId ?? this.patientId,
       doctorId: doctorId ?? this.doctorId,
       rawText: rawText ?? this.rawText,
+      richTextDelta: richTextDelta ?? this.richTextDelta,
       status: status ?? this.status,
       extractedFields: extractedFields ?? this.extractedFields,
       patientRecap: patientRecap ?? this.patientRecap,
@@ -485,6 +535,9 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
     }
     if (rawText.present) {
       map['raw_text'] = Variable<String>(rawText.value);
+    }
+    if (richTextDelta.present) {
+      map['rich_text_delta'] = Variable<String>(richTextDelta.value);
     }
     if (status.present) {
       map['status'] = Variable<int>(status.value);
@@ -515,6 +568,7 @@ class DoctorNotesCompanion extends UpdateCompanion<DoctorNoteEntity> {
           ..write('patientId: $patientId, ')
           ..write('doctorId: $doctorId, ')
           ..write('rawText: $rawText, ')
+          ..write('richTextDelta: $richTextDelta, ')
           ..write('status: $status, ')
           ..write('extractedFields: $extractedFields, ')
           ..write('patientRecap: $patientRecap, ')
@@ -568,27 +622,11 @@ class $TranscriptsTable extends Transcripts
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
       'created_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _lastModifiedAtMeta =
-      const VerificationMeta('lastModifiedAt');
-  @override
-  late final GeneratedColumn<DateTime> lastModifiedAt =
-      GeneratedColumn<DateTime>('last_modified_at', aliasedName, true,
-          type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _sourceMeta = const VerificationMeta('source');
   @override
   late final GeneratedColumn<int> source = GeneratedColumn<int>(
       'source', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _isSyncedMeta =
-      const VerificationMeta('isSynced');
-  @override
-  late final GeneratedColumn<bool> isSynced = GeneratedColumn<bool>(
-      'is_synced', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("is_synced" IN (0, 1))'),
-      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         transcriptId,
@@ -597,9 +635,7 @@ class $TranscriptsTable extends Transcripts
         rawText,
         cleanedText,
         createdAt,
-        lastModifiedAt,
-        source,
-        isSynced
+        source
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -651,21 +687,11 @@ class $TranscriptsTable extends Transcripts
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
-    if (data.containsKey('last_modified_at')) {
-      context.handle(
-          _lastModifiedAtMeta,
-          lastModifiedAt.isAcceptableOrUnknown(
-              data['last_modified_at']!, _lastModifiedAtMeta));
-    }
     if (data.containsKey('source')) {
       context.handle(_sourceMeta,
           source.isAcceptableOrUnknown(data['source']!, _sourceMeta));
     } else if (isInserting) {
       context.missing(_sourceMeta);
-    }
-    if (data.containsKey('is_synced')) {
-      context.handle(_isSyncedMeta,
-          isSynced.isAcceptableOrUnknown(data['is_synced']!, _isSyncedMeta));
     }
     return context;
   }
@@ -688,12 +714,8 @@ class $TranscriptsTable extends Transcripts
           .read(DriftSqlType.string, data['${effectivePrefix}cleaned_text']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
-      lastModifiedAt: attachedDatabase.typeMapping.read(
-          DriftSqlType.dateTime, data['${effectivePrefix}last_modified_at']),
       source: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}source'])!,
-      isSynced: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}is_synced'])!,
     );
   }
 
@@ -711,9 +733,7 @@ class TranscriptEntity extends DataClass
   final String rawText;
   final String? cleanedText;
   final DateTime createdAt;
-  final DateTime? lastModifiedAt;
   final int source;
-  final bool isSynced;
   const TranscriptEntity(
       {required this.transcriptId,
       required this.consultationId,
@@ -721,9 +741,7 @@ class TranscriptEntity extends DataClass
       required this.rawText,
       this.cleanedText,
       required this.createdAt,
-      this.lastModifiedAt,
-      required this.source,
-      required this.isSynced});
+      required this.source});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -735,11 +753,7 @@ class TranscriptEntity extends DataClass
       map['cleaned_text'] = Variable<String>(cleanedText);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
-    if (!nullToAbsent || lastModifiedAt != null) {
-      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
-    }
     map['source'] = Variable<int>(source);
-    map['is_synced'] = Variable<bool>(isSynced);
     return map;
   }
 
@@ -753,11 +767,7 @@ class TranscriptEntity extends DataClass
           ? const Value.absent()
           : Value(cleanedText),
       createdAt: Value(createdAt),
-      lastModifiedAt: lastModifiedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastModifiedAt),
       source: Value(source),
-      isSynced: Value(isSynced),
     );
   }
 
@@ -771,9 +781,7 @@ class TranscriptEntity extends DataClass
       rawText: serializer.fromJson<String>(json['rawText']),
       cleanedText: serializer.fromJson<String?>(json['cleanedText']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      lastModifiedAt: serializer.fromJson<DateTime?>(json['lastModifiedAt']),
       source: serializer.fromJson<int>(json['source']),
-      isSynced: serializer.fromJson<bool>(json['isSynced']),
     );
   }
   @override
@@ -786,9 +794,7 @@ class TranscriptEntity extends DataClass
       'rawText': serializer.toJson<String>(rawText),
       'cleanedText': serializer.toJson<String?>(cleanedText),
       'createdAt': serializer.toJson<DateTime>(createdAt),
-      'lastModifiedAt': serializer.toJson<DateTime?>(lastModifiedAt),
       'source': serializer.toJson<int>(source),
-      'isSynced': serializer.toJson<bool>(isSynced),
     };
   }
 
@@ -799,9 +805,7 @@ class TranscriptEntity extends DataClass
           String? rawText,
           Value<String?> cleanedText = const Value.absent(),
           DateTime? createdAt,
-          Value<DateTime?> lastModifiedAt = const Value.absent(),
-          int? source,
-          bool? isSynced}) =>
+          int? source}) =>
       TranscriptEntity(
         transcriptId: transcriptId ?? this.transcriptId,
         consultationId: consultationId ?? this.consultationId,
@@ -809,10 +813,7 @@ class TranscriptEntity extends DataClass
         rawText: rawText ?? this.rawText,
         cleanedText: cleanedText.present ? cleanedText.value : this.cleanedText,
         createdAt: createdAt ?? this.createdAt,
-        lastModifiedAt:
-            lastModifiedAt.present ? lastModifiedAt.value : this.lastModifiedAt,
         source: source ?? this.source,
-        isSynced: isSynced ?? this.isSynced,
       );
   TranscriptEntity copyWithCompanion(TranscriptsCompanion data) {
     return TranscriptEntity(
@@ -827,11 +828,7 @@ class TranscriptEntity extends DataClass
       cleanedText:
           data.cleanedText.present ? data.cleanedText.value : this.cleanedText,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      lastModifiedAt: data.lastModifiedAt.present
-          ? data.lastModifiedAt.value
-          : this.lastModifiedAt,
       source: data.source.present ? data.source.value : this.source,
-      isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
     );
   }
 
@@ -844,16 +841,14 @@ class TranscriptEntity extends DataClass
           ..write('rawText: $rawText, ')
           ..write('cleanedText: $cleanedText, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastModifiedAt: $lastModifiedAt, ')
-          ..write('source: $source, ')
-          ..write('isSynced: $isSynced')
+          ..write('source: $source')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(transcriptId, consultationId, doctorId,
-      rawText, cleanedText, createdAt, lastModifiedAt, source, isSynced);
+      rawText, cleanedText, createdAt, source);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -864,9 +859,7 @@ class TranscriptEntity extends DataClass
           other.rawText == this.rawText &&
           other.cleanedText == this.cleanedText &&
           other.createdAt == this.createdAt &&
-          other.lastModifiedAt == this.lastModifiedAt &&
-          other.source == this.source &&
-          other.isSynced == this.isSynced);
+          other.source == this.source);
 }
 
 class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
@@ -876,9 +869,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
   final Value<String> rawText;
   final Value<String?> cleanedText;
   final Value<DateTime> createdAt;
-  final Value<DateTime?> lastModifiedAt;
   final Value<int> source;
-  final Value<bool> isSynced;
   final Value<int> rowid;
   const TranscriptsCompanion({
     this.transcriptId = const Value.absent(),
@@ -887,9 +878,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     this.rawText = const Value.absent(),
     this.cleanedText = const Value.absent(),
     this.createdAt = const Value.absent(),
-    this.lastModifiedAt = const Value.absent(),
     this.source = const Value.absent(),
-    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TranscriptsCompanion.insert({
@@ -899,9 +888,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     required String rawText,
     this.cleanedText = const Value.absent(),
     required DateTime createdAt,
-    this.lastModifiedAt = const Value.absent(),
     required int source,
-    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : transcriptId = Value(transcriptId),
         consultationId = Value(consultationId),
@@ -916,9 +903,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     Expression<String>? rawText,
     Expression<String>? cleanedText,
     Expression<DateTime>? createdAt,
-    Expression<DateTime>? lastModifiedAt,
     Expression<int>? source,
-    Expression<bool>? isSynced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -928,9 +913,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
       if (rawText != null) 'raw_text': rawText,
       if (cleanedText != null) 'cleaned_text': cleanedText,
       if (createdAt != null) 'created_at': createdAt,
-      if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
       if (source != null) 'source': source,
-      if (isSynced != null) 'is_synced': isSynced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -942,9 +925,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
       Value<String>? rawText,
       Value<String?>? cleanedText,
       Value<DateTime>? createdAt,
-      Value<DateTime?>? lastModifiedAt,
       Value<int>? source,
-      Value<bool>? isSynced,
       Value<int>? rowid}) {
     return TranscriptsCompanion(
       transcriptId: transcriptId ?? this.transcriptId,
@@ -953,9 +934,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
       rawText: rawText ?? this.rawText,
       cleanedText: cleanedText ?? this.cleanedText,
       createdAt: createdAt ?? this.createdAt,
-      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       source: source ?? this.source,
-      isSynced: isSynced ?? this.isSynced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -981,14 +960,8 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
-    if (lastModifiedAt.present) {
-      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
-    }
     if (source.present) {
       map['source'] = Variable<int>(source.value);
-    }
-    if (isSynced.present) {
-      map['is_synced'] = Variable<bool>(isSynced.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -1005,9 +978,7 @@ class TranscriptsCompanion extends UpdateCompanion<TranscriptEntity> {
           ..write('rawText: $rawText, ')
           ..write('cleanedText: $cleanedText, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('source: $source, ')
-          ..write('isSynced: $isSynced, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1063,22 +1034,6 @@ class $TranscriptSummariesTable extends TranscriptSummaries
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
       'created_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _lastModifiedAtMeta =
-      const VerificationMeta('lastModifiedAt');
-  @override
-  late final GeneratedColumn<DateTime> lastModifiedAt =
-      GeneratedColumn<DateTime>('last_modified_at', aliasedName, true,
-          type: DriftSqlType.dateTime, requiredDuringInsert: false);
-  static const VerificationMeta _isSyncedMeta =
-      const VerificationMeta('isSynced');
-  @override
-  late final GeneratedColumn<bool> isSynced = GeneratedColumn<bool>(
-      'is_synced', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("is_synced" IN (0, 1))'),
-      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         consultationId,
@@ -1087,9 +1042,7 @@ class $TranscriptSummariesTable extends TranscriptSummaries
         executiveSummary,
         contextEnrichedSummaryJson,
         doctorNoteJson,
-        createdAt,
-        lastModifiedAt,
-        isSynced
+        createdAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1147,16 +1100,6 @@ class $TranscriptSummariesTable extends TranscriptSummaries
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
-    if (data.containsKey('last_modified_at')) {
-      context.handle(
-          _lastModifiedAtMeta,
-          lastModifiedAt.isAcceptableOrUnknown(
-              data['last_modified_at']!, _lastModifiedAtMeta));
-    }
-    if (data.containsKey('is_synced')) {
-      context.handle(_isSyncedMeta,
-          isSynced.isAcceptableOrUnknown(data['is_synced']!, _isSyncedMeta));
-    }
     return context;
   }
 
@@ -1183,10 +1126,6 @@ class $TranscriptSummariesTable extends TranscriptSummaries
           DriftSqlType.string, data['${effectivePrefix}doctor_note_json']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
-      lastModifiedAt: attachedDatabase.typeMapping.read(
-          DriftSqlType.dateTime, data['${effectivePrefix}last_modified_at']),
-      isSynced: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}is_synced'])!,
     );
   }
 
@@ -1205,8 +1144,6 @@ class TranscriptSummaryEntity extends DataClass
   final String? contextEnrichedSummaryJson;
   final String? doctorNoteJson;
   final DateTime createdAt;
-  final DateTime? lastModifiedAt;
-  final bool isSynced;
   const TranscriptSummaryEntity(
       {required this.consultationId,
       required this.doctorId,
@@ -1214,9 +1151,7 @@ class TranscriptSummaryEntity extends DataClass
       this.executiveSummary,
       this.contextEnrichedSummaryJson,
       this.doctorNoteJson,
-      required this.createdAt,
-      this.lastModifiedAt,
-      required this.isSynced});
+      required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1236,10 +1171,6 @@ class TranscriptSummaryEntity extends DataClass
       map['doctor_note_json'] = Variable<String>(doctorNoteJson);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
-    if (!nullToAbsent || lastModifiedAt != null) {
-      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
-    }
-    map['is_synced'] = Variable<bool>(isSynced);
     return map;
   }
 
@@ -1261,10 +1192,6 @@ class TranscriptSummaryEntity extends DataClass
           ? const Value.absent()
           : Value(doctorNoteJson),
       createdAt: Value(createdAt),
-      lastModifiedAt: lastModifiedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastModifiedAt),
-      isSynced: Value(isSynced),
     );
   }
 
@@ -1281,8 +1208,6 @@ class TranscriptSummaryEntity extends DataClass
           serializer.fromJson<String?>(json['contextEnrichedSummaryJson']),
       doctorNoteJson: serializer.fromJson<String?>(json['doctorNoteJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      lastModifiedAt: serializer.fromJson<DateTime?>(json['lastModifiedAt']),
-      isSynced: serializer.fromJson<bool>(json['isSynced']),
     );
   }
   @override
@@ -1298,8 +1223,6 @@ class TranscriptSummaryEntity extends DataClass
           serializer.toJson<String?>(contextEnrichedSummaryJson),
       'doctorNoteJson': serializer.toJson<String?>(doctorNoteJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
-      'lastModifiedAt': serializer.toJson<DateTime?>(lastModifiedAt),
-      'isSynced': serializer.toJson<bool>(isSynced),
     };
   }
 
@@ -1310,9 +1233,7 @@ class TranscriptSummaryEntity extends DataClass
           Value<String?> executiveSummary = const Value.absent(),
           Value<String?> contextEnrichedSummaryJson = const Value.absent(),
           Value<String?> doctorNoteJson = const Value.absent(),
-          DateTime? createdAt,
-          Value<DateTime?> lastModifiedAt = const Value.absent(),
-          bool? isSynced}) =>
+          DateTime? createdAt}) =>
       TranscriptSummaryEntity(
         consultationId: consultationId ?? this.consultationId,
         doctorId: doctorId ?? this.doctorId,
@@ -1328,9 +1249,6 @@ class TranscriptSummaryEntity extends DataClass
         doctorNoteJson:
             doctorNoteJson.present ? doctorNoteJson.value : this.doctorNoteJson,
         createdAt: createdAt ?? this.createdAt,
-        lastModifiedAt:
-            lastModifiedAt.present ? lastModifiedAt.value : this.lastModifiedAt,
-        isSynced: isSynced ?? this.isSynced,
       );
   TranscriptSummaryEntity copyWithCompanion(TranscriptSummariesCompanion data) {
     return TranscriptSummaryEntity(
@@ -1351,10 +1269,6 @@ class TranscriptSummaryEntity extends DataClass
           ? data.doctorNoteJson.value
           : this.doctorNoteJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      lastModifiedAt: data.lastModifiedAt.present
-          ? data.lastModifiedAt.value
-          : this.lastModifiedAt,
-      isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
     );
   }
 
@@ -1367,9 +1281,7 @@ class TranscriptSummaryEntity extends DataClass
           ..write('executiveSummary: $executiveSummary, ')
           ..write('contextEnrichedSummaryJson: $contextEnrichedSummaryJson, ')
           ..write('doctorNoteJson: $doctorNoteJson, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('lastModifiedAt: $lastModifiedAt, ')
-          ..write('isSynced: $isSynced')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
@@ -1382,9 +1294,7 @@ class TranscriptSummaryEntity extends DataClass
       executiveSummary,
       contextEnrichedSummaryJson,
       doctorNoteJson,
-      createdAt,
-      lastModifiedAt,
-      isSynced);
+      createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1395,9 +1305,7 @@ class TranscriptSummaryEntity extends DataClass
           other.executiveSummary == this.executiveSummary &&
           other.contextEnrichedSummaryJson == this.contextEnrichedSummaryJson &&
           other.doctorNoteJson == this.doctorNoteJson &&
-          other.createdAt == this.createdAt &&
-          other.lastModifiedAt == this.lastModifiedAt &&
-          other.isSynced == this.isSynced);
+          other.createdAt == this.createdAt);
 }
 
 class TranscriptSummariesCompanion
@@ -1409,8 +1317,6 @@ class TranscriptSummariesCompanion
   final Value<String?> contextEnrichedSummaryJson;
   final Value<String?> doctorNoteJson;
   final Value<DateTime> createdAt;
-  final Value<DateTime?> lastModifiedAt;
-  final Value<bool> isSynced;
   final Value<int> rowid;
   const TranscriptSummariesCompanion({
     this.consultationId = const Value.absent(),
@@ -1420,8 +1326,6 @@ class TranscriptSummariesCompanion
     this.contextEnrichedSummaryJson = const Value.absent(),
     this.doctorNoteJson = const Value.absent(),
     this.createdAt = const Value.absent(),
-    this.lastModifiedAt = const Value.absent(),
-    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TranscriptSummariesCompanion.insert({
@@ -1432,8 +1336,6 @@ class TranscriptSummariesCompanion
     this.contextEnrichedSummaryJson = const Value.absent(),
     this.doctorNoteJson = const Value.absent(),
     required DateTime createdAt,
-    this.lastModifiedAt = const Value.absent(),
-    this.isSynced = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : consultationId = Value(consultationId),
         doctorId = Value(doctorId),
@@ -1446,8 +1348,6 @@ class TranscriptSummariesCompanion
     Expression<String>? contextEnrichedSummaryJson,
     Expression<String>? doctorNoteJson,
     Expression<DateTime>? createdAt,
-    Expression<DateTime>? lastModifiedAt,
-    Expression<bool>? isSynced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1460,8 +1360,6 @@ class TranscriptSummariesCompanion
         'context_enriched_summary_json': contextEnrichedSummaryJson,
       if (doctorNoteJson != null) 'doctor_note_json': doctorNoteJson,
       if (createdAt != null) 'created_at': createdAt,
-      if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
-      if (isSynced != null) 'is_synced': isSynced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1474,8 +1372,6 @@ class TranscriptSummariesCompanion
       Value<String?>? contextEnrichedSummaryJson,
       Value<String?>? doctorNoteJson,
       Value<DateTime>? createdAt,
-      Value<DateTime?>? lastModifiedAt,
-      Value<bool>? isSynced,
       Value<int>? rowid}) {
     return TranscriptSummariesCompanion(
       consultationId: consultationId ?? this.consultationId,
@@ -1487,8 +1383,6 @@ class TranscriptSummariesCompanion
           contextEnrichedSummaryJson ?? this.contextEnrichedSummaryJson,
       doctorNoteJson: doctorNoteJson ?? this.doctorNoteJson,
       createdAt: createdAt ?? this.createdAt,
-      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
-      isSynced: isSynced ?? this.isSynced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1519,12 +1413,6 @@ class TranscriptSummariesCompanion
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
-    if (lastModifiedAt.present) {
-      map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
-    }
-    if (isSynced.present) {
-      map['is_synced'] = Variable<bool>(isSynced.value);
-    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1541,8 +1429,663 @@ class TranscriptSummariesCompanion
           ..write('contextEnrichedSummaryJson: $contextEnrichedSummaryJson, ')
           ..write('doctorNoteJson: $doctorNoteJson, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastModifiedAt: $lastModifiedAt, ')
-          ..write('isSynced: $isSynced, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SyncQueueEntriesTable extends SyncQueueEntries
+    with TableInfo<$SyncQueueEntriesTable, SyncQueueEntryEntity> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncQueueEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _noteIdMeta = const VerificationMeta('noteId');
+  @override
+  late final GeneratedColumn<String> noteId = GeneratedColumn<String>(
+      'note_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _consultationIdMeta =
+      const VerificationMeta('consultationId');
+  @override
+  late final GeneratedColumn<String> consultationId = GeneratedColumn<String>(
+      'consultation_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _operationMeta =
+      const VerificationMeta('operation');
+  @override
+  late final GeneratedColumn<String> operation = GeneratedColumn<String>(
+      'operation', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _payloadJsonMeta =
+      const VerificationMeta('payloadJson');
+  @override
+  late final GeneratedColumn<String> payloadJson = GeneratedColumn<String>(
+      'payload_json', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _retryCountMeta =
+      const VerificationMeta('retryCount');
+  @override
+  late final GeneratedColumn<int> retryCount = GeneratedColumn<int>(
+      'retry_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _maxRetriesMeta =
+      const VerificationMeta('maxRetries');
+  @override
+  late final GeneratedColumn<int> maxRetries = GeneratedColumn<int>(
+      'max_retries', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(5));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _nextRetryAtMeta =
+      const VerificationMeta('nextRetryAt');
+  @override
+  late final GeneratedColumn<DateTime> nextRetryAt = GeneratedColumn<DateTime>(
+      'next_retry_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _lastErrorMeta =
+      const VerificationMeta('lastError');
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+      'last_error', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _isDeadLetterMeta =
+      const VerificationMeta('isDeadLetter');
+  @override
+  late final GeneratedColumn<bool> isDeadLetter = GeneratedColumn<bool>(
+      'is_dead_letter', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("is_dead_letter" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _isConflictMeta =
+      const VerificationMeta('isConflict');
+  @override
+  late final GeneratedColumn<bool> isConflict = GeneratedColumn<bool>(
+      'is_conflict', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_conflict" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        noteId,
+        consultationId,
+        operation,
+        payloadJson,
+        retryCount,
+        maxRetries,
+        createdAt,
+        updatedAt,
+        nextRetryAt,
+        lastError,
+        isDeadLetter,
+        isConflict
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_queue_entries';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<SyncQueueEntryEntity> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('note_id')) {
+      context.handle(_noteIdMeta,
+          noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta));
+    } else if (isInserting) {
+      context.missing(_noteIdMeta);
+    }
+    if (data.containsKey('consultation_id')) {
+      context.handle(
+          _consultationIdMeta,
+          consultationId.isAcceptableOrUnknown(
+              data['consultation_id']!, _consultationIdMeta));
+    } else if (isInserting) {
+      context.missing(_consultationIdMeta);
+    }
+    if (data.containsKey('operation')) {
+      context.handle(_operationMeta,
+          operation.isAcceptableOrUnknown(data['operation']!, _operationMeta));
+    } else if (isInserting) {
+      context.missing(_operationMeta);
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+          _payloadJsonMeta,
+          payloadJson.isAcceptableOrUnknown(
+              data['payload_json']!, _payloadJsonMeta));
+    } else if (isInserting) {
+      context.missing(_payloadJsonMeta);
+    }
+    if (data.containsKey('retry_count')) {
+      context.handle(
+          _retryCountMeta,
+          retryCount.isAcceptableOrUnknown(
+              data['retry_count']!, _retryCountMeta));
+    }
+    if (data.containsKey('max_retries')) {
+      context.handle(
+          _maxRetriesMeta,
+          maxRetries.isAcceptableOrUnknown(
+              data['max_retries']!, _maxRetriesMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('next_retry_at')) {
+      context.handle(
+          _nextRetryAtMeta,
+          nextRetryAt.isAcceptableOrUnknown(
+              data['next_retry_at']!, _nextRetryAtMeta));
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(_lastErrorMeta,
+          lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta));
+    }
+    if (data.containsKey('is_dead_letter')) {
+      context.handle(
+          _isDeadLetterMeta,
+          isDeadLetter.isAcceptableOrUnknown(
+              data['is_dead_letter']!, _isDeadLetterMeta));
+    }
+    if (data.containsKey('is_conflict')) {
+      context.handle(
+          _isConflictMeta,
+          isConflict.isAcceptableOrUnknown(
+              data['is_conflict']!, _isConflictMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SyncQueueEntryEntity map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncQueueEntryEntity(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      noteId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note_id'])!,
+      consultationId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}consultation_id'])!,
+      operation: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}operation'])!,
+      payloadJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}payload_json'])!,
+      retryCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}retry_count'])!,
+      maxRetries: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}max_retries'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      nextRetryAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}next_retry_at']),
+      lastError: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}last_error']),
+      isDeadLetter: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_dead_letter'])!,
+      isConflict: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_conflict'])!,
+    );
+  }
+
+  @override
+  $SyncQueueEntriesTable createAlias(String alias) {
+    return $SyncQueueEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class SyncQueueEntryEntity extends DataClass
+    implements Insertable<SyncQueueEntryEntity> {
+  final String id;
+  final String noteId;
+  final String consultationId;
+  final String operation;
+  final String payloadJson;
+  final int retryCount;
+  final int maxRetries;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? nextRetryAt;
+  final String? lastError;
+  final bool isDeadLetter;
+  final bool isConflict;
+  const SyncQueueEntryEntity(
+      {required this.id,
+      required this.noteId,
+      required this.consultationId,
+      required this.operation,
+      required this.payloadJson,
+      required this.retryCount,
+      required this.maxRetries,
+      required this.createdAt,
+      required this.updatedAt,
+      this.nextRetryAt,
+      this.lastError,
+      required this.isDeadLetter,
+      required this.isConflict});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['note_id'] = Variable<String>(noteId);
+    map['consultation_id'] = Variable<String>(consultationId);
+    map['operation'] = Variable<String>(operation);
+    map['payload_json'] = Variable<String>(payloadJson);
+    map['retry_count'] = Variable<int>(retryCount);
+    map['max_retries'] = Variable<int>(maxRetries);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || nextRetryAt != null) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    map['is_dead_letter'] = Variable<bool>(isDeadLetter);
+    map['is_conflict'] = Variable<bool>(isConflict);
+    return map;
+  }
+
+  SyncQueueEntriesCompanion toCompanion(bool nullToAbsent) {
+    return SyncQueueEntriesCompanion(
+      id: Value(id),
+      noteId: Value(noteId),
+      consultationId: Value(consultationId),
+      operation: Value(operation),
+      payloadJson: Value(payloadJson),
+      retryCount: Value(retryCount),
+      maxRetries: Value(maxRetries),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      nextRetryAt: nextRetryAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextRetryAt),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      isDeadLetter: Value(isDeadLetter),
+      isConflict: Value(isConflict),
+    );
+  }
+
+  factory SyncQueueEntryEntity.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncQueueEntryEntity(
+      id: serializer.fromJson<String>(json['id']),
+      noteId: serializer.fromJson<String>(json['noteId']),
+      consultationId: serializer.fromJson<String>(json['consultationId']),
+      operation: serializer.fromJson<String>(json['operation']),
+      payloadJson: serializer.fromJson<String>(json['payloadJson']),
+      retryCount: serializer.fromJson<int>(json['retryCount']),
+      maxRetries: serializer.fromJson<int>(json['maxRetries']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      nextRetryAt: serializer.fromJson<DateTime?>(json['nextRetryAt']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      isDeadLetter: serializer.fromJson<bool>(json['isDeadLetter']),
+      isConflict: serializer.fromJson<bool>(json['isConflict']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'noteId': serializer.toJson<String>(noteId),
+      'consultationId': serializer.toJson<String>(consultationId),
+      'operation': serializer.toJson<String>(operation),
+      'payloadJson': serializer.toJson<String>(payloadJson),
+      'retryCount': serializer.toJson<int>(retryCount),
+      'maxRetries': serializer.toJson<int>(maxRetries),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'nextRetryAt': serializer.toJson<DateTime?>(nextRetryAt),
+      'lastError': serializer.toJson<String?>(lastError),
+      'isDeadLetter': serializer.toJson<bool>(isDeadLetter),
+      'isConflict': serializer.toJson<bool>(isConflict),
+    };
+  }
+
+  SyncQueueEntryEntity copyWith(
+          {String? id,
+          String? noteId,
+          String? consultationId,
+          String? operation,
+          String? payloadJson,
+          int? retryCount,
+          int? maxRetries,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> nextRetryAt = const Value.absent(),
+          Value<String?> lastError = const Value.absent(),
+          bool? isDeadLetter,
+          bool? isConflict}) =>
+      SyncQueueEntryEntity(
+        id: id ?? this.id,
+        noteId: noteId ?? this.noteId,
+        consultationId: consultationId ?? this.consultationId,
+        operation: operation ?? this.operation,
+        payloadJson: payloadJson ?? this.payloadJson,
+        retryCount: retryCount ?? this.retryCount,
+        maxRetries: maxRetries ?? this.maxRetries,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        nextRetryAt: nextRetryAt.present ? nextRetryAt.value : this.nextRetryAt,
+        lastError: lastError.present ? lastError.value : this.lastError,
+        isDeadLetter: isDeadLetter ?? this.isDeadLetter,
+        isConflict: isConflict ?? this.isConflict,
+      );
+  SyncQueueEntryEntity copyWithCompanion(SyncQueueEntriesCompanion data) {
+    return SyncQueueEntryEntity(
+      id: data.id.present ? data.id.value : this.id,
+      noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      consultationId: data.consultationId.present
+          ? data.consultationId.value
+          : this.consultationId,
+      operation: data.operation.present ? data.operation.value : this.operation,
+      payloadJson:
+          data.payloadJson.present ? data.payloadJson.value : this.payloadJson,
+      retryCount:
+          data.retryCount.present ? data.retryCount.value : this.retryCount,
+      maxRetries:
+          data.maxRetries.present ? data.maxRetries.value : this.maxRetries,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      nextRetryAt:
+          data.nextRetryAt.present ? data.nextRetryAt.value : this.nextRetryAt,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      isDeadLetter: data.isDeadLetter.present
+          ? data.isDeadLetter.value
+          : this.isDeadLetter,
+      isConflict:
+          data.isConflict.present ? data.isConflict.value : this.isConflict,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncQueueEntryEntity(')
+          ..write('id: $id, ')
+          ..write('noteId: $noteId, ')
+          ..write('consultationId: $consultationId, ')
+          ..write('operation: $operation, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('maxRetries: $maxRetries, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('isDeadLetter: $isDeadLetter, ')
+          ..write('isConflict: $isConflict')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      noteId,
+      consultationId,
+      operation,
+      payloadJson,
+      retryCount,
+      maxRetries,
+      createdAt,
+      updatedAt,
+      nextRetryAt,
+      lastError,
+      isDeadLetter,
+      isConflict);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncQueueEntryEntity &&
+          other.id == this.id &&
+          other.noteId == this.noteId &&
+          other.consultationId == this.consultationId &&
+          other.operation == this.operation &&
+          other.payloadJson == this.payloadJson &&
+          other.retryCount == this.retryCount &&
+          other.maxRetries == this.maxRetries &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.nextRetryAt == this.nextRetryAt &&
+          other.lastError == this.lastError &&
+          other.isDeadLetter == this.isDeadLetter &&
+          other.isConflict == this.isConflict);
+}
+
+class SyncQueueEntriesCompanion extends UpdateCompanion<SyncQueueEntryEntity> {
+  final Value<String> id;
+  final Value<String> noteId;
+  final Value<String> consultationId;
+  final Value<String> operation;
+  final Value<String> payloadJson;
+  final Value<int> retryCount;
+  final Value<int> maxRetries;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> nextRetryAt;
+  final Value<String?> lastError;
+  final Value<bool> isDeadLetter;
+  final Value<bool> isConflict;
+  final Value<int> rowid;
+  const SyncQueueEntriesCompanion({
+    this.id = const Value.absent(),
+    this.noteId = const Value.absent(),
+    this.consultationId = const Value.absent(),
+    this.operation = const Value.absent(),
+    this.payloadJson = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.maxRetries = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.isDeadLetter = const Value.absent(),
+    this.isConflict = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncQueueEntriesCompanion.insert({
+    required String id,
+    required String noteId,
+    required String consultationId,
+    required String operation,
+    required String payloadJson,
+    this.retryCount = const Value.absent(),
+    this.maxRetries = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.nextRetryAt = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.isDeadLetter = const Value.absent(),
+    this.isConflict = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        noteId = Value(noteId),
+        consultationId = Value(consultationId),
+        operation = Value(operation),
+        payloadJson = Value(payloadJson),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<SyncQueueEntryEntity> custom({
+    Expression<String>? id,
+    Expression<String>? noteId,
+    Expression<String>? consultationId,
+    Expression<String>? operation,
+    Expression<String>? payloadJson,
+    Expression<int>? retryCount,
+    Expression<int>? maxRetries,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? nextRetryAt,
+    Expression<String>? lastError,
+    Expression<bool>? isDeadLetter,
+    Expression<bool>? isConflict,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (noteId != null) 'note_id': noteId,
+      if (consultationId != null) 'consultation_id': consultationId,
+      if (operation != null) 'operation': operation,
+      if (payloadJson != null) 'payload_json': payloadJson,
+      if (retryCount != null) 'retry_count': retryCount,
+      if (maxRetries != null) 'max_retries': maxRetries,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (nextRetryAt != null) 'next_retry_at': nextRetryAt,
+      if (lastError != null) 'last_error': lastError,
+      if (isDeadLetter != null) 'is_dead_letter': isDeadLetter,
+      if (isConflict != null) 'is_conflict': isConflict,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncQueueEntriesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? noteId,
+      Value<String>? consultationId,
+      Value<String>? operation,
+      Value<String>? payloadJson,
+      Value<int>? retryCount,
+      Value<int>? maxRetries,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? nextRetryAt,
+      Value<String?>? lastError,
+      Value<bool>? isDeadLetter,
+      Value<bool>? isConflict,
+      Value<int>? rowid}) {
+    return SyncQueueEntriesCompanion(
+      id: id ?? this.id,
+      noteId: noteId ?? this.noteId,
+      consultationId: consultationId ?? this.consultationId,
+      operation: operation ?? this.operation,
+      payloadJson: payloadJson ?? this.payloadJson,
+      retryCount: retryCount ?? this.retryCount,
+      maxRetries: maxRetries ?? this.maxRetries,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      nextRetryAt: nextRetryAt ?? this.nextRetryAt,
+      lastError: lastError ?? this.lastError,
+      isDeadLetter: isDeadLetter ?? this.isDeadLetter,
+      isConflict: isConflict ?? this.isConflict,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (noteId.present) {
+      map['note_id'] = Variable<String>(noteId.value);
+    }
+    if (consultationId.present) {
+      map['consultation_id'] = Variable<String>(consultationId.value);
+    }
+    if (operation.present) {
+      map['operation'] = Variable<String>(operation.value);
+    }
+    if (payloadJson.present) {
+      map['payload_json'] = Variable<String>(payloadJson.value);
+    }
+    if (retryCount.present) {
+      map['retry_count'] = Variable<int>(retryCount.value);
+    }
+    if (maxRetries.present) {
+      map['max_retries'] = Variable<int>(maxRetries.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (nextRetryAt.present) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (isDeadLetter.present) {
+      map['is_dead_letter'] = Variable<bool>(isDeadLetter.value);
+    }
+    if (isConflict.present) {
+      map['is_conflict'] = Variable<bool>(isConflict.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncQueueEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('noteId: $noteId, ')
+          ..write('consultationId: $consultationId, ')
+          ..write('operation: $operation, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('maxRetries: $maxRetries, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('isDeadLetter: $isDeadLetter, ')
+          ..write('isConflict: $isConflict, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1556,12 +2099,14 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $TranscriptsTable transcripts = $TranscriptsTable(this);
   late final $TranscriptSummariesTable transcriptSummaries =
       $TranscriptSummariesTable(this);
+  late final $SyncQueueEntriesTable syncQueueEntries =
+      $SyncQueueEntriesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [doctorNotes, transcripts, transcriptSummaries];
+      [doctorNotes, transcripts, transcriptSummaries, syncQueueEntries];
 }
 
 typedef $$DoctorNotesTableCreateCompanionBuilder = DoctorNotesCompanion
@@ -1571,6 +2116,7 @@ typedef $$DoctorNotesTableCreateCompanionBuilder = DoctorNotesCompanion
   required String patientId,
   required String doctorId,
   required String rawText,
+  Value<String?> richTextDelta,
   required int status,
   Value<String?> extractedFields,
   Value<String?> patientRecap,
@@ -1585,6 +2131,7 @@ typedef $$DoctorNotesTableUpdateCompanionBuilder = DoctorNotesCompanion
   Value<String> patientId,
   Value<String> doctorId,
   Value<String> rawText,
+  Value<String?> richTextDelta,
   Value<int> status,
   Value<String?> extractedFields,
   Value<String?> patientRecap,
@@ -1617,6 +2164,9 @@ class $$DoctorNotesTableFilterComposer
 
   ColumnFilters<String> get rawText => $composableBuilder(
       column: $table.rawText, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get status => $composableBuilder(
       column: $table.status, builder: (column) => ColumnFilters(column));
@@ -1660,6 +2210,10 @@ class $$DoctorNotesTableOrderingComposer
   ColumnOrderings<String> get rawText => $composableBuilder(
       column: $table.rawText, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get status => $composableBuilder(
       column: $table.status, builder: (column) => ColumnOrderings(column));
 
@@ -1701,6 +2255,9 @@ class $$DoctorNotesTableAnnotationComposer
 
   GeneratedColumn<String> get rawText =>
       $composableBuilder(column: $table.rawText, builder: (column) => column);
+
+  GeneratedColumn<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta, builder: (column) => column);
 
   GeneratedColumn<int> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
@@ -1749,6 +2306,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             Value<String> patientId = const Value.absent(),
             Value<String> doctorId = const Value.absent(),
             Value<String> rawText = const Value.absent(),
+            Value<String?> richTextDelta = const Value.absent(),
             Value<int> status = const Value.absent(),
             Value<String?> extractedFields = const Value.absent(),
             Value<String?> patientRecap = const Value.absent(),
@@ -1762,6 +2320,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             patientId: patientId,
             doctorId: doctorId,
             rawText: rawText,
+            richTextDelta: richTextDelta,
             status: status,
             extractedFields: extractedFields,
             patientRecap: patientRecap,
@@ -1775,6 +2334,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             required String patientId,
             required String doctorId,
             required String rawText,
+            Value<String?> richTextDelta = const Value.absent(),
             required int status,
             Value<String?> extractedFields = const Value.absent(),
             Value<String?> patientRecap = const Value.absent(),
@@ -1788,6 +2348,7 @@ class $$DoctorNotesTableTableManager extends RootTableManager<
             patientId: patientId,
             doctorId: doctorId,
             rawText: rawText,
+            richTextDelta: richTextDelta,
             status: status,
             extractedFields: extractedFields,
             patientRecap: patientRecap,
@@ -1825,9 +2386,7 @@ typedef $$TranscriptsTableCreateCompanionBuilder = TranscriptsCompanion
   required String rawText,
   Value<String?> cleanedText,
   required DateTime createdAt,
-  Value<DateTime?> lastModifiedAt,
   required int source,
-  Value<bool> isSynced,
   Value<int> rowid,
 });
 typedef $$TranscriptsTableUpdateCompanionBuilder = TranscriptsCompanion
@@ -1838,9 +2397,7 @@ typedef $$TranscriptsTableUpdateCompanionBuilder = TranscriptsCompanion
   Value<String> rawText,
   Value<String?> cleanedText,
   Value<DateTime> createdAt,
-  Value<DateTime?> lastModifiedAt,
   Value<int> source,
-  Value<bool> isSynced,
   Value<int> rowid,
 });
 
@@ -1872,15 +2429,8 @@ class $$TranscriptsTableFilterComposer
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<DateTime> get lastModifiedAt => $composableBuilder(
-      column: $table.lastModifiedAt,
-      builder: (column) => ColumnFilters(column));
-
   ColumnFilters<int> get source => $composableBuilder(
       column: $table.source, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<bool> get isSynced => $composableBuilder(
-      column: $table.isSynced, builder: (column) => ColumnFilters(column));
 }
 
 class $$TranscriptsTableOrderingComposer
@@ -1912,15 +2462,8 @@ class $$TranscriptsTableOrderingComposer
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
-      column: $table.lastModifiedAt,
-      builder: (column) => ColumnOrderings(column));
-
   ColumnOrderings<int> get source => $composableBuilder(
       column: $table.source, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<bool> get isSynced => $composableBuilder(
-      column: $table.isSynced, builder: (column) => ColumnOrderings(column));
 }
 
 class $$TranscriptsTableAnnotationComposer
@@ -1950,14 +2493,8 @@ class $$TranscriptsTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get lastModifiedAt => $composableBuilder(
-      column: $table.lastModifiedAt, builder: (column) => column);
-
   GeneratedColumn<int> get source =>
       $composableBuilder(column: $table.source, builder: (column) => column);
-
-  GeneratedColumn<bool> get isSynced =>
-      $composableBuilder(column: $table.isSynced, builder: (column) => column);
 }
 
 class $$TranscriptsTableTableManager extends RootTableManager<
@@ -1992,9 +2529,7 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             Value<String> rawText = const Value.absent(),
             Value<String?> cleanedText = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
-            Value<DateTime?> lastModifiedAt = const Value.absent(),
             Value<int> source = const Value.absent(),
-            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptsCompanion(
@@ -2004,9 +2539,7 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             rawText: rawText,
             cleanedText: cleanedText,
             createdAt: createdAt,
-            lastModifiedAt: lastModifiedAt,
             source: source,
-            isSynced: isSynced,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -2016,9 +2549,7 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             required String rawText,
             Value<String?> cleanedText = const Value.absent(),
             required DateTime createdAt,
-            Value<DateTime?> lastModifiedAt = const Value.absent(),
             required int source,
-            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptsCompanion.insert(
@@ -2028,9 +2559,7 @@ class $$TranscriptsTableTableManager extends RootTableManager<
             rawText: rawText,
             cleanedText: cleanedText,
             createdAt: createdAt,
-            lastModifiedAt: lastModifiedAt,
             source: source,
-            isSynced: isSynced,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -2064,8 +2593,6 @@ typedef $$TranscriptSummariesTableCreateCompanionBuilder
   Value<String?> contextEnrichedSummaryJson,
   Value<String?> doctorNoteJson,
   required DateTime createdAt,
-  Value<DateTime?> lastModifiedAt,
-  Value<bool> isSynced,
   Value<int> rowid,
 });
 typedef $$TranscriptSummariesTableUpdateCompanionBuilder
@@ -2077,8 +2604,6 @@ typedef $$TranscriptSummariesTableUpdateCompanionBuilder
   Value<String?> contextEnrichedSummaryJson,
   Value<String?> doctorNoteJson,
   Value<DateTime> createdAt,
-  Value<DateTime?> lastModifiedAt,
-  Value<bool> isSynced,
   Value<int> rowid,
 });
 
@@ -2116,13 +2641,6 @@ class $$TranscriptSummariesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<DateTime> get lastModifiedAt => $composableBuilder(
-      column: $table.lastModifiedAt,
-      builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<bool> get isSynced => $composableBuilder(
-      column: $table.isSynced, builder: (column) => ColumnFilters(column));
 }
 
 class $$TranscriptSummariesTableOrderingComposer
@@ -2159,13 +2677,6 @@ class $$TranscriptSummariesTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
-      column: $table.lastModifiedAt,
-      builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<bool> get isSynced => $composableBuilder(
-      column: $table.isSynced, builder: (column) => ColumnOrderings(column));
 }
 
 class $$TranscriptSummariesTableAnnotationComposer
@@ -2197,12 +2708,6 @@ class $$TranscriptSummariesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get lastModifiedAt => $composableBuilder(
-      column: $table.lastModifiedAt, builder: (column) => column);
-
-  GeneratedColumn<bool> get isSynced =>
-      $composableBuilder(column: $table.isSynced, builder: (column) => column);
 }
 
 class $$TranscriptSummariesTableTableManager extends RootTableManager<
@@ -2242,8 +2747,6 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             Value<String?> contextEnrichedSummaryJson = const Value.absent(),
             Value<String?> doctorNoteJson = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
-            Value<DateTime?> lastModifiedAt = const Value.absent(),
-            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptSummariesCompanion(
@@ -2254,8 +2757,6 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             contextEnrichedSummaryJson: contextEnrichedSummaryJson,
             doctorNoteJson: doctorNoteJson,
             createdAt: createdAt,
-            lastModifiedAt: lastModifiedAt,
-            isSynced: isSynced,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -2266,8 +2767,6 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             Value<String?> contextEnrichedSummaryJson = const Value.absent(),
             Value<String?> doctorNoteJson = const Value.absent(),
             required DateTime createdAt,
-            Value<DateTime?> lastModifiedAt = const Value.absent(),
-            Value<bool> isSynced = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TranscriptSummariesCompanion.insert(
@@ -2278,8 +2777,6 @@ class $$TranscriptSummariesTableTableManager extends RootTableManager<
             contextEnrichedSummaryJson: contextEnrichedSummaryJson,
             doctorNoteJson: doctorNoteJson,
             createdAt: createdAt,
-            lastModifiedAt: lastModifiedAt,
-            isSynced: isSynced,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -2305,6 +2802,305 @@ typedef $$TranscriptSummariesTableProcessedTableManager = ProcessedTableManager<
     ),
     TranscriptSummaryEntity,
     PrefetchHooks Function()>;
+typedef $$SyncQueueEntriesTableCreateCompanionBuilder
+    = SyncQueueEntriesCompanion Function({
+  required String id,
+  required String noteId,
+  required String consultationId,
+  required String operation,
+  required String payloadJson,
+  Value<int> retryCount,
+  Value<int> maxRetries,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<DateTime?> nextRetryAt,
+  Value<String?> lastError,
+  Value<bool> isDeadLetter,
+  Value<bool> isConflict,
+  Value<int> rowid,
+});
+typedef $$SyncQueueEntriesTableUpdateCompanionBuilder
+    = SyncQueueEntriesCompanion Function({
+  Value<String> id,
+  Value<String> noteId,
+  Value<String> consultationId,
+  Value<String> operation,
+  Value<String> payloadJson,
+  Value<int> retryCount,
+  Value<int> maxRetries,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> nextRetryAt,
+  Value<String?> lastError,
+  Value<bool> isDeadLetter,
+  Value<bool> isConflict,
+  Value<int> rowid,
+});
+
+class $$SyncQueueEntriesTableFilterComposer
+    extends Composer<_$LocalDatabase, $SyncQueueEntriesTable> {
+  $$SyncQueueEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get noteId => $composableBuilder(
+      column: $table.noteId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get consultationId => $composableBuilder(
+      column: $table.consultationId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get operation => $composableBuilder(
+      column: $table.operation, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get retryCount => $composableBuilder(
+      column: $table.retryCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get maxRetries => $composableBuilder(
+      column: $table.maxRetries, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeadLetter => $composableBuilder(
+      column: $table.isDeadLetter, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isConflict => $composableBuilder(
+      column: $table.isConflict, builder: (column) => ColumnFilters(column));
+}
+
+class $$SyncQueueEntriesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $SyncQueueEntriesTable> {
+  $$SyncQueueEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get noteId => $composableBuilder(
+      column: $table.noteId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get consultationId => $composableBuilder(
+      column: $table.consultationId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get operation => $composableBuilder(
+      column: $table.operation, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get retryCount => $composableBuilder(
+      column: $table.retryCount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get maxRetries => $composableBuilder(
+      column: $table.maxRetries, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeadLetter => $composableBuilder(
+      column: $table.isDeadLetter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isConflict => $composableBuilder(
+      column: $table.isConflict, builder: (column) => ColumnOrderings(column));
+}
+
+class $$SyncQueueEntriesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $SyncQueueEntriesTable> {
+  $$SyncQueueEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get noteId =>
+      $composableBuilder(column: $table.noteId, builder: (column) => column);
+
+  GeneratedColumn<String> get consultationId => $composableBuilder(
+      column: $table.consultationId, builder: (column) => column);
+
+  GeneratedColumn<String> get operation =>
+      $composableBuilder(column: $table.operation, builder: (column) => column);
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => column);
+
+  GeneratedColumn<int> get retryCount => $composableBuilder(
+      column: $table.retryCount, builder: (column) => column);
+
+  GeneratedColumn<int> get maxRetries => $composableBuilder(
+      column: $table.maxRetries, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeadLetter => $composableBuilder(
+      column: $table.isDeadLetter, builder: (column) => column);
+
+  GeneratedColumn<bool> get isConflict => $composableBuilder(
+      column: $table.isConflict, builder: (column) => column);
+}
+
+class $$SyncQueueEntriesTableTableManager extends RootTableManager<
+    _$LocalDatabase,
+    $SyncQueueEntriesTable,
+    SyncQueueEntryEntity,
+    $$SyncQueueEntriesTableFilterComposer,
+    $$SyncQueueEntriesTableOrderingComposer,
+    $$SyncQueueEntriesTableAnnotationComposer,
+    $$SyncQueueEntriesTableCreateCompanionBuilder,
+    $$SyncQueueEntriesTableUpdateCompanionBuilder,
+    (
+      SyncQueueEntryEntity,
+      BaseReferences<_$LocalDatabase, $SyncQueueEntriesTable,
+          SyncQueueEntryEntity>
+    ),
+    SyncQueueEntryEntity,
+    PrefetchHooks Function()> {
+  $$SyncQueueEntriesTableTableManager(
+      _$LocalDatabase db, $SyncQueueEntriesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncQueueEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncQueueEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncQueueEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> noteId = const Value.absent(),
+            Value<String> consultationId = const Value.absent(),
+            Value<String> operation = const Value.absent(),
+            Value<String> payloadJson = const Value.absent(),
+            Value<int> retryCount = const Value.absent(),
+            Value<int> maxRetries = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> nextRetryAt = const Value.absent(),
+            Value<String?> lastError = const Value.absent(),
+            Value<bool> isDeadLetter = const Value.absent(),
+            Value<bool> isConflict = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncQueueEntriesCompanion(
+            id: id,
+            noteId: noteId,
+            consultationId: consultationId,
+            operation: operation,
+            payloadJson: payloadJson,
+            retryCount: retryCount,
+            maxRetries: maxRetries,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            nextRetryAt: nextRetryAt,
+            lastError: lastError,
+            isDeadLetter: isDeadLetter,
+            isConflict: isConflict,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String noteId,
+            required String consultationId,
+            required String operation,
+            required String payloadJson,
+            Value<int> retryCount = const Value.absent(),
+            Value<int> maxRetries = const Value.absent(),
+            required DateTime createdAt,
+            required DateTime updatedAt,
+            Value<DateTime?> nextRetryAt = const Value.absent(),
+            Value<String?> lastError = const Value.absent(),
+            Value<bool> isDeadLetter = const Value.absent(),
+            Value<bool> isConflict = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncQueueEntriesCompanion.insert(
+            id: id,
+            noteId: noteId,
+            consultationId: consultationId,
+            operation: operation,
+            payloadJson: payloadJson,
+            retryCount: retryCount,
+            maxRetries: maxRetries,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            nextRetryAt: nextRetryAt,
+            lastError: lastError,
+            isDeadLetter: isDeadLetter,
+            isConflict: isConflict,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$SyncQueueEntriesTableProcessedTableManager = ProcessedTableManager<
+    _$LocalDatabase,
+    $SyncQueueEntriesTable,
+    SyncQueueEntryEntity,
+    $$SyncQueueEntriesTableFilterComposer,
+    $$SyncQueueEntriesTableOrderingComposer,
+    $$SyncQueueEntriesTableAnnotationComposer,
+    $$SyncQueueEntriesTableCreateCompanionBuilder,
+    $$SyncQueueEntriesTableUpdateCompanionBuilder,
+    (
+      SyncQueueEntryEntity,
+      BaseReferences<_$LocalDatabase, $SyncQueueEntriesTable,
+          SyncQueueEntryEntity>
+    ),
+    SyncQueueEntryEntity,
+    PrefetchHooks Function()>;
 
 class $LocalDatabaseManager {
   final _$LocalDatabase _db;
@@ -2315,4 +3111,6 @@ class $LocalDatabaseManager {
       $$TranscriptsTableTableManager(_db, _db.transcripts);
   $$TranscriptSummariesTableTableManager get transcriptSummaries =>
       $$TranscriptSummariesTableTableManager(_db, _db.transcriptSummaries);
+  $$SyncQueueEntriesTableTableManager get syncQueueEntries =>
+      $$SyncQueueEntriesTableTableManager(_db, _db.syncQueueEntries);
 }
