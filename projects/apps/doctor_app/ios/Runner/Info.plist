@@ -70,5 +70,29 @@
 	<string>This app requires microphone access to record patient consultations.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>This app requires speech recognition to transcribe consultations into text.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Workstream 8 (Security): arbitrary cleartext loads are forbidden.
+		     Only the local dev backend (localhost/127.0.0.1) is exempted. -->
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+			</dict>
+			<key>127.0.0.1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

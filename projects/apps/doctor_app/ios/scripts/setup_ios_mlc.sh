@@ -63,47 +63,49 @@ echo ""
 
 # ── 1. Verify prerequisites ─────────────────────────────────────────
 
-check_command() {
-    if ! command -v "$1" &> /dev/null; then
-        echo "❌ $1 is not installed. $2"
-        exit 1
-    fi
-    echo "✅ $1 found: $(command -v "$1")"
-}
+VENV_PY="$IOS_DIR/venv-mlc/bin/python"
+VENV_DIR="$IOS_DIR/venv-mlc/lib/python3.11"
 
-echo "Checking prerequisites..."
-echo ""
-
-check_command "cmake" "Install via: brew install cmake (requires >= 3.24)"
-check_command "git-lfs" "Install via: brew install git-lfs && git lfs install"
-check_command "rustc" "Install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-check_command "cargo" "Install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-check_command "python3" "Install via: brew install python@3.11"
-
-# Check CMake version
-CMAKE_VERSION=$(cmake --version | head -1 | grep -oE '[0-9]+\.[0-9]+')
-CMAKE_MAJOR=$(echo "$CMAKE_VERSION" | cut -d. -f1)
-CMAKE_MINOR=$(echo "$CMAKE_VERSION" | cut -d. -f2)
-if [ "$CMAKE_MAJOR" -lt 3 ] || ([ "$CMAKE_MAJOR" -eq 3 ] && [ "$CMAKE_MINOR" -lt 24 ]); then
-    echo "❌ CMake >= 3.24 required (found $CMAKE_VERSION)"
+if [ ! -x "$VENV_PY" ]; then
+    echo "❌ Virtual env not found at $VENV_PY"
+    echo "   Create it with: python3 -m venv ios/venv-mlc"
     exit 1
 fi
-echo "✅ CMake version: $CMAKE_VERSION"
+echo "✅ venv python found: $VENV_PY"
 
-# Check git-lfs is initialized
-if ! git lfs version &> /dev/null; then
-    echo "⚠️  git-lfs not initialized. Running: git lfs install"
-    git lfs install
-fi
-
-# Check mlc_llm pip package
-if ! python3 -c "import mlc_llm" 2>/dev/null; then
-    echo ""
-    echo "⚠️  mlc_llm Python package not found."
-    echo "   Installing via: pip install mlc-llm mlc-ai-nightly -f https://mlc.ai/wheels"
-    pip install mlc-llm mlc-ai-nightly -f https://mlc.ai/wheels
+# mlc_llm must be installed in the venv from MLC's wheel index
+# (mlc-llm/mlc-ai are NOT on PyPI). Stable 0.20.0 pair + the matching
+# tvm-ffi built from the vendored source tree (PyPI's apache-tvm-ffi is
+# ABI-incompatible with the macOS wheels).
+if ! "$VENV_PY" -c "import mlc_llm" 2>/dev/null; then
+    echo "⚠️  mlc_llm not importable in venv. Expected setup:"
+    echo "   1) $VENV_PY -m pip install cmake ninja"
+    echo "   2) $VENV_PY -m pip install --pre -f https://mlc.ai/wheels mlc-ai-cpu mlc-llm-cpu"
+    echo "   3) git -C $IOS_DIR/mlc-llm/3rdparty/tvm/3rdparty/tvm-ffi checkout 3c35034fd"
+    echo "   4) $VENV_PY -m pip install $IOS_DIR/mlc-llm/3rdparty/tvm/3rdparty/tvm-ffi"
+    echo "   5) $VENV_PY -m pip install pytest"
+    echo "   6) Re-sign native libs (see resign step below)."
+    exit 1
 fi
 echo "✅ mlc_llm Python package found"
+
+# HuggingFace now requires authentication for model downloads.
+if [ -z "${HF_TOKEN:-}" ] && [ ! -f "$HOME/.cache/huggingface/token" ]; then
+    echo "❌ No HuggingFace token found (HF_TOKEN unset, no ~/.cache/huggingface/token)."
+    echo "   Create a read token at https://huggingface.co/settings/tokens and run:"
+    echo "   export HF_TOKEN=hf_..."
+    exit 1
+fi
+echo "✅ HuggingFace token found"
+
+# macOS 26 kills unsigned native dylibs at load time (SIGKILL on import).
+# The MLC wheels ship invalidly-signed binaries; ad-hoc re-signing is
+# required after every pip install that touches mlc/tvm/tvm_ffi.
+echo "Re-signing native libraries in the venv (macOS 26 requirement)..."
+find "$VENV_DIR/lib" -name "*.so" -o -name "*.dylib" 2>/dev/null | while read -r f; do
+    codesign -f -s - "$f" 2>/dev/null || echo "  (skipped: $f)"
+done
+echo "✅ Native libraries re-signed"
 
 echo ""
 echo "All prerequisites verified."
@@ -118,6 +120,8 @@ cat > "$CONFIG_FILE" << CONFIG_EOF
   "model_list": [
     {
       "model": "$MODEL",
+      "model_id": "${MODEL_LIB}",
+      "estimated_vram_bytes": 190000000,
       "bundle_weight": true,
       "overrides": {
         "context_window_size": 2048,
@@ -142,8 +146,9 @@ echo ""
 
 cd "$IOS_DIR"
 
-python3 -m mlc_llm package "$CONFIG_FILE" \
-    --device iphone \
+"$VENV_PY" -m mlc_llm package \
+    --package-config "$CONFIG_FILE" \
+    --mlc-llm-source-dir "$IOS_DIR/mlc-llm" \
     --output "$IOS_DIR/mlc-llm" \
     2>&1 | tee "$IOS_DIR/mlc_package_output.log"
 
@@ -164,7 +169,28 @@ find "$IOS_DIR/mlc-llm" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.j
     xargs sha256sum > "$IOS_DIR/mlc-llm/SHA256SUMS.txt"
 
 echo "✅ Checksums saved to $IOS_DIR/mlc-llm/SHA256SUMS.txt"
-cat "$IOS_DIR/mlc-llm/SHA256SUMS.txt"
+
+# ── 4b. Emit checksums.sha256 for runtime verification ──────────────
+# MLCLLMHandler reads `checksums.sha256` from the bundle and exposes it
+# via getModelInfo; ModelManagerCubit logs it during verification.
+# ios/Runner is a synchronized Xcode group, so this file is bundled
+# automatically when the app builds.
+echo ""
+echo "Writing bundle checksums.sha256..."
+MODEL_DIR2="$IOS_DIR/mlc-llm/$MODEL_LIB"
+BUNDLE_CHECKSUM=""
+if [ -d "$MODEL_DIR2" ]; then
+  MODEL_BIN=$(find "$MODEL_DIR2" -maxdepth 1 -type f -name "*.bin" | head -1)
+  if [ -n "$MODEL_BIN" ]; then
+    BUNDLE_CHECKSUM=$(sha256sum "$MODEL_BIN" | awk '{print $1}')
+  fi
+fi
+if [ -n "$BUNDLE_CHECKSUM" ]; then
+  printf '%s  %s\n' "$BUNDLE_CHECKSUM" "${MODEL_LIB}.bin" > "$IOS_DIR/Runner/checksums.sha256"
+  echo "✅ Wrote $IOS_DIR/Runner/checksums.sha256 ($BUNDLE_CHECKSUM)"
+else
+  echo "⚠️  Model artifacts not found; leaving checksums.sha256 untouched."
+fi
 
 echo ""
 echo "═══════════════════════════════════════════════════"

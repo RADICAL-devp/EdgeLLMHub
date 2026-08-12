@@ -3,8 +3,10 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+#if canImport(MLCSwift)
   /// Keep a strong reference to the MLC handler so it isn't deallocated.
   private var mlcHandler: MLCLLMHandler?
+#endif
 
   override func application(
     _ application: UIApplication,
@@ -21,7 +23,12 @@ import UIKit
     }
 
     let messenger = controller.binaryMessenger
+#if canImport(MLCSwift)
     mlcHandler = MLCLLMHandler(messenger: messenger)
+#else
+    // MLCSwift package not linked — native LLM unavailable until it is
+    // added in Xcode; the app falls back to the cloud LLM.
+#endif
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

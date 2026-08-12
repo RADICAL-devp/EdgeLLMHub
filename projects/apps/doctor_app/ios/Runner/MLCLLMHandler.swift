@@ -1,15 +1,24 @@
 import Flutter
 import Foundation
+#if canImport(MLCSwift)
 import MLCSwift
+#else
+// Native on-device LLM is disabled until the MLCSwift Swift Package is
+// added to the Xcode project (File → Add Package Dependencies → Add Local
+// → ios/mlc-llm/ios/MLCSwift). The Dart adapter then reports the engine as
+// unavailable and the app falls back to the cloud LLM.
+#endif
 
-/// Bridges Flutter to MLCSwift for on-device SmolLM-350M inference.
+#if canImport(MLCSwift)
+
+/// Bridges Flutter to MLCSwift for on-device SmolLM-360M inference.
 final class MLCLLMHandler: NSObject {
   private static let methodChannelName = "com.example.clinical/llm"
   private static let streamChannelName = "com.example.clinical/llm_stream"
   private static let doneSentinel = "[DONE]"
-  // Model directory name as produced by `mlc_llm package` with HF://HuggingFaceTB/SmolLM-350M-Instruct + q4f16_1
-  private static let modelBundleName = "SmolLM-350M-Instruct-q4f16_1-MLC"
-  private static let modelLib = "SmolLM-350M-Instruct-q4f16_1-MLC"
+  // Model directory name as produced by `mlc_llm package` with HF://HuggingFaceTB/SmolLM-360M-Instruct + q4f16_1
+  private static let modelBundleName = "SmolLM-360M-Instruct-q4f16_1-MLC"
+  private static let modelLib = "SmolLM-360M-Instruct-q4f16_1-MLC"
   private static let maxContextTokens = 2048
 
   private let methodChannel: FlutterMethodChannel
@@ -42,7 +51,43 @@ final class MLCLLMHandler: NSObject {
   }
 
   private var modelPath: String? {
-    Bundle.main.path(forResource: Self.modelBundleName, ofType: nil)
+    // Primary: the model downloaded on first run. The Dart ModelManagerCubit
+    // downloads and checksum-verifies the archive into the app Documents
+    // directory and extracts it there, so this is the single source of truth
+    // for both platforms.
+    if let documentsDir = FileManager.default.urls(
+      for: .documentDirectory,
+      in: .userDomainMask
+    ).first {
+      let downloaded = documentsDir
+        .appendingPathComponent(Self.modelBundleName)
+      var isDir: ObjCBool = false
+      if FileManager.default.fileExists(
+        atPath: downloaded.path,
+        isDirectory: &isDir
+      ), isDir.boolValue {
+        return downloaded.path
+      }
+    }
+    // Legacy/dev fallback: the model folder bundled into the app bundle
+    // (pre-download era, and local `flutter run` setups that copy the model
+    // in as a folder reference).
+    if let path = Bundle.main.path(forResource: Self.modelBundleName, ofType: nil) {
+      return path
+    }
+    // Fallback: synchronized groups may flatten resources — scan the
+    // bundle for any directory whose name contains the model lib.
+    let matchingDir = Bundle.main.urls(
+      forResourcesWithExtension: nil,
+      subdirectory: nil
+    )?.first { url in
+      var isDir: ObjCBool = false
+      return FileManager.default.fileExists(
+        atPath: url.path,
+        isDirectory: &isDir
+      ) && isDir.boolValue && url.lastPathComponent.contains(Self.modelLib)
+    }
+    return matchingDir?.path
   }
 
   private func handleMethodCall(
@@ -133,7 +178,7 @@ final class MLCLLMHandler: NSObject {
     guard !isEngineReady else { return }
     guard let path = modelPath else {
       throw MLCBridgeError.modelNotFound(
-        "SmolLM-350M not bundled. Run ios/scripts/setup_ios_mlc.sh --model HuggingFaceTB/SmolLM-350M-Instruct --quant q4f16_1."
+        "SmolLM-360M not installed. Download it from the Model Manager screen first."
       )
     }
 
@@ -193,15 +238,51 @@ final class MLCLLMHandler: NSObject {
       "modelId": Self.modelBundleName,
       "modelLib": Self.modelLib,
       "modelPath": path ?? "",
-      "bundled": path != nil,
+      "installed": path != nil,
       "ready": isEngineReady,
       "contextWindowTokens": Self.maxContextTokens,
       "checksumSha256": bundleChecksum() ?? "",
-      "runtime": "MLCSwift"
+      "runtime": "MLCSwift",
+      "processor": deviceProcessor(),
     ]
   }
 
+  /// Human-readable execution device: the Metal GPU name when a Metal device
+  /// is available (physical A-series hardware), otherwise the CPU (simulator
+  /// or devices without Metal).
+  private func deviceProcessor() -> String {
+    if let metalDevice = MTLCreateSystemDefaultDevice() {
+      return "\(metalDevice.name) (Metal)"
+    }
+    return "CPU (\(hostCpuArchitecture()))"
+  }
+
+  private func hostCpuArchitecture() -> String {
+    var uts = utsname()
+    uname(&uts)
+    let raw = withUnsafePointer(to: &uts.machine) { pointer in
+      pointer.withMemoryRebound(to: CChar.self, capacity: 64) { cstr in
+        String(cString: cstr)
+      }
+    }
+    return raw
+  }
+
   private func bundleChecksum() -> String? {
+    // The downloaded-model flow verifies the SHA-256 in Dart (single source
+    // of truth); a checksums.sha256 file may still accompany the model in
+    // the Documents dir (written by the download tooling) or ship inside
+    // the bundle for dev builds.
+    if let documentsDir = FileManager.default.urls(
+      for: .documentDirectory,
+      in: .userDomainMask
+    ).first {
+      let checksumFile = documentsDir.appendingPathComponent("checksums.sha256")
+      if let value = try? String(contentsOf: checksumFile, encoding: .utf8)
+        .trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
+        return value
+      }
+    }
     guard let checksumPath = Bundle.main.path(forResource: "checksums", ofType: "sha256") else {
       return nil
     }
@@ -267,3 +348,5 @@ private enum MLCBridgeError: LocalizedError {
     }
   }
 }
+
+#endif  // canImport(MLCSwift)
