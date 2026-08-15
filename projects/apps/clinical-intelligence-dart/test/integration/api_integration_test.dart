@@ -113,7 +113,7 @@ void main() {
     });
 
     test('returns 401 with a tampered token', () async {
-      final token = keys.signToken();
+      final token = await keys.signToken();
       final parts = token.split('.');
       parts[1] = base64Url.encode(
         utf8.encode('{"sub":"intruder","scope":"clinical:write"}'),
@@ -123,7 +123,7 @@ void main() {
     });
 
     test('returns 401 with an expired token', () async {
-      final token = keys.signToken(expiresIn: const Duration(seconds: -60));
+      final token = await keys.signToken(expiresIn: const Duration(seconds: -60));
       final (status, _, _) = await _request('GET', '/', token: token);
       expect(status, 401);
     });
@@ -132,7 +132,7 @@ void main() {
       final (status, headers, body) = await _request(
         'GET',
         '/',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         headers: {'x-correlation-id': 'corr-health-1'},
       );
       expect(status, 200);
@@ -147,7 +147,7 @@ void main() {
 
   group('POST /api/v1/clinical-processing/process', () {
     test('rejects a token without clinical:write scope (403)', () async {
-      final readOnly = keys.signToken(scopes: ['clinical:read']);
+      final readOnly = await keys.signToken(scopes: ['clinical:read']);
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/clinical-processing/process',
@@ -165,7 +165,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/clinical-processing/process',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {'inputText': '   ', 'processingMode': 'VOCAB_ASSIST'},
       );
       expect(status, 400);
@@ -176,7 +176,7 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/clinical-processing/process',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'inputText': 'Patient is stable.',
           'processingMode': 'DO_MAGIC',
@@ -189,7 +189,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/clinical-processing/process',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'inputText': 'Patient reports SOB and DOE . BP 130 / 85',
           'processingMode': 'VOCAB_ASSIST',
@@ -211,7 +211,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/clinical-processing/process',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'inputText': '  Doctor: Good   morning.   Patient:   Hi.  ',
           'processingMode': 'CLEAN_TRANSCRIPT',
@@ -229,7 +229,7 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/transcript-summary/generate',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'consultationId': 'itest-sum-0',
           'patientId': 'p-1',
@@ -244,7 +244,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/transcript-summary/generate',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'consultationId': 'itest-sum-1',
           'patientId': 'p-1',
@@ -273,7 +273,7 @@ void main() {
       final (status, _, _) = await _request(
         'GET',
         '/api/v1/transcript-summary/itest-missing',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 404);
     });
@@ -282,7 +282,7 @@ void main() {
       final (status, _, _) = await _request(
         'GET',
         '/api/v1/transcript-summary/itest-sum-1',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 200);
     });
@@ -292,7 +292,7 @@ void main() {
       await _request(
         'POST',
         '/api/v1/transcript-summary/generate',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'consultationId': 'itest-roundtrip',
           'patientId': 'p-2',
@@ -303,7 +303,7 @@ void main() {
       final (status, _, body) = await _request(
         'GET',
         '/api/v1/transcript-summary/itest-roundtrip',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 200);
       final json = jsonDecode(body) as Map<String, dynamic>;
@@ -320,7 +320,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/transcript-summary/itest-roundtrip/regenerate',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 200);
       final json = jsonDecode(body) as Map<String, dynamic>;
@@ -332,7 +332,7 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/transcript-summary/itest-no-such/regenerate',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 400);
     });
@@ -376,7 +376,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/transcript-summary/structured',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'transcriptText': '56 year old male with SOB and DOE for 2 weeks.',
         },
@@ -396,7 +396,7 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/transcript-summary/structured',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {'transcriptText': '   '},
       );
       expect(status, 400);
@@ -406,7 +406,7 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/transcript-summary/structured',
-        token: keys.signToken(scopes: ['clinical:read']),
+        token: await keys.signToken(scopes: ['clinical:read']),
         body: {'transcriptText': 'Patient stable.'},
       );
       expect(status, 403);
@@ -416,7 +416,7 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/transcript-summary/structured',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 400);
     });
@@ -427,7 +427,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/transcript-summary/context-enriched',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'transcriptText': 'Patient reports headaches.',
           'pastContext': 'Known migraine history.',
@@ -438,14 +438,49 @@ void main() {
       expect(json['complaint'], isNotEmpty);
     });
 
-    test('rejects missing pastContext (400)', () async {
-      final (status, _, _) = await _request(
+    test('auto-retrieves past context from the vector store when omitted '
+        '(200)', () async {
+      // Seed the vector store through the orchestrator path, then call the
+      // route without pastContext — retrieval must succeed and produce a
+      // summary (vector search degrades gracefully when the sqlite-vec
+      // extension is unavailable).
+      await _request(
+        'POST',
+        '/api/v1/transcript-summary/generate',
+        token: await keys.signToken(),
+        body: {
+          'transcriptText':
+              'Patient with chronic headaches for 3 months. MRI normal.',
+          'consultationId': 'itest-vec-seed',
+          'patientId': 'p-1',
+          'doctorId': 'dr-smith',
+          'consultationMode': 'IN_PERSON',
+        },
+      );
+      final (status, _, body) = await _request(
         'POST',
         '/api/v1/transcript-summary/context-enriched',
-        token: keys.signToken(),
-        body: {'transcriptText': 'Patient reports headaches.'},
+        token: await keys.signToken(),
+        body: {'transcriptText': 'Patient still reports headaches.'},
       );
-      expect(status, 400);
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['complaint'], isNotEmpty);
+    });
+
+    test('uses explicit pastContext when provided (200)', () async {
+      final (status, _, body) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/context-enriched',
+        token: await keys.signToken(),
+        body: {
+          'transcriptText': 'Reports shortness of breath.',
+          'pastContext': 'Patient had a mild asthma episode last year.',
+        },
+      );
+      expect(status, 200);
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      expect(json['complaint'], isNotEmpty);
     });
   });
 
@@ -454,7 +489,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/transcript-summary/executive',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {'transcriptText': '56 year old male with SOB for 2 weeks.'},
       );
       expect(status, 200);
@@ -469,7 +504,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/transcript-summary/doctor-note',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {'transcriptText': '56 year old male with SOB for 2 weeks.'},
       );
       expect(status, 200);
@@ -506,7 +541,7 @@ void main() {
       final (syncStatus, _, syncBody) = await _request(
         'POST',
         '/api/v1/notes/sync',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: payload,
       );
       expect(syncStatus, 200);
@@ -515,7 +550,7 @@ void main() {
       final (status, _, body) = await _request(
         'GET',
         '/api/v1/notes/consultation/itest-note-consult-1',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 200);
       final json = jsonDecode(body) as Map<String, dynamic>;
@@ -533,7 +568,7 @@ void main() {
       await _request(
         'POST',
         '/api/v1/notes/sync',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'noteId': 'itest-note-upd',
           'consultationId': 'itest-note-consult-upd',
@@ -548,7 +583,7 @@ void main() {
       final (status, _, body) = await _request(
         'POST',
         '/api/v1/notes/sync',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'noteId': 'itest-note-upd',
           'consultationId': 'itest-note-consult-upd',
@@ -565,7 +600,7 @@ void main() {
       final (getStatus, _, getBody) = await _request(
         'GET',
         '/api/v1/notes/consultation/itest-note-consult-upd',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(getStatus, 200);
       final json = jsonDecode(getBody) as Map<String, dynamic>;
@@ -576,7 +611,7 @@ void main() {
       final (status, _, _) = await _request(
         'GET',
         '/api/v1/notes/consultation/itest-note-missing',
-        token: keys.signToken(),
+        token: await keys.signToken(),
       );
       expect(status, 404);
     });
@@ -585,7 +620,7 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/notes/sync',
-        token: keys.signToken(),
+        token: await keys.signToken(),
         body: {
           'consultationId': 'itest-note-bad',
           'rawText': 'text',
@@ -598,14 +633,96 @@ void main() {
       final (status, _, _) = await _request(
         'POST',
         '/api/v1/notes/sync',
-        token: keys.signToken(scopes: ['clinical:read']),
+        token: await keys.signToken(scopes: ['clinical:read']),
         body: {
           'noteId': 'itest-note-scope',
           'consultationId': 'itest-note-consult-scope',
           'rawText': 'text',
+          'createdAt': '2026-08-01T10:00:00.000Z',
+          'updatedAt': '2026-08-01T10:00:00.000Z',
         },
       );
       expect(status, 403);
     });
   });
+
+  group('GET /metrics', () {
+    test('is exempt from auth and serves Prometheus text format', () async {
+      final (status, headers, body) = await _request('GET', '/metrics');
+      expect(status, 200);
+      expect(headers['content-type'], contains('text/plain'));
+      expect(body, contains('# TYPE http_requests_total counter'));
+      expect(body, contains('# TYPE http_request_duration_seconds histogram'));
+      expect(body, contains('# TYPE llm_inference_duration_seconds histogram'));
+      expect(body, contains('# TYPE active_consultations gauge'));
+    });
+
+    test('records requests with method/path/status labels', () async {
+      final (status, _, body) = await _request('GET', '/metrics');
+      expect(status, 200);
+      expect(body, contains('http_requests_total{method="GET",path="/metrics"'));
+      expect(
+        body,
+        contains('http_request_duration_seconds_bucket{le="+Inf",method="GET",'),
+      );
+    });
+
+    test('tracks active_consultations on generate and regenerate', () async {
+      final (_, _, beforeBody) = await _request('GET', '/metrics');
+      final before = _gaugeValue(beforeBody);
+
+      // Generate a summary — the gauge increments.
+      final (genStatus, _, _) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/generate',
+        token: await keys.signToken(),
+        body: {
+          'consultationId': 'itest-metrics-consult',
+          'patientId': 'p-metrics',
+          'doctorId': 'dr-smith',
+          'transcriptText': 'Patient reports chest pain for 1 day.',
+        },
+      );
+      expect(genStatus, 200);
+
+      final (_, _, afterGen) = await _request('GET', '/metrics');
+      expect(
+        _gaugeValue(afterGen),
+        before + 1,
+        reason: 'generating a summary increments the gauge',
+      );
+
+      // Regenerate — the gauge decrements back.
+      final (regStatus, _, _) = await _request(
+        'POST',
+        '/api/v1/transcript-summary/itest-metrics-consult/regenerate',
+        token: await keys.signToken(),
+      );
+      expect(regStatus, 200);
+
+      final (_, _, afterRegen) = await _request('GET', '/metrics');
+      expect(
+        _gaugeValue(afterRegen),
+        before,
+        reason: 'regenerating a summary decrements the gauge',
+      );
+    });
+
+    test('records llm_inference_duration_seconds with method labels', () async {
+      final (_, _, body) = await _request('GET', '/metrics');
+      expect(
+        body,
+        contains('llm_inference_duration_seconds_bucket{le="+Inf",method="'),
+      );
+      expect(body, contains('llm_inference_duration_seconds_count{method="'));
+    });
+  });
+}
+
+/// Parses the `active_consultations <n>` gauge line from a metrics scrape.
+int _gaugeValue(String metricsBody) {
+  final match = RegExp(r'^active_consultations (\d+)$', multiLine: true)
+      .firstMatch(metricsBody);
+  if (match == null) return 0;
+  return int.parse(match.group(1)!);
 }

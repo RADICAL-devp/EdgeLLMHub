@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/services.dart';
 import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
@@ -23,6 +24,9 @@ class SmolLLMAdapter implements LlmPort {
     _codec,
   );
   static const _generationTimeout = Duration(seconds: 20);
+
+  /// Serializes concurrent [initialize] calls so the engine is loaded once.
+  Future<void>? _initialization;
 
   @override
   Future<String> processText(String input, ProcessingMode mode) async {
@@ -84,6 +88,8 @@ class SmolLLMAdapter implements LlmPort {
     StreamSubscription? subscription;
 
     try {
+      await _ensureInitialized();
+
       final completer = Completer<String>();
       final buffer = StringBuffer();
 
@@ -158,6 +164,17 @@ class SmolLLMAdapter implements LlmPort {
     }
   }
 
+  /// Lazily ensure the native engine is initialized before first use.
+  Future<void> _ensureInitialized() async {
+    if (await isAvailable()) return;
+    _initialization ??= initialize();
+    try {
+      await _initialization;
+    } finally {
+      _initialization = null;
+    }
+  }
+
   /// Check if the MLC engine is initialized and ready.
   Future<bool> isAvailable() async {
     try {
@@ -225,7 +242,7 @@ class SmolLLMAdapter implements LlmPort {
           .timeout(const Duration(seconds: 20));
     } catch (e) {
       // Non-fatal, just log
-      print('MLC warm-up failed: $e');
+      developer.log('MLC warm-up failed: $e', name: 'SmolLLMAdapter');
     }
   }
 

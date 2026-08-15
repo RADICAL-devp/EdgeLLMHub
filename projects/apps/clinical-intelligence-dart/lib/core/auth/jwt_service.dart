@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:clinical_intelligence_dart/core/auth/token_signer.dart';
 import 'package:jose/jose.dart';
 import 'package:pointycastle/digests/sha256.dart';
 
@@ -9,11 +10,12 @@ class JwtService {
     required String privateKeyPem,
     required String publicKeyPem,
     Duration jwksCacheTtl = const Duration(minutes: 5),
-  })  : _privateKey = privateKeyPem,
+    TokenSigner? signer,
+  })  : _signer = signer ?? selectTokenSigner(privateKeyPem: privateKeyPem),
         _publicKey = publicKeyPem,
         _jwksCacheTtl = jwksCacheTtl;
 
-  final String _privateKey;
+  final TokenSigner _signer;
   final String _publicKey;
   final Duration _jwksCacheTtl;
 
@@ -21,27 +23,23 @@ class JwtService {
   Map<String, dynamic>? _jwksCache;
 
   /// Sign a JWT with the given claims.
-  String sign({
+  Future<String> sign({
     required Map<String, dynamic> claims,
     Duration expiresIn = const Duration(hours: 1),
-  }) {
+  }) async {
     final now = DateTime.now().toUtc();
     final exp = now.add(expiresIn);
 
-    final builder = JsonWebSignatureBuilder()
-      ..jsonContent = {
-        ...claims,
-        'iat': now.millisecondsSinceEpoch ~/ 1000,
-        'exp': exp.millisecondsSinceEpoch ~/ 1000,
-      }
-      ..setProtectedHeader('typ', 'JWT')
-      ..addRecipient(
-        JsonWebKey.fromPem(_privateKey),
-        algorithm: 'RS256',
-      );
+    final payload = {
+      ...claims,
+      'iat': now.millisecondsSinceEpoch ~/ 1000,
+      'exp': exp.millisecondsSinceEpoch ~/ 1000,
+    };
+    const header = {'alg': 'RS256', 'typ': 'JWT'};
+    final signingInput = '${_encodeUrl(header)}.${_encodeUrl(payload)}';
 
-    final jws = builder.build();
-    return jws.toCompactSerialization();
+    final signature = await _signer.sign(signingInput);
+    return '$signingInput.${_encodeUrlBytes(signature)}';
   }
 
   /// Verify a JWT and return the claims.
@@ -101,6 +99,12 @@ class JwtService {
     final digest = _sha256(utf8.encode(canonical));
     return base64Url.encode(digest).replaceAll('=', '');
   }
+
+  static String _encodeUrl(Map<String, dynamic> json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+
+  static String _encodeUrlBytes(List<int> bytes) =>
+      base64Url.encode(bytes).replaceAll('=', '');
 
   static List<int> _sha256(List<int> input) {
     final digest = SHA256Digest();

@@ -87,7 +87,7 @@ void main() {
   group('fetchNoteForConsultation', () {
     test('parses the note returned by the backend', () async {
       adapter.responses.add(
-        _Response(
+        const _Response(
           statusCode: 200,
           body: {
             'noteId': 'n1',

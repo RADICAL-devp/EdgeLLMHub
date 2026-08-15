@@ -26,7 +26,7 @@ class NoteRemoteDatasource {
         'patientRecap': note.patientRecap,
         'createdAt': note.createdAt.toIso8601String(),
         'updatedAt': note.updatedAt.toIso8601String(),
-      };
+      }..removeWhere((_, value) => value == null);
 
       await _dio.post('/api/v1/notes/sync', data: payload);
     } on DioException catch (e) {

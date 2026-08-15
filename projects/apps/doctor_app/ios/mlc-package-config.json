@@ -2,10 +2,10 @@
   "device": "iphone",
   "model_list": [
     {
-      "model": "HF://HuggingFaceTB/SmolLM-360M-Instruct",
+      "model": "HF://mlc-ai/SmolLM-360M-Instruct-q4f16_1-MLC",
       "model_id": "SmolLM-360M-Instruct-q4f16_1-MLC",
       "estimated_vram_bytes": 200000000,
-      "bundle_weight": false,
+      "bundle_weight": true,
       "overrides": {
         "context_window_size": 2048,
         "prefill_chunk_size": 512,

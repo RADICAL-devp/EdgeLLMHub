@@ -374,19 +374,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   String _formatExtractedFields(ExtractedFields fields) {
     final buffer = StringBuffer();
-    if (fields.provisionalDiagnosis != null)
+    if (fields.provisionalDiagnosis != null) {
       buffer.writeln('Diagnosis: ${fields.provisionalDiagnosis}');
-    if (fields.duration != null) buffer.writeln('Duration: ${fields.duration}');
-    if (fields.symptoms.isNotEmpty)
+    }
+    if (fields.duration != null) {
+      buffer.writeln('Duration: ${fields.duration}');
+    }
+    if (fields.symptoms.isNotEmpty) {
       buffer.writeln('Symptoms: ${fields.symptoms.join(', ')}');
-    if (fields.medications.isNotEmpty)
+    }
+    if (fields.medications.isNotEmpty) {
       buffer.writeln('Medications: ${fields.medications.join(', ')}');
-    if (fields.allergies.isNotEmpty)
+    }
+    if (fields.allergies.isNotEmpty) {
       buffer.writeln('Allergies: ${fields.allergies.join(', ')}');
-    if (fields.testsRecommended.isNotEmpty)
+    }
+    if (fields.testsRecommended.isNotEmpty) {
       buffer.writeln('Tests: ${fields.testsRecommended.join(', ')}');
-    if (fields.followUpActions.isNotEmpty)
+    }
+    if (fields.followUpActions.isNotEmpty) {
       buffer.writeln('Follow Up: ${fields.followUpActions.join(', ')}');
+    }
     return buffer.toString().trim();
   }
 }

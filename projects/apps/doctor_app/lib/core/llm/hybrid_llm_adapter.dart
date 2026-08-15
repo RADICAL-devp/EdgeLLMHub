@@ -5,40 +5,30 @@ import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 
-/// Three-tier hybrid LLM adapter: native → cloud → stub.
+/// Two-tier hybrid LLM adapter: native → stub.
 ///
 /// Fallback chain:
-///   1. **Native** (on-device MLC on iOS, Gemma on Android)
-///   2. **Cloud** (only if compliance-approved — PHI gate)
-///   3. **Stub** (offline placeholder responses)
+///   1. **Native** (on-device MLC on iOS/Android)
+///   2. **Stub** (offline placeholder responses)
 ///
-/// The adapter tracks per-tier availability and avoids repeated failures
+/// Cloud tier removed — PHI never leaves the device.
+/// The adapter tracks native availability and avoids repeated failures
 /// against a known-broken tier until it is explicitly reset.
 class HybridLlmAdapter implements LlmPort {
   final LlmPort _nativeAdapter;
-  final LlmPort _cloudAdapter;
   final LlmPort _stubAdapter;
 
-  /// Whether cloud processing is allowed by compliance policy.
-  /// When false, PHI never leaves the device — cloud tier is skipped entirely.
-  final bool cloudEnabled;
-
   bool _nativeAvailable = true;
-  bool _cloudAvailable = true;
 
   HybridLlmAdapter({
     required LlmPort nativeAdapter,
-    required LlmPort cloudAdapter,
     required LlmPort stubAdapter,
-    this.cloudEnabled = false,
   })  : _nativeAdapter = nativeAdapter,
-        _cloudAdapter = cloudAdapter,
         _stubAdapter = stubAdapter;
 
-  /// Reset availability flags (e.g., after network reconnection).
+  /// Reset availability flags (e.g., after engine restart).
   void resetAvailability() {
     _nativeAvailable = true;
-    _cloudAvailable = true;
   }
 
   @override
@@ -46,7 +36,6 @@ class HybridLlmAdapter implements LlmPort {
     return _withFallback(
       'processText',
       native: () => _nativeAdapter.processText(input, mode),
-      cloud: () => _cloudAdapter.processText(input, mode),
       stub: () => _stubAdapter.processText(input, mode),
     );
   }
@@ -56,7 +45,6 @@ class HybridLlmAdapter implements LlmPort {
     return _withFallback(
       'generateStructuredSummary',
       native: () => _nativeAdapter.generateStructuredSummary(transcriptText),
-      cloud: () => _cloudAdapter.generateStructuredSummary(transcriptText),
       stub: () => _stubAdapter.generateStructuredSummary(transcriptText),
     );
   }
@@ -70,8 +58,6 @@ class HybridLlmAdapter implements LlmPort {
       'generateContextEnrichedSummary',
       native: () => _nativeAdapter.generateContextEnrichedSummary(
           transcriptText, pastContext),
-      cloud: () => _cloudAdapter.generateContextEnrichedSummary(
-          transcriptText, pastContext),
       stub: () => _stubAdapter.generateContextEnrichedSummary(
           transcriptText, pastContext),
     );
@@ -82,7 +68,6 @@ class HybridLlmAdapter implements LlmPort {
     return _withFallback(
       'generateExecutiveSummary',
       native: () => _nativeAdapter.generateExecutiveSummary(transcriptText),
-      cloud: () => _cloudAdapter.generateExecutiveSummary(transcriptText),
       stub: () => _stubAdapter.generateExecutiveSummary(transcriptText),
     );
   }
@@ -92,20 +77,17 @@ class HybridLlmAdapter implements LlmPort {
     return _withFallback(
       'generateDoctorNote',
       native: () => _nativeAdapter.generateDoctorNote(transcriptText),
-      cloud: () => _cloudAdapter.generateDoctorNote(transcriptText),
       stub: () => _stubAdapter.generateDoctorNote(transcriptText),
     );
   }
 
-  /// Execute with three-tier fallback: native → cloud → stub.
+  /// Execute with two-tier fallback: native → stub.
   ///
   /// - Skips native if previously failed (until [resetAvailability]).
-  /// - Skips cloud if compliance is not approved or previously failed.
   /// - Stub always succeeds (hardcoded responses).
   Future<T> _withFallback<T>(
     String methodName, {
     required Future<T> Function() native,
-    required Future<T> Function() cloud,
     required Future<T> Function() stub,
   }) async {
     // --- Tier 1: Native (on-device) ---
@@ -129,29 +111,7 @@ class HybridLlmAdapter implements LlmPort {
       }
     }
 
-    // --- Tier 2: Cloud (compliance-gated) ---
-    if (cloudEnabled && _cloudAvailable) {
-      try {
-        final result = await cloud();
-        // Cloud succeeded — mark native as potentially recoverable
-        return result;
-      } on ComplianceException catch (e) {
-        _log(methodName, 'Cloud blocked by compliance: $e');
-        _cloudAvailable = false;
-      } on NetworkException catch (e) {
-        _log(methodName, 'Cloud network error: $e');
-        if (!e.isTransient) {
-          _cloudAvailable = false;
-        }
-      } catch (e) {
-        _log(methodName, 'Cloud unexpected error: $e');
-        _cloudAvailable = false;
-      }
-    } else if (!cloudEnabled) {
-      _log(methodName, 'Cloud fallback disabled (compliance not approved)');
-    }
-
-    // --- Tier 3: Stub (always available) ---
+    // --- Tier 2: Stub (always available) ---
     _log(methodName, 'Falling back to offline stub');
     return stub();
   }

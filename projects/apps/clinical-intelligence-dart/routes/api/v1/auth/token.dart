@@ -32,7 +32,7 @@ Future<Response> onRequest(RequestContext context) async {
   final jwtService = context.read<JwtService>();
   final expiresIn = Duration(hours: 12);
 
-  final token = jwtService.sign(
+  final token = await jwtService.sign(
     claims: {
       'sub': 'dev-doctor',
       'org': 'dev-clinic',

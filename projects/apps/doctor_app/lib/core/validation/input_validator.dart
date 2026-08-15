@@ -72,7 +72,7 @@ class InputValidator {
 
     for (final pattern in _injectionPatterns) {
       if (pattern.hasMatch(lower)) {
-        throw ValidationException(
+        throw const ValidationException(
           'Input contains a potentially unsafe pattern that may '
           'interfere with AI processing. Please review and resubmit.',
           reason: ValidationFailureReason.promptInjection,

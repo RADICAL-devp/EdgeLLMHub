@@ -127,4 +127,22 @@ void main() {
       expect(cubit.state, isA<AiAssistInitial>());
     });
   });
+
+  group('AiAssist state equality', () {
+    test('SuggestionReady compares by suggestion and action', () {
+      expect(
+        const AiAssistSuggestionReady('a', 'b'),
+        const AiAssistSuggestionReady('a', 'b'),
+      );
+      expect(
+        const AiAssistSuggestionReady('a', 'b'),
+        isNot(const AiAssistSuggestionReady('a', 'c')),
+      );
+    });
+
+    test('Error compares by message', () {
+      expect(const AiAssistError('x'), const AiAssistError('x'));
+      expect(const AiAssistError('x'), isNot(const AiAssistError('y')));
+    });
+  });
 }

@@ -1,9 +1,58 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:doctor_app/features/note_assist/data/local/local_database.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+class _FakePathProvider extends PathProviderPlatform {
+  final String dir;
+
+  _FakePathProvider(this.dir);
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => dir;
+}
+
 void main() {
+  test('onCreate creates all tables on a fresh database', () async {
+    final rawDb = sqlite3.openInMemory();
+    rawDb.execute('PRAGMA user_version = 0;');
+
+    final db = LocalDatabase.connect(NativeDatabase.opened(rawDb));
+
+    // First query triggers the lazy open → onCreate.
+    await db.select(db.doctorNotes).get();
+
+    final tables = rawDb
+        .select("SELECT name FROM sqlite_master WHERE type='table'")
+        .map((row) => row['name'] as String)
+        .toList();
+    expect(tables, containsAll(['doctor_notes', 'transcripts',
+        'transcript_summaries', 'sync_queue_entries']));
+
+    await db.close();
+  });
+
+  test('default constructor opens the on-disk database lazily', () async {
+    final dir = Directory.systemTemp.createTempSync('local-db-test');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    PathProviderPlatform.instance = _FakePathProvider(dir.path);
+    final db = LocalDatabase();
+
+    // First query triggers the lazy native connection and creates the file.
+    final count = await db.select(db.doctorNotes).get();
+    expect(count, isEmpty);
+    expect(
+      File('${dir.path}/doctor_notes.sqlite').existsSync(),
+      isTrue,
+      reason: 'lazy connection must create the sqlite file',
+    );
+
+    await db.close();
+  });
+
   test('migration from v1 to v2 works without data loss', () async {
     // 1. Create a raw in-memory database
     final rawDb = sqlite3.openInMemory();

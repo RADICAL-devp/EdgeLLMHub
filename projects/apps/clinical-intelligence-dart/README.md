@@ -166,6 +166,32 @@ For richer processing with a local LLM:
 dart test
 ```
 
+## JWT Signing & Key Rotation
+
+JWT signing is abstracted behind a `TokenSigner` (`lib/core/auth/token_signer.dart`):
+
+- **LocalKeySigner (default / dev)**: signs RS256 JWTs with the local private
+  key PEM (`JWT_PRIVATE_KEY`, falling back to the embedded dev key).
+- **KmsSigner (production)**: signs via the AWS KMS `Sign` API
+  (`RSASSA_PKCS1_V1_5_SHA256`) when `AWS_KMS_KEY_ID` is set. Configure with
+  `AWS_KMS_REGION` (default `us-east-1`), `AWS_ACCESS_KEY_ID`,
+  `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN`. Requests are
+  signed with AWS Signature V4 using `package:http` — no AWS SDK dependency.
+
+Verification is unaffected by the signer: it always uses the static public key
+(`JWT_PUBLIC_KEY`) and the JWKS endpoint, so signing and verification stay
+asymmetric.
+
+### Key Rotation
+
+KMS-backed signing supports key rotation via KMS key aliases: point
+`AWS_KMS_KEY_ID` at an alias (e.g. `alias/jwt-signing/current`) and repoint the
+alias to the new key when rotating. New JWTs are then signed with the rotated
+KMS key while verification keeps using the static public key until rotation
+completes — update `JWT_PUBLIC_KEY` (and any external consumers of the JWKS
+endpoint) to the new key's public key as part of the rotation, since
+verification is not KMS-backed.
+
 ## Assumptions
 
 1. **Persistence**: Uses in-memory repositories. Data is lost on server restart.

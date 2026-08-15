@@ -12,6 +12,7 @@
         "drift",
         "http",
         "jose",
+        "json_schema",
         "meta",
         "path",
         "pointycastle",
@@ -134,6 +135,17 @@
         "web_socket_channel",
         "webkit_inspection_protocol",
         "yaml"
+      ]
+    },
+    {
+      "name": "json_schema",
+      "version": "5.2.2",
+      "dependencies": [
+        "collection",
+        "http",
+        "logging",
+        "rfc_6901",
+        "uri"
       ]
     },
     {
@@ -715,6 +727,19 @@
       ]
     },
     {
+      "name": "uri",
+      "version": "1.0.0",
+      "dependencies": [
+        "matcher",
+        "quiver"
+      ]
+    },
+    {
+      "name": "rfc_6901",
+      "version": "0.2.1",
+      "dependencies": []
+    },
+    {
       "name": "convert",
       "version": "3.1.2",
       "dependencies": [
@@ -908,19 +933,19 @@
       ]
     },
     {
+      "name": "quiver",
+      "version": "3.2.2",
+      "dependencies": [
+        "matcher"
+      ]
+    },
+    {
       "name": "posix",
       "version": "6.5.2",
       "dependencies": [
         "ffi",
         "meta",
         "path"
-      ]
-    },
-    {
-      "name": "quiver",
-      "version": "3.2.2",
-      "dependencies": [
-        "matcher"
       ]
     },
     {

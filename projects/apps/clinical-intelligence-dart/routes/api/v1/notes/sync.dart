@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:clinical_intelligence_dart/application/ports/doctor_note_repository.dart';
 import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
 import 'package:clinical_intelligence_dart/core/models/doctor_note.dart';
+import 'package:clinical_intelligence_dart/core/validation/request_validator.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// POST /api/v1/notes/sync
@@ -11,7 +12,9 @@ import 'package:dart_frog/dart_frog.dart';
 /// Upsert a doctor note synced from the mobile app (last-write-wins).
 /// Body: DoctorNote JSON (see lib/core/models/doctor_note.dart).
 Future<Response> onRequest(RequestContext context) async {
-  return requireAuth(_handleSync, scopes: ['clinical:write'])(context);
+  return jsonSchemaValidation(RequestSchemas.notesSync)(
+    requireAuth(_handleSync, scopes: ['clinical:write']),
+  )(context);
 }
 
 Future<Response> _handleSync(RequestContext context) async {

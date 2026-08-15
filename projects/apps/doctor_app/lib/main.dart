@@ -6,6 +6,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:ui';
 
 import 'core/config/environment.dart';
 import 'core/services/speech_service.dart';
@@ -23,8 +24,12 @@ import 'core/repositories/drift_summary_repository.dart';
 import 'core/network/retry_interceptor.dart';
 import 'core/network/circuit_breaker.dart';
 import 'core/network/auth_interceptor.dart';
+import 'core/network/certificate_pinner.dart';
 import 'core/auth/auth_token_service.dart';
+import 'core/auth/token_storage.dart';
 import 'core/validation/input_validator.dart';
+import 'core/crypto/phi_encryption_service.dart';
+import 'core/observability/metrics_collector.dart';
 
 import 'core/application_services/transcript_chunking_service.dart';
 import 'core/application_services/transcript_normalization_service.dart';
@@ -42,6 +47,8 @@ import 'features/note_assist/data/local/note_local_repository.dart';
 import 'features/note_assist/data/remote/note_remote_datasource.dart';
 import 'features/note_assist/data/repositories/note_sync_repository.dart';
 import 'features/note_assist/data/services/on_device_llm_service.dart';
+import 'features/note_assist/data/services/agora_rtt_service.dart';
+import 'features/note_assist/domain/services/diagnostics_exporter.dart';
 import 'features/note_assist/domain/services/note_assist_service.dart';
 import 'features/note_assist/presentation/cubit/note_editor_cubit.dart';
 import 'features/note_assist/presentation/cubit/ai_assist_cubit.dart';
@@ -52,6 +59,21 @@ import 'features/note_assist/presentation/pages/settings_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Surface ALL uncaught errors with full stack traces to the console —
+  // the default dart_vm_initializer logger truncates them, hiding the
+  // real startup failure behind a white screen.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('═══ UNCAUGHT FLUTTER ERROR (full stack) ═══');
+    debugPrint(details.toString());
+    debugPrint('═══ END ERROR ═══');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('═══ UNCAUGHT ASYNC ERROR ═══');
+    debugPrint('$error\n$stack');
+    debugPrint('═══ END ERROR ═══');
+    return true;
+  };
   await setupDependencies();
   runApp(const DoctorApp());
 }
@@ -74,6 +96,9 @@ Future<void> setupDependencies() async {
   final capabilityService = DeviceCapabilityService();
   getIt.registerSingleton<DeviceCapabilityService>(capabilityService);
 
+  // ── 1b. Observability ──────────────────────────────────────────────
+  getIt.registerSingleton<MetricsCollector>(MetricsCollector.instance);
+
   // ── 2. Database ───────────────────────────────────────────────────
   final db = LocalDatabase();
   getIt.registerSingleton<LocalDatabase>(db);
@@ -92,8 +117,14 @@ Future<void> setupDependencies() async {
     sendTimeout: const Duration(seconds: 30),
   ));
 
+  // SHA-256 certificate pinning — active once BACKEND_CERT_PIN is defined
+  // at build time (see core/network/certificate_pinner.dart).
+  CertificatePinner().applyTo(dio);
+
   // Add interceptors in order: auth → retry → logging (debug only)
-  final authTokenService = AuthTokenService(dio);
+  // Auth tokens persist via Keychain/Keystore (flutter_secure_storage), never
+  // SharedPreferences — see core/auth/token_storage.dart.
+  final authTokenService = AuthTokenService(dio, storage: SecureTokenStorage());
   getIt.registerLazySingleton<AuthTokenService>(() => authTokenService);
   dio.interceptors.add(AuthInterceptor(dio, authTokenService));
   dio.interceptors.add(RetryInterceptor(dio));
@@ -137,6 +168,20 @@ Future<void> setupDependencies() async {
   );
   await syncQueue.initialize();
   getIt.registerSingleton<SyncQueueService>(syncQueue);
+
+  // ── 6b. Diagnostics export ──────────────────────────────────────────
+  getIt.registerSingleton<DiagnosticsExporter>(DiagnosticsExporter());
+
+  // ── 6c. PHI Encryption Service ──────────────────────────────────────
+  getIt.registerSingleton<PhiEncryptionService>(PhiEncryptionService());
+
+  // ── 6d. Agora RTT Service ───────────────────────────────────────────
+  final agoraConfig = AgoraRttConfig.fromEnvironment();
+  if (agoraConfig != null) {
+    getIt.registerSingleton<AgoraRttService>(
+      AgoraRttService(config: agoraConfig, dio: getIt<Dio>()),
+    );
+  }
 
   getIt.registerLazySingleton<TranscriptRepository>(
       () => DriftTranscriptRepository(getIt<LocalDatabase>()));
@@ -199,6 +244,7 @@ Future<void> setupDependencies() async {
 // ═══════════════════════════════════════════════════════════════════════════
 
 final GoRouter _router = GoRouter(
+  navigatorKey: _rootNavigatorKey,
   initialLocation: '/consultations',
   routes: [
     GoRoute(
@@ -267,9 +313,12 @@ class _DoctorAppState extends State<DoctorApp> {
     final prefs = await SharedPreferences.getInstance();
     final hasAcknowledged = prefs.getBool('ai_disclaimer_acknowledged') ?? false;
 
-    if (!hasAcknowledged && mounted) {
+    // Dialog must be shown with a context UNDER MaterialApp —
+    // DoctorApp's own context is above it and has no Navigator.
+    final navContext = _rootNavigatorKey.currentContext;
+    if (!hasAcknowledged && navContext != null && navContext.mounted) {
       await showDialog<void>(
-        context: context,
+        context: navContext,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
           icon: const Icon(Icons.smart_toy, size: 48, color: Colors.blue),
@@ -331,6 +380,17 @@ class _DoctorAppState extends State<DoctorApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'Doctor Note App',
+      // Dynamic type: scale all text with the system text scale so large
+      // accessibility sizes work across the app (no fixed-font overflow).
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: MediaQuery.of(context).textScaler.clamp(
+                minScaleFactor: 0.9,
+                maxScaleFactor: 2.2,
+              ),
+        ),
+        child: child!,
+      ),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
@@ -350,6 +410,10 @@ class _DoctorAppState extends State<DoctorApp> {
   }
 }
 
+/// Root navigator key — lets dialogs be shown from contexts ABOVE the
+/// MaterialApp (e.g. DoctorApp's own State).
+final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+
 /// A single point in the AI disclaimer dialog.
 class _DisclaimerPoint extends StatelessWidget {
   final IconData icon;
@@ -365,7 +429,10 @@ class _DisclaimerPoint extends StatelessWidget {
         Icon(icon, size: 20, color: Colors.blue.shade700),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(text, style: const TextStyle(fontSize: 13)),
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
       ],
     );

@@ -53,7 +53,7 @@ class AuthInterceptor extends Interceptor {
 
     if (!isTokenPath && isUnauthorized && !alreadyRetried) {
       _retried.add(options);
-      _tokenService.invalidate();
+      await _tokenService.invalidate();
       try {
         final token = await _tokenService.getToken();
         options.headers['Authorization'] = 'Bearer $token';

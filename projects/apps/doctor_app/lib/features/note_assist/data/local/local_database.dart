@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:doctor_app/core/crypto/encrypted_database.dart';
 
 part 'local_database.g.dart';
 
@@ -75,12 +76,12 @@ class SyncQueueEntries extends Table {
 
 @DriftDatabase(tables: [DoctorNotes, Transcripts, TranscriptSummaries, SyncQueueEntries])
 class LocalDatabase extends _$LocalDatabase {
-  LocalDatabase() : super(_openConnection());
-  
-  LocalDatabase.connect(QueryExecutor e) : super(e);
+  LocalDatabase() : super(_openEncryptedConnection());
+
+  LocalDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -107,6 +108,11 @@ class LocalDatabase extends _$LocalDatabase {
           // v4 → v5: Added richTextDelta for the Quill rich-text editor.
           await m.addColumn(doctorNotes, doctorNotes.richTextDelta);
         }
+        if (from == 5) {
+          // v5 → v6: Database encryption enabled (SQLCipher).
+          // No schema changes needed; encryption is transparent at the connection level.
+          // If migrating from unencrypted to encrypted, data will be re-encrypted on first access.
+        }
       },
       beforeOpen: (details) async {
         // Validate schema integrity on every launch.
@@ -116,10 +122,8 @@ class LocalDatabase extends _$LocalDatabase {
   }
 }
 
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'doctor_notes.sqlite'));
-    return NativeDatabase.createInBackground(file);
-  });
+LazyDatabase _openEncryptedConnection() {
+  return createEncryptedDatabaseConnection(
+    databaseName: 'doctor_notes_encrypted.sqlite',
+  );
 }

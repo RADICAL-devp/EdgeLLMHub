@@ -42,7 +42,7 @@ class ExtractedFields extends Equatable {
       'testsRecommended': testsRecommended,
       'followUpActions': followUpActions,
       'provisionalDiagnosis': provisionalDiagnosis,
-    };
+    }..removeWhere((_, value) => value == null);
   }
 
   @override

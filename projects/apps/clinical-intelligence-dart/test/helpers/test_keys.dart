@@ -27,7 +27,7 @@ class TestKeys {
     );
   }
 
-  String signToken({
+  Future<String> signToken({
     String sub = 'dr-smith',
     String org = 'clinic-a',
     List<String> roles = const ['doctor'],

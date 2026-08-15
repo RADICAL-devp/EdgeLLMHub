@@ -46,7 +46,15 @@ void main() {
 
   setUpAll(() async {
     final buildDir = Directory('${backendDir.path}/build/bin');
-    if (!File('${buildDir.path}/server.dart').existsSync()) {
+    final serverBin = File('${buildDir.path}/server.dart');
+    final newestSource = backendDir
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .map((f) => f.statSync().modified)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    if (!serverBin.existsSync() ||
+        serverBin.statSync().modified.isBefore(newestSource)) {
       final build = await Process.run(
         'dart',
         ['pub', 'global', 'run', 'dart_frog_cli:dart_frog', 'build'],

@@ -24,6 +24,7 @@ dependencies:
   path: ^1.9.0
   speech_to_text: ^7.4.0
   dio: ^5.10.0
+  archive: ^4.0.0
   device_info_plus: ^13.2.0
   connectivity_plus: ^7.2.0
   shared_preferences: ^2.3.0
@@ -32,9 +33,12 @@ dependencies:
   permission_handler: ^11.3.1
   workmanager: ^0.5.2
   crypto: ^3.0.3
+  encrypt: ^5.0.3
   flutter_quill: ^11.5.1
   flutter_localizations:
     sdk: flutter
+  share_plus: ^13.3.0
+  flutter_secure_storage: ^11.0.0
 
 dev_dependencies:
   flutter_test:
@@ -47,6 +51,8 @@ dev_dependencies:
   mocktail: ^1.0.5
   bloc_test: ^10.0.0
   path_provider_platform_interface: ^2.1.2
+  permission_handler_platform_interface: ^4.4.0
+  share_plus_platform_interface: ^7.2.0
 
 flutter:
   uses-material-design: true

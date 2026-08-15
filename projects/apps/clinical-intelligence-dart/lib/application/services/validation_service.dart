@@ -1,4 +1,3 @@
-import '../../api/dto/clinical_processing_request.dart';
 import 'package:shared_models/shared_models.dart';
 
 /// Validates incoming requests.

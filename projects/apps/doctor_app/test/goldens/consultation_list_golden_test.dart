@@ -1,3 +1,4 @@
+import 'package:doctor_app/core/services/sync_queue_service.dart';
 import 'package:doctor_app/features/note_assist/data/local/note_local_repository.dart';
 import 'package:doctor_app/features/note_assist/domain/models/doctor_note.dart';
 import 'package:doctor_app/features/note_assist/presentation/pages/consultation_list_page.dart';
@@ -11,12 +12,17 @@ import 'golden_helpers.dart';
 
 class _MockNoteLocalRepository extends Mock implements NoteLocalRepository {}
 
+class _NoopSyncQueueService extends Mock implements SyncQueueService {}
+
 void main() {
   late _MockNoteLocalRepository localRepository;
+  late _NoopSyncQueueService syncQueueService;
 
   setUp(() {
     localRepository = _MockNoteLocalRepository();
+    syncQueueService = _NoopSyncQueueService();
     GetIt.I.registerSingleton<NoteLocalRepository>(localRepository);
+    GetIt.I.registerSingleton<SyncQueueService>(syncQueueService);
   });
 
   tearDown(() => GetIt.I.reset());

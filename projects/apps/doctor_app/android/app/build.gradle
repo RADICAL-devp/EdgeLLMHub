@@ -42,3 +42,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // MLC LLM Android runtime for on-device inference
+    implementation("org.mlc:llm-android:0.20.0")
+}

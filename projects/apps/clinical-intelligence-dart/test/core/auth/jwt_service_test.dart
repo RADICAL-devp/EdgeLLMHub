@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:clinical_intelligence_dart/core/auth/jwt_service.dart';
+import 'package:clinical_intelligence_dart/core/auth/token_signer.dart';
 import 'package:test/test.dart';
 import 'package:pointycastle/api.dart';
 import 'package:pointycastle/asymmetric/api.dart';
@@ -60,13 +61,13 @@ void main() {
       );
     });
 
-    test('sign produces a 3-part compact serialization', () {
-      final token = service.sign(claims: {'sub': 'doctor-1'});
+    test('sign produces a 3-part compact serialization', () async {
+      final token = await service.sign(claims: {'sub': 'doctor-1'});
       expect(token.split('.'), hasLength(3));
     });
 
     test('verify returns original claims', () async {
-      final token = service.sign(
+      final token = await service.sign(
         claims: {
           'sub': 'doctor-1',
           'org': 'clinic-a',
@@ -85,7 +86,7 @@ void main() {
     });
 
     test('verify sets exp/iat from expiresIn', () async {
-      final token = service.sign(
+      final token = await service.sign(
         claims: {'sub': 'doctor-1'},
         expiresIn: const Duration(hours: 2),
       );
@@ -104,7 +105,7 @@ void main() {
     });
 
     test('verify rejects a tampered token', () async {
-      final token = service.sign(claims: {'sub': 'doctor-1'});
+      final token = await service.sign(claims: {'sub': 'doctor-1'});
       final parts = token.split('.');
       parts[1] = base64UrlEncodeUtf8('{"sub":"doctor-2"}');
       await expectLater(
@@ -119,7 +120,7 @@ void main() {
         privateKeyPem: _encodePrivateKeyPem(keyPair.privateKey),
         publicKeyPem: _encodePublicKeyPem(keyPair.publicKey),
       );
-      final token = other.sign(claims: {'sub': 'doctor-1'});
+      final token = await other.sign(claims: {'sub': 'doctor-1'});
       await expectLater(
         service.verify(token),
         throwsA(isA<JwtException>()),
@@ -137,6 +138,22 @@ void main() {
       expect(key['kid'], isNotEmpty);
       // Cached on second call
       expect(service.getJwks(), same(jwks));
+    });
+
+    test('LocalKeySigner roundtrip: sign then verify', () async {
+      final localSigner = LocalKeySigner(privateKeyPem: _privateKeyPem);
+      final localService = JwtService(
+        privateKeyPem: _privateKeyPem,
+        publicKeyPem: _publicKeyPem,
+        signer: localSigner,
+      );
+      final token = await localService.sign(
+        claims: {'sub': 'doctor-1', 'org': 'clinic-a'},
+      );
+      final claims = await localService.verify(token);
+      expect(claims.subject, 'doctor-1');
+      expect(claims.clinicId, 'clinic-a');
+      expect(claims.isExpired, isFalse);
     });
   });
 }

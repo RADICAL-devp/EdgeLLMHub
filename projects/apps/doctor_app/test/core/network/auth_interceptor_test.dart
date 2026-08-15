@@ -46,7 +46,7 @@ void main() {
 
   test('refreshes once and retries on 401', () async {
     adapter.responses.add(tokenBody(token: 'expired.token'));
-    adapter.responses.add(_StatusResponse(401, {'error': 'Token expired'}));
+    adapter.responses.add(const _StatusResponse(401, {'error': 'Token expired'}));
     adapter.responses.add(tokenBody(token: 'fresh.token'));
     adapter.responses.add(const {'ok': true});
 
@@ -62,8 +62,8 @@ void main() {
 
   test('passes through after a second 401 (no infinite retry)', () async {
     adapter.responses.add(tokenBody());
-    adapter.responses.add(_StatusResponse(401, const {'error': 'nope'}));
-    adapter.responses.add(_StatusResponse(401, const {'error': 'nope'}));
+    adapter.responses.add(const _StatusResponse(401, {'error': 'nope'}));
+    adapter.responses.add(const _StatusResponse(401, {'error': 'nope'}));
 
     await expectLater(
       dio.get('/api/v1/notes/sync'),

@@ -61,7 +61,7 @@ void main() {
 
     test('strips control characters', () {
       // \x01 = SOH, \x02 = STX
-      final input = 'Hello\x01World\x02Test';
+      const input = 'Hello\x01World\x02Test';
       final result = validator.validate(input);
       expect(result, 'HelloWorldTest');
     });

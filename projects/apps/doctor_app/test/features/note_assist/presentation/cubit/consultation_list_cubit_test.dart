@@ -1,3 +1,4 @@
+import 'package:doctor_app/core/services/sync_queue_service.dart';
 import 'package:doctor_app/features/note_assist/data/local/note_local_repository.dart';
 import 'package:doctor_app/features/note_assist/domain/models/doctor_note.dart';
 import 'package:doctor_app/features/note_assist/presentation/cubit/consultation_list_cubit.dart';
@@ -6,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockRepository extends Mock implements NoteLocalRepository {}
+
+class _MockSyncQueue extends Mock implements SyncQueueService {}
 
 void main() {
   group('ConsultationListCubit', () {
@@ -18,6 +21,10 @@ void main() {
     });
 
     tearDown(() => cubit.close());
+
+    /// Wait past the 300ms search debounce.
+    Future<void> settleDebounce() => Future<void>.delayed(
+        const Duration(milliseconds: 350));
 
     DoctorNote note({
       required String consultationId,
@@ -92,6 +99,7 @@ void main() {
 
       await cubit.load();
       cubit.search('fractured');
+      await settleDebounce();
 
       final state = cubit.state as ConsultationListLoaded;
       expect(state.filtered, hasLength(1));
@@ -189,6 +197,7 @@ void main() {
 
       await cubit.load();
       cubit.search('fractured');
+      await settleDebounce();
 
       await cubit.refresh();
 
@@ -239,7 +248,130 @@ void main() {
       expect((cubit.state as ConsultationListLoaded).visibleCount, 25);
 
       cubit.search('c');
+      await settleDebounce();
       expect((cubit.state as ConsultationListLoaded).visibleCount, 20);
+    });
+
+    test('date filter narrows the list to the selected range', () async {
+      final midnight = DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        DateTime.now().day,
+      );
+      when(() => repository.getAllConsultations()).thenAnswer((_) async => [
+            note(
+              consultationId: 'recent',
+              updatedAt: midnight.add(const Duration(hours: 1)),
+            ),
+            note(
+              consultationId: 'week',
+              updatedAt: midnight
+                  .subtract(const Duration(days: 4))
+                  .add(const Duration(hours: 1)),
+            ),
+            note(
+              consultationId: 'old',
+              updatedAt: midnight.subtract(const Duration(days: 45)),
+            ),
+          ]);
+
+      await cubit.load();
+
+      cubit.filterByDate(DateFilter.today);
+      var state = cubit.state as ConsultationListLoaded;
+      expect(state.filtered.map((c) => c.consultationId), ['recent']);
+
+      cubit.filterByDate(DateFilter.last7Days);
+      state = cubit.state as ConsultationListLoaded;
+      expect(
+        state.filtered.map((c) => c.consultationId).toSet(),
+        {'recent', 'week'},
+      );
+
+      cubit.filterByDate(DateFilter.last30Days);
+      state = cubit.state as ConsultationListLoaded;
+      expect(
+        state.filtered.map((c) => c.consultationId).toSet(),
+        {'recent', 'week'},
+      );
+
+      cubit.filterByDate(DateFilter.all);
+      state = cubit.state as ConsultationListLoaded;
+      expect(state.filtered, hasLength(3));
+    });
+
+    test('rapid keystrokes collapse into a single debounced search', () async {
+      when(() => repository.getAllConsultations()).thenAnswer((_) async => [
+            note(consultationId: 'c1', updatedAt: DateTime(2026, 1, 1)),
+            note(consultationId: 'c2', updatedAt: DateTime(2026, 1, 2)),
+          ]);
+
+      await cubit.load();
+      // Clear any state from prior searches.
+      cubit.search('zzz');
+      cubit.search('zz');
+      cubit.search('z');
+      // No query has settled yet — state must still be unfiltered.
+      expect(
+        (cubit.state as ConsultationListLoaded).searchQuery,
+        '',
+      );
+      await settleDebounce();
+      // Only the last keystroke wins.
+      expect((cubit.state as ConsultationListLoaded).searchQuery, 'z');
+    });
+
+    test('refresh flushes the sync queue before reloading', () async {
+      final syncQueue = _MockSyncQueue();
+      cubit = ConsultationListCubit(
+        localRepository: repository,
+        syncQueueService: syncQueue,
+      );
+      when(() => syncQueue.syncNow()).thenAnswer((_) async {});
+      when(() => repository.getAllConsultations()).thenAnswer((_) async => [
+            note(consultationId: 'c1', updatedAt: DateTime(2026, 1, 1)),
+          ]);
+
+      await cubit.load();
+      await cubit.refresh();
+
+      verify(() => syncQueue.syncNow()).called(1);
+      expect(cubit.state, isA<ConsultationListLoaded>());
+    });
+
+    test('refresh with an unloaded list flushes the queue then loads',
+        () async {
+      final syncQueue = _MockSyncQueue();
+      cubit = ConsultationListCubit(
+        localRepository: repository,
+        syncQueueService: syncQueue,
+      );
+      when(() => syncQueue.syncNow()).thenAnswer((_) async {});
+      when(() => repository.getAllConsultations()).thenAnswer((_) async => [
+            note(consultationId: 'c1', updatedAt: DateTime(2026, 1, 1)),
+          ]);
+
+      await cubit.refresh();
+
+      verify(() => syncQueue.syncNow()).called(1);
+      expect((cubit.state as ConsultationListLoaded).all, hasLength(1));
+    });
+
+    test('sync queue failure does not block the refresh', () async {
+      final syncQueue = _MockSyncQueue();
+      cubit = ConsultationListCubit(
+        localRepository: repository,
+        syncQueueService: syncQueue,
+      );
+      when(() => syncQueue.syncNow()).thenThrow(Exception('offline'));
+      when(() => repository.getAllConsultations()).thenAnswer((_) async => [
+            note(consultationId: 'c1', updatedAt: DateTime(2026, 1, 1)),
+          ]);
+
+      await cubit.load();
+      await cubit.refresh();
+
+      expect(cubit.state, isA<ConsultationListLoaded>());
     });
   });
 }

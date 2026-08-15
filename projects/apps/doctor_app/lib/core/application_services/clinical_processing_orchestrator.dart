@@ -1,6 +1,4 @@
-import 'package:doctor_app/core/dto/clinical_processing_request.dart';
-import 'package:doctor_app/core/dto/clinical_processing_response.dart';
-import 'package:doctor_app/core/models/processing_mode.dart';
+import 'package:shared_models/shared_models.dart';
 import 'terminology_assistance_service.dart';
 import 'transcript_cleanup_service.dart';
 import 'validation_service.dart';

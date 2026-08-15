@@ -1,7 +1,6 @@
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 import 'package:doctor_app/core/services/sync_queue_service.dart';
 import 'package:doctor_app/features/note_assist/data/local/local_database.dart';
-import 'package:doctor_app/features/note_assist/data/local/sync_queue_entry.dart';
 import 'package:doctor_app/features/note_assist/data/repositories/note_sync_repository.dart';
 import 'package:doctor_app/features/note_assist/domain/models/doctor_note.dart';
 import 'package:drift/native.dart';

@@ -1,0 +1,47 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: projects/apps/clinical-intelligence-dart
+
+jobs:
+  test:
+    name: Analyze, Test & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Analyze
+        run: dart analyze
+
+      - name: Test
+        run: dart test
+
+      - name: Dependency scan (pub outdated)
+        run: dart pub outdated
+
+      - name: Install dart_frog_cli
+        run: dart pub global activate dart_frog_cli
+
+      - name: Build server
+        run: dart_frog build

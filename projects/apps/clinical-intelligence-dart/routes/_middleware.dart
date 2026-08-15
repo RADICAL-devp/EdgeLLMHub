@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:clinical_intelligence_dart/application/ports/doctor_note_repository.dart';
+import 'package:clinical_intelligence_dart/application/ports/embedding_service.dart';
 import 'package:clinical_intelligence_dart/application/ports/llm_port.dart';
 import 'package:clinical_intelligence_dart/application/ports/transcript_repository.dart';
 import 'package:clinical_intelligence_dart/application/ports/transcript_summary_repository.dart';
@@ -19,6 +20,10 @@ import 'package:clinical_intelligence_dart/core/audit/audit_middleware.dart';
 import 'package:clinical_intelligence_dart/core/auth/auth_middleware.dart';
 import 'package:clinical_intelligence_dart/core/auth/jwt_service.dart';
 import 'package:clinical_intelligence_dart/core/crypto/aes_gcm_service.dart';
+import 'package:clinical_intelligence_dart/core/observability/metric_registry.dart';
+import 'package:clinical_intelligence_dart/core/observability/metrics_middleware.dart';
+import 'package:clinical_intelligence_dart/infrastructure/embeddings/hash_embedding_service.dart';
+import 'package:clinical_intelligence_dart/infrastructure/embeddings/ollama_embedding_service.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/ollama_llm_adapter.dart';
 import 'package:clinical_intelligence_dart/infrastructure/llm/stub_llm_adapter.dart';
 import 'package:clinical_intelligence_dart/infrastructure/persistence/clinical_database.dart';
@@ -28,8 +33,11 @@ import 'package:clinical_intelligence_dart/infrastructure/persistence/drift_tran
 import 'package:clinical_intelligence_dart/infrastructure/persistence/sqlite_vec_store.dart';
 import 'package:dart_frog/dart_frog.dart';
 
-/// Root middleware: dependency injection, auth, audit, and CORS.
+/// Root middleware: dependency injection, auth, audit, metrics, and CORS.
 Handler middleware(Handler handler) {
+  // --- Observability ---
+  final metricRegistry = MetricRegistry();
+
   // --- Infrastructure ---
   // Dev/CI default is the stub adapter (deterministic, no external deps).
   // Set OLLAMA_BASE_URL to use the Ollama adapter against a local model.
@@ -37,7 +45,22 @@ Handler middleware(Handler handler) {
       ? OllamaLlmAdapter(baseUrl: Platform.environment['OLLAMA_BASE_URL']!)
       : StubLlmAdapter();
 
+  // Wrap the port so every LLM call is timed at a single central point.
+  final instrumentedLlmPort = InstrumentedLlmPort(llmPort, metricRegistry);
+
   final database = ClinicalDatabase();
+
+  // --- Embeddings (vector store) ---
+  // Deterministic hashing by default; switch to Ollama embeddings by
+  // setting OLLAMA_BASE_URL (and optionally OLLAMA_EMBEDDING_MODEL).
+  final EmbeddingService embeddingService =
+      Platform.environment.containsKey('OLLAMA_BASE_URL')
+          ? OllamaEmbeddingService(
+              baseUrl: Platform.environment['OLLAMA_BASE_URL']!,
+              model: Platform.environment['OLLAMA_EMBEDDING_MODEL'] ??
+                  'nomic-embed-text',
+            )
+          : HashEmbeddingService();
 
   // --- Crypto ---
   final aesGcmService = AesGcmService(
@@ -45,7 +68,8 @@ Handler middleware(Handler handler) {
   );
 
   // --- Repositories (with encryption) ---
-  final transcriptRepository = DriftTranscriptRepository(database, aesGcmService);
+  final transcriptRepository =
+      DriftTranscriptRepository(database, aesGcmService);
   final summaryRepository = DriftSummaryRepository(database, aesGcmService);
   final doctorNoteRepository =
       DriftDoctorNoteRepository(database, aesGcmService);
@@ -66,28 +90,28 @@ Handler middleware(Handler handler) {
   final aggregationService = TranscriptSummaryAggregationService();
 
   final terminologyAssistanceService = TerminologyAssistanceService(
-    llmPort: llmPort,
+    llmPort: instrumentedLlmPort,
     normalizationService: normalizationService,
   );
 
   final transcriptCleanupService = TranscriptCleanupService(
-    llmPort: llmPort,
+    llmPort: instrumentedLlmPort,
     normalizationService: normalizationService,
   );
 
   final summaryGenerationService = SummaryGenerationService(
-    llmPort: llmPort,
+    llmPort: instrumentedLlmPort,
   );
 
   final doctorNoteGenerationService = DoctorNoteGenerationService(
-    llmPort: llmPort,
+    llmPort: instrumentedLlmPort,
   );
 
   final clinicalProcessingOrchestrator = ClinicalProcessingOrchestrator(
     validationService: validationService,
     terminologyAssistanceService: terminologyAssistanceService,
     transcriptCleanupService: transcriptCleanupService,
-    llmPort: llmPort,
+    llmPort: instrumentedLlmPort,
   );
 
   final summaryOrchestrator = SummaryOrchestrator(
@@ -100,13 +124,15 @@ Handler middleware(Handler handler) {
     transcriptRepository: transcriptRepository,
     summaryRepository: summaryRepository,
     vectorStore: SqliteVecStore(),
-    llmPort: llmPort,
+    embeddingService: embeddingService,
+    llmPort: instrumentedLlmPort,
   );
 
   return handler
       .use(provider<JwtService>((_) => jwtService))
       .use(provider<AuditLogger>((_) => auditLogger))
-      .use(provider<LlmPort>((_) => llmPort))
+      .use(provider<LlmPort>((_) => instrumentedLlmPort))
+      .use(provider<MetricRegistry>((_) => metricRegistry))
       .use(provider<ClinicalProcessingOrchestrator>(
         (_) => clinicalProcessingOrchestrator,
       ))
@@ -118,9 +144,14 @@ Handler middleware(Handler handler) {
       .use(provider<DoctorNoteRepository>((_) => doctorNoteRepository))
       .use(authMiddleware(
         jwtService,
-        exemptPaths: ['api/v1/auth/token'],
+        exemptPaths: [
+          'api/v1/auth/token',
+          // Prometheus scrape endpoint — no bearer credentials required.
+          'metrics',
+        ],
       ))
       .use(auditMiddleware(auditLogger))
+      .use(metricsMiddleware(metricRegistry))
       .use(_corsMiddleware());
 }
 

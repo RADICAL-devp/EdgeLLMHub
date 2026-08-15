@@ -29,13 +29,20 @@ void main() {
     test('model download configuration defaults to empty', () {
       expect(EnvironmentConfig.modelDownloadUrl, isEmpty);
       expect(EnvironmentConfig.modelChecksumSha256, isEmpty);
-      expect(EnvironmentConfig.modelFileName, 'smolLM-350M.bin');
+      expect(
+        EnvironmentConfig.modelFileName,
+        'smolLM-360M-Instruct-q4f16_1-MLC.zip',
+      );
+      expect(
+        EnvironmentConfig.modelBundleDirName,
+        'SmolLM-360M-Instruct-q4f16_1-MLC',
+      );
     });
 
     test('supported model tier list contains the SmolLM MLC bundle', () {
       expect(
         EnvironmentConfig.supportedModels,
-        contains('SmolLM-350M-Instruct-q4f16_1-MLC'),
+        contains('SmolLM-360M-Instruct-q4f16_1-MLC'),
       );
     });
   });

@@ -5,6 +5,7 @@
 ///
 /// This is the SINGLE SOURCE OF TRUTH for exception types — no other
 /// file should define competing exception classes.
+library;
 
 /// Base exception for all app-level errors.
 class AppException implements Exception {

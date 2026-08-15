@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:clinical_intelligence_dart/api/dto/clinical_processing_request.dart';
 import 'package:clinical_intelligence_dart/application/services/clinical_processing_orchestrator.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
+import 'package:clinical_intelligence_dart/core/validation/request_validator.dart';
 import 'package:dart_frog/dart_frog.dart';
 import 'package:shared_models/shared_models.dart';
 
@@ -20,7 +20,9 @@ import 'package:shared_models/shared_models.dart';
 ///   - SUMMARIZE: structured clinical summary
 ///   - GENERATE_DOCTOR_NOTE: doctor note generation
 Future<Response> onRequest(RequestContext context) async {
-  return requireAuth(_handleRequest, scopes: ['clinical:write'])(context);
+  return jsonSchemaValidation(RequestSchemas.clinicalProcess)(
+    requireAuth(_handleRequest, scopes: ['clinical:write']),
+  )(context);
 }
 
 Future<Response> _handleRequest(RequestContext context) async {

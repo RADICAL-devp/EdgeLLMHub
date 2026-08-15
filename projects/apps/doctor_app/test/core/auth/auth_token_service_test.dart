@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:doctor_app/core/auth/auth_token_service.dart';
+import 'package:doctor_app/core/auth/token_storage.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,16 +10,18 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   late Dio dio;
   late AuthTokenService service;
+  late InMemoryTokenStorage storage;
   late _FakeAdapter adapter;
 
   setUp(() {
     dio = Dio(BaseOptions(baseUrl: 'https://example.com'));
-    service = AuthTokenService(dio);
+    storage = InMemoryTokenStorage();
+    service = AuthTokenService(dio, storage: storage);
     adapter = _FakeAdapter();
     dio.httpClientAdapter = adapter;
   });
 
-  Map<String, dynamic> _tokenBody({
+  Map<String, dynamic> tokenBody({
     String token = 'abc.token.123',
     String? expiresAt = '2026-08-11T00:00:00.000Z',
   }) =>
@@ -30,7 +33,7 @@ void main() {
       };
 
   test('fetches a token from the mint endpoint', () async {
-    adapter.responses.add(_tokenBody());
+    adapter.responses.add(tokenBody());
 
     final token = await service.getToken();
 
@@ -40,7 +43,7 @@ void main() {
   });
 
   test('caches the token and does not re-request within validity', () async {
-    adapter.responses.add(_tokenBody(expiresAt: '2030-01-01T00:00:00.000Z'));
+    adapter.responses.add(tokenBody(expiresAt: '2030-01-01T00:00:00.000Z'));
 
     await service.getToken();
     await service.getToken();
@@ -53,8 +56,8 @@ void main() {
         .toUtc()
         .add(const Duration(minutes: 1))
         .toIso8601String();
-    adapter.responses.add(_tokenBody(expiresAt: nearExpiry));
-    adapter.responses.add(_tokenBody(token: 'second.token'));
+    adapter.responses.add(tokenBody(expiresAt: nearExpiry));
+    adapter.responses.add(tokenBody(token: 'second.token'));
 
     await service.getToken();
     await service.getToken();
@@ -63,11 +66,11 @@ void main() {
   });
 
   test('invalidate forces a fresh request', () async {
-    adapter.responses.add(_tokenBody(expiresAt: '2030-01-01T00:00:00.000Z'));
-    adapter.responses.add(_tokenBody(token: 'fresh.token'));
+    adapter.responses.add(tokenBody(expiresAt: '2030-01-01T00:00:00.000Z'));
+    adapter.responses.add(tokenBody(token: 'fresh.token'));
 
     await service.getToken();
-    service.invalidate();
+    await service.invalidate();
     final token = await service.getToken();
 
     expect(token, 'fresh.token');
@@ -100,6 +103,77 @@ void main() {
       throwsA(isA<NetworkException>()),
     );
   });
+
+  group('token storage', () {
+    test('persists the minted token to the injected storage', () async {
+      adapter.responses.add(tokenBody(expiresAt: '2030-01-01T00:00:00.000Z'));
+
+      await service.getToken();
+
+      final stored = await storage.read();
+      expect(stored, isNotNull);
+      expect(stored!.token, 'abc.token.123');
+      expect(stored.expiresAt, DateTime.parse('2030-01-01T00:00:00.000Z'));
+    });
+
+    test('hydrates a valid token from storage without re-minting', () async {
+      await storage.write(StoredAuthToken(
+        token: 'persisted.token',
+        expiresAt: _future(),
+      ));
+
+      final token = await service.getToken();
+
+      expect(token, 'persisted.token');
+      expect(adapter.paths, isEmpty, reason: 'no mint request expected');
+    });
+
+    test('ignores an expired persisted token and mints a new one', () async {
+      await storage.write(StoredAuthToken(
+        token: 'stale.token',
+        expiresAt: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+      ));
+      adapter.responses.add(tokenBody(token: 'fresh.token'));
+
+      final token = await service.getToken();
+
+      expect(token, 'fresh.token');
+      expect(adapter.paths, ['/api/v1/auth/token']);
+    });
+
+    test('invalidate clears the persisted token', () async {
+      adapter.responses.add(tokenBody());
+      await service.getToken();
+      expect(await storage.read(), isNotNull);
+
+      await service.invalidate();
+
+      expect(await storage.read(), isNull);
+      expect(service.hasToken, isFalse);
+    });
+
+    test('still works when storage is unavailable (write failure)',
+        () async {
+      final failing = _FailingStorage();
+      final svc = AuthTokenService(dio, storage: failing);
+      adapter.responses.add(tokenBody());
+
+      final token = await svc.getToken();
+
+      expect(token, 'abc.token.123');
+    });
+  });
+}
+
+DateTime _future() =>
+    DateTime.now().toUtc().add(const Duration(days: 30));
+
+/// Storage whose writes throw, simulating an unavailable Keychain.
+class _FailingStorage extends InMemoryTokenStorage {
+  @override
+  Future<void> write(StoredAuthToken token) async {
+    throw Exception('keychain unavailable');
+  }
 }
 
 class _FakeAdapter implements HttpClientAdapter {

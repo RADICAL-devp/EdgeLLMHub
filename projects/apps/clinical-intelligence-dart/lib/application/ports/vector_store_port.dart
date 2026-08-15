@@ -1,5 +1,3 @@
-import 'package:shared_models/shared_models.dart';
-
 /// Port for vector store operations (embeddings for context-enriched summaries).
 abstract class VectorStorePort {
   /// Add an embedding with metadata.

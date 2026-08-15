@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Workstream 8 (Security): cleartext HTTP is forbidden by default.
+  The debug source set (src/debug/res/xml/network_security_config.xml)
+  additionally permits cleartext ONLY to the local dev backend
+  (10.0.2.2 = Android emulator host, localhost/127.0.0.1).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
