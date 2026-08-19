@@ -1,0 +1,22 @@
+%% Deployment -- current local-only topology vs. recommended target topology
+%% Referenced in: docs/deployment.md
+graph TB
+    subgraph Current["Current: confirmed local-only topology"]
+        DevMachine[Single developer machine]
+        DevMachine --> DF1[Dart Frog process]
+        DevMachine --> OL1[Ollama process]
+        DF1 <--> OL1
+    end
+
+    subgraph Target["Recommended target -- not yet implemented"]
+        LB[Load Balancer]
+        LB --> DF2a[Dart Frog replica A<br/>stateless container]
+        LB --> DF2b[Dart Frog replica B<br/>stateless container]
+        DF2a --> PG[(Postgres)]
+        DF2b --> PG
+        DF2a --> Inf[vLLM / managed inference API<br/>GPU-attached, scaled independently]
+        DF2b --> Inf
+    end
+
+    style Current fill:#fff3cd,stroke:#664d03
+    style Target fill:#d1e7dd,stroke:#0f5132

@@ -1,0 +1,18 @@
+%% System Overview — the three cooperating systems and their actors
+%% Referenced in: README.md, docs/architecture.md
+graph LR
+    Doctor((Doctor)) -->|speaks / edits notes| App[doctor_app<br/>Flutter Mobile]
+    App -->|on-device inference| MLC[MLC Engine<br/>iOS]
+    App -->|on-device inference| Gemma[flutter_gemma<br/>Android]
+    App -->|HTTP fallback| DartBackend[clinical-intelligence-dart<br/>Dart Frog]
+    DartBackend -->|local inference| Ollama[(Ollama<br/>llama3.2)]
+
+    Org([Healthcare Organization]) -.->|regional-language audio / reports| JavaPipeline[clinical-intelligence<br/>Java / Micronaut]
+    JavaPipeline --> GCP_STT[Google Cloud<br/>Speech-to-Text V2]
+    JavaPipeline --> GCP_TR[Google Cloud<br/>Translate V3]
+    JavaPipeline --> LC4J[LangChain4j<br/>+ OpenAI]
+    JavaPipeline --> Qdrant[(Qdrant<br/>vector store)]
+
+    App -.->|no documented integration| JavaPipeline
+
+    style JavaPipeline fill:#fff3cd,stroke:#664d03

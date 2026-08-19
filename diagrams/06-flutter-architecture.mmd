@@ -1,0 +1,17 @@
+%% Flutter Architecture — component-level view of doctor_app's LLM path
+%% Referenced in: docs/mobile.md
+graph TB
+    Cubit[NoteEditorCubit / AiAssistCubit] --> Service[NoteAssistService]
+    Service --> Hybrid[HybridLlmAdapter]
+    Hybrid --> NativeIOS[IosNativeLlmAdapter]
+    Hybrid --> NativeAndroid[AndroidNativeLlmAdapter]
+    Hybrid --> Cloud[CloudLlmAdapter]
+    Hybrid --> Stub[StubLlmAdapter]
+    NativeIOS --> MethodChannel[MethodChannel: com.example.clinical/llm]
+    MethodChannel --> Swift[MLCLLMHandler.swift]
+    Swift --> MLCEngine[MLCEngine]
+    Cloud --> Dio[Dio + RetryInterceptor + CircuitBreaker]
+    Dio --> Route[Dart Frog: /api/v1/clinical-processing/process]
+    Route --> Orchestrator[ClinicalProcessingOrchestrator]
+    Orchestrator --> OllamaAdapter[OllamaLlmAdapter]
+    OllamaAdapter --> OllamaServer[(Ollama HTTP :11435)]

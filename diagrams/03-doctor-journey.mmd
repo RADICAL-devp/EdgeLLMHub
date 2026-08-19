@@ -1,0 +1,20 @@
+%% Doctor Journey — end-to-end experience of one consultation
+%% Referenced in: README.md
+journey
+    title Doctor's Consultation Journey
+    section Before the visit
+      Open app: 5: Doctor
+      Load or create patient note: 5: Doctor
+    section During the visit
+      Start recording: 5: Doctor
+      Speak consultation aloud: 4: Doctor
+      Live transcript appears (streamed): 4: Doctor
+    section After the visit
+      Tap "Clean transcript": 5: Doctor
+      Tap "Generate structured summary": 5: Doctor
+      Review 7-field clinical summary: 4: Doctor
+      Edit note manually if needed: 3: Doctor
+      Note autosaves locally (2s debounce): 5: Doctor
+    section Sync
+      Note syncs to backend when online (3s debounce): 4: Doctor
+      Note queued if offline, replayed later: 3: Doctor

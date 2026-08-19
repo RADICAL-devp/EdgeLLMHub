@@ -1,0 +1,11 @@
+%% CI/CD -- recommended staged pipeline (not confirmed as an existing implemented workflow)
+%% Referenced in: docs/deployment.md
+flowchart LR
+    Commit[Commit / PR] --> Lint[Lint<br/>catch style/type issues cheaply]
+    Lint --> Test[Unit Test<br/>flutter test / gradlew test]
+    Test --> Build[Build<br/>produce deployable artifact]
+    Build --> Staging[Deploy to Staging]
+    Staging --> Smoke[Smoke Test<br/>confirm it responds before routing real traffic]
+    Smoke --> Prod[Deploy to Production<br/>blue-green / canary, once backend is stateless]
+
+    Smoke -->|fails| Rollback[Block promotion]

@@ -1,0 +1,10 @@
+%% Java Pipeline -- clinical-intelligence four-phase enterprise processing
+%% Referenced in: docs/java-enterprise.md
+%% Depth note: built from the service's own top-level README description only.
+flowchart TD
+    A[Raw Clinical Input<br/>Audio or Regional-Language Text] --> B[Phase 1: Ingestion and Transcription<br/>Google Cloud Speech-to-Text -- Chirp model]
+    B --> C[Phase 2: Translation<br/>Google Cloud Translate V3 to English]
+    C --> D[Phase 3: LLM Structuring<br/>LangChain4j + OpenAI / local models<br/>Extract symptoms, diagnosis, prescriptions]
+    D --> E[Phase 4: Vectorization<br/>All-MiniLM-L6-v2 embeddings]
+    E --> F[(Qdrant<br/>vector store)]
+    F --> G[Semantic Search over<br/>Clinical Records]
