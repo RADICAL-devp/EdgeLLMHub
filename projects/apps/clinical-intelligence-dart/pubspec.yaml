@@ -20,7 +20,7 @@ dependencies:
   shared_models:
     path: ../../packages/shared_models
   jose: ^0.3.5+2
-  pointycastle: ^3.7.3
+  pointycastle: ^4.0.0
   args: ^2.5.0
   json_schema: ^5.2.2
 
