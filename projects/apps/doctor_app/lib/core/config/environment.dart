@@ -18,7 +18,7 @@ enum AppEnvironment {
 
 /// Model version information for upgrade/downgrade detection.
 class ModelVersion {
-  const ModelVersion({
+  ModelVersion({
     required this.version,
     required this.minimumCompatibleVersion,
     required this.releaseDate,
@@ -112,12 +112,12 @@ class EnvironmentConfig {
   /// Current model version embedded in the app bundle.
   ///
   /// Updated when a new model is bundled with the app release.
-  static const ModelVersion bundledModelVersion = ModelVersion(
-    version: '1.0.0',
-    minimumCompatibleVersion: '1.0.0',
-    releaseDate: '2026-08-15T00:00:00Z',
-    changelog: 'Initial SmolLM-360M-Instruct-q4f16_1-MLC release',
-  );
+  static ModelVersion get bundledModelVersion => ModelVersion(
+        version: '1.0.0',
+        minimumCompatibleVersion: '1.0.0',
+        releaseDate: DateTime.utc(2026, 8, 15),
+        changelog: 'Initial SmolLM-360M-Instruct-q4f16_1-MLC release',
+      );
 
   /// Supported model tiers for on-device inference.
   static const List<String> supportedModels = [

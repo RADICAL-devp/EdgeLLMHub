@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:crypto/crypto.dart';
 import 'package:convert/convert.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 /// Encrypted database connection using SQLCipher.
 ///
@@ -28,7 +29,7 @@ class EncryptedDatabase {
   ///
   /// The encryption key is derived from a master key stored in secure storage.
   /// On first run, a new master key is generated.
-  Future<DatabaseConnection> openConnection() async {
+  Future<QueryExecutor> openConnection() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, _databaseName));
 
@@ -37,13 +38,13 @@ class EncryptedDatabase {
     return NativeDatabase.createInBackground(
       file,
       // SQLCipher requires the key to be set via PRAGMA
-      setup: (db) async {
-        await db.execute("PRAGMA key = '${_escapeSqlString(key)}'");
-        await db.execute('PRAGMA cipher_page_size = 4096');
-        await db.execute('PRAGMA kdf_iter = 256000');
-        await db.execute('PRAGMA cipher_hmac_algorithm = HMAC_SHA512');
-        await db.execute('PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512');
-        await db.execute('PRAGMA foreign_keys = ON');
+      setup: (db) {
+        db.execute("PRAGMA key = '${_escapeSqlString(key)}'");
+        db.execute('PRAGMA cipher_page_size = 4096');
+        db.execute('PRAGMA kdf_iter = 256000');
+        db.execute('PRAGMA cipher_hmac_algorithm = HMAC_SHA512');
+        db.execute('PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512');
+        db.execute('PRAGMA foreign_keys = ON');
       },
     );
   }
@@ -61,7 +62,7 @@ class EncryptedDatabase {
     await _secureStorage.write(
       key: _keyAlias,
       value: key,
-      aOptions: const AndroidOptions(encryptedSharedPreferences: true),
+      aOptions: const AndroidOptions(),
       iOptions: const IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
     );
     return key;
@@ -80,17 +81,20 @@ class EncryptedDatabase {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, _databaseName));
 
-    // Rekey the database
-    final db = await NativeDatabase.createInBackground(file);
-    await db.execute("PRAGMA key = '${_escapeSqlString(oldKey)}'");
-    await db.execute("PRAGMA rekey = '${_escapeSqlString(newKey)}'");
-    await db.close();
+    // Rekey the database - open synchronously with sqlite3 directly
+    final db = sqlite3.open(file.path);
+    try {
+      db.execute("PRAGMA key = '${_escapeSqlString(oldKey)}'");
+      db.execute("PRAGMA rekey = '${_escapeSqlString(newKey)}'");
+    } finally {
+      db.dispose();
+    }
 
     // Update stored key
     await _secureStorage.write(
       key: _keyAlias,
       value: newKey,
-      aOptions: const AndroidOptions(encryptedSharedPreferences: true),
+      aOptions: const AndroidOptions(),
       iOptions: const IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
     );
   }

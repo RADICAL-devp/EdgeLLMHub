@@ -125,8 +125,10 @@ class DoctorNote extends Equatable {
         'status': status.name,
         'extractedFields': extractedFields?.toJson(),
         'patientRecap': patientRecap,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
+        // UTC ISO-8601 with the trailing 'Z' — the backend deserializes
+        // into java.time.Instant, which rejects offset-less local strings.
+        'createdAt': createdAt.toUtc().toIso8601String(),
+        'updatedAt': updatedAt.toUtc().toIso8601String(),
       };
 
   factory DoctorNote.fromJson(Map<String, dynamic> json) {

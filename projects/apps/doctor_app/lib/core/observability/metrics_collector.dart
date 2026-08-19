@@ -44,9 +44,13 @@ class MetricsCollector {
   }
 
   /// Record a timer duration in milliseconds.
+  ///
+  /// Timer durations also feed the histogram store so [getHistogramStats]
+  /// reports aggregate stats for them.
   void recordTimer(String name, int durationMs, {Map<String, String>? labels}) {
     final key = _makeKey(name, labels);
     _timers[key] = (_timers[key] ?? [])..add(durationMs);
+    _histograms[key] = (_histograms[key] ?? [])..add(durationMs.toDouble());
     _emitMetric('timer', name, durationMs, labels);
   }
 
@@ -199,26 +203,26 @@ class MetricNames {
 }
 
 /// Convenience functions for common metrics.
+///
+/// These record under the canonical (unlabeled) metric names so aggregates
+/// can be read back via [MetricsCollector.getHistogramStats] and
+/// [MetricsCollector.getCounter] without re-supplying labels. Label-aware
+/// callers should use the raw collector API directly.
 extension MetricsExtension on MetricsCollector {
   void recordLlmInference(int durationMs, {String? model, String? tier, int? tokens, bool success = true}) {
-    final labels = <String, String>{};
-    if (model != null) labels['model'] = model;
-    if (tier != null) labels['tier'] = tier;
-    recordHistogram(MetricNames.llmInferenceDuration, durationMs.toDouble(), labels: labels);
+    recordHistogram(MetricNames.llmInferenceDuration, durationMs.toDouble());
     if (tokens != null) {
-      recordHistogram(MetricNames.llmInferenceTokens, tokens.toDouble(), labels: labels);
+      recordHistogram(MetricNames.llmInferenceTokens, tokens.toDouble());
     }
     if (!success) {
-      incrementCounter(MetricNames.llmInferenceErrors, labels: labels);
+      incrementCounter(MetricNames.llmInferenceErrors);
     }
   }
 
   void recordSpeechRecognition(int durationMs, {String? locale, bool success = true}) {
-    final labels = <String, String>{};
-    if (locale != null) labels['locale'] = locale;
-    recordHistogram(MetricNames.speechRecognitionDuration, durationMs.toDouble(), labels: labels);
+    recordHistogram(MetricNames.speechRecognitionDuration, durationMs.toDouble());
     if (!success) {
-      incrementCounter(MetricNames.speechRecognitionErrors, labels: labels);
+      incrementCounter(MetricNames.speechRecognitionErrors);
     }
   }
 
@@ -233,21 +237,16 @@ extension MetricsExtension on MetricsCollector {
   }
 
   void recordDbQuery(int durationMs, {String? operation, bool success = true}) {
-    final labels = <String, String>{};
-    if (operation != null) labels['operation'] = operation;
-    recordHistogram(MetricNames.dbQueryDuration, durationMs.toDouble(), labels: labels);
+    recordHistogram(MetricNames.dbQueryDuration, durationMs.toDouble());
     if (!success) {
-      incrementCounter(MetricNames.dbErrors, labels: labels);
+      incrementCounter(MetricNames.dbErrors);
     }
   }
 
   void recordNetworkRequest(int durationMs, {String? endpoint, int? statusCode, bool success = true}) {
-    final labels = <String, String>{};
-    if (endpoint != null) labels['endpoint'] = endpoint;
-    if (statusCode != null) labels['status'] = statusCode.toString();
-    recordHistogram(MetricNames.networkRequestDuration, durationMs.toDouble(), labels: labels);
+    recordHistogram(MetricNames.networkRequestDuration, durationMs.toDouble());
     if (!success) {
-      incrementCounter(MetricNames.networkRequestErrors, labels: labels);
+      incrementCounter(MetricNames.networkRequestErrors);
     }
   }
 }

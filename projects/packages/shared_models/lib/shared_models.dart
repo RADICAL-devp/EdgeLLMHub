@@ -7,6 +7,7 @@ export 'consultation_transcript.dart';
 export 'doctor_note.dart';
 export 'executive_summary.dart';
 export 'extracted_clinical_fields.dart';
+export 'patient_context.dart';
 export 'processing_mode.dart';
 export 'processing_source.dart';
 export 'structured_note_sections.dart';

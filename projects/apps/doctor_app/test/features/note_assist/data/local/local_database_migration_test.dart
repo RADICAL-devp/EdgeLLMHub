@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:doctor_app/features/note_assist/data/local/local_database.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -16,6 +17,28 @@ class _FakePathProvider extends PathProviderPlatform {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    // The default LocalDatabase() constructor uses the encrypted connection,
+    // which reads/writes the encryption key through flutter_secure_storage.
+    // Stub the platform channel so key storage is a no-op (read → null
+    // generates a key; write is discarded).
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+      (call) async => call.method == 'read' ? null : null,
+    );
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+      null,
+    );
+  });
+
   test('onCreate creates all tables on a fresh database', () async {
     final rawDb = sqlite3.openInMemory();
     rawDb.execute('PRAGMA user_version = 0;');
@@ -45,7 +68,7 @@ void main() {
     final count = await db.select(db.doctorNotes).get();
     expect(count, isEmpty);
     expect(
-      File('${dir.path}/doctor_notes.sqlite').existsSync(),
+      File('${dir.path}/doctor_notes_encrypted.sqlite').existsSync(),
       isTrue,
       reason: 'lazy connection must create the sqlite file',
     );

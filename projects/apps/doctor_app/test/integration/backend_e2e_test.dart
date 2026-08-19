@@ -3,8 +3,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:doctor_app/core/auth/auth_token_service.dart';
-import 'package:doctor_app/core/llm/cloud_llm_adapter.dart';
-import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/network/auth_interceptor.dart';
 import 'package:doctor_app/features/note_assist/data/remote/note_remote_datasource.dart';
 import 'package:doctor_app/features/note_assist/domain/models/doctor_note.dart';
@@ -13,13 +11,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// End-to-end test booting the REAL clinical-intelligence backend and
 /// driving it through the app's own production classes
-/// (AuthTokenService + AuthInterceptor + CloudLlmAdapter + NoteRemoteDatasource).
+/// (AuthTokenService + AuthInterceptor + NoteRemoteDatasource).
 ///
 /// Requirements:
 ///   - `dart_frog_cli` activated globally (`dart pub global activate dart_frog_cli`)
 ///
 /// The server is built once if needed and started on a random port with the
 /// backend's embedded development keys (dev token mint endpoint enabled).
+///
+/// Note: the cloud LLM tier was removed (PHI never leaves the device), so
+/// the former processText/summary tests no longer apply; the LLM is verified
+/// through the on-device ModelManagerCubit tests instead.
 void main() {
   late Process server;
   late Dio dio;
@@ -94,40 +96,6 @@ void main() {
     await server.exitCode.timeout(const Duration(seconds: 5));
     final sqlite = File('${backendDir.path}/clinical_intelligence.sqlite');
     if (sqlite.existsSync()) sqlite.deleteSync();
-  });
-
-  test('auth token is minted automatically and processText succeeds', () async {
-    final llm = CloudLlmAdapter(dio);
-
-    final result = await llm.processText(
-      'Patient reports SOB and DOE . BP 130 / 85',
-      ProcessingMode.vocabAssist,
-    );
-
-    expect(result, isNotEmpty);
-  });
-
-  test('structured summary roundtrips through the real backend', () async {
-    final llm = CloudLlmAdapter(dio);
-
-    final summary = await llm.generateStructuredSummary(
-      '56 year old male with SOB and DOE for 2 weeks.',
-    );
-
-    expect(summary.complaint, isNotEmpty);
-    expect(summary.diagnosis, isNotEmpty);
-    expect(summary.advice, isNotEmpty);
-  });
-
-  test('executive summary and doctor note return text', () async {
-    final llm = CloudLlmAdapter(dio);
-    const transcript = '56 year old male with SOB for 2 weeks.';
-
-    final executive = await llm.generateExecutiveSummary(transcript);
-    final note = await llm.generateDoctorNote(transcript);
-
-    expect(executive, isNotEmpty);
-    expect(note, isNotEmpty);
   });
 
   test('note sync roundtrips through the real backend', () async {

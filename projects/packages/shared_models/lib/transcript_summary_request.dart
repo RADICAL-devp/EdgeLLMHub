@@ -9,6 +9,7 @@ class TranscriptSummaryRequest {
     this.sleepLabId,
     required this.transcriptText,
     this.consultationMode,
+    this.patientContext,
   });
 
   factory TranscriptSummaryRequest.fromJson(Map<String, dynamic> json) {
@@ -17,6 +18,9 @@ class TranscriptSummaryRequest {
     final doctorId = json['doctorId'] as String? ?? '';
     final sleepLabId = json['sleepLabId'] as String?;
     final mode = ConsultationMode.tryParse(json['consultationMode'] as String?);
+    final patientContext = json['patientContext'] != null
+        ? PatientContext.fromJson(json['patientContext'] as Map<String, dynamic>)
+        : null;
 
     // Check if this is the Java ConsultationInput format
     if (json.containsKey('consultation')) {
@@ -29,6 +33,7 @@ class TranscriptSummaryRequest {
         sleepLabId: sleepLabId ?? consultation['sleepLabId'] as String?,
         transcriptText: transcriptText,
         consultationMode: mode,
+        patientContext: patientContext,
       );
     }
 
@@ -39,6 +44,7 @@ class TranscriptSummaryRequest {
       sleepLabId: sleepLabId,
       transcriptText: json['transcriptText'] as String? ?? '',
       consultationMode: mode,
+      patientContext: patientContext,
     );
   }
 
@@ -109,6 +115,7 @@ class TranscriptSummaryRequest {
   final String? sleepLabId;
   final String transcriptText;
   final ConsultationMode? consultationMode;
+  final PatientContext? patientContext;
 
   Map<String, dynamic> toJson() => {
         'consultationId': consultationId,
@@ -118,5 +125,6 @@ class TranscriptSummaryRequest {
         'transcriptText': transcriptText,
         if (consultationMode != null)
           'consultationMode': consultationMode!.toJson(),
+        if (patientContext != null) 'patientContext': patientContext!.toJson(),
       };
 }

@@ -25,6 +25,13 @@ micronaut:
         http-method: POST
         access:
           - isAnonymous()
+      - pattern: /api/v1/auth/token
+        http-method: POST
+        access:
+          - isAnonymous()
+      - pattern: /**
+        access:
+          - isAuthenticated()
     authentication: bearer
     token:
       jwt:

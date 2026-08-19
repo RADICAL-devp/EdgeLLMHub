@@ -25,6 +25,31 @@ class _PassthroughLlm implements LlmPort {
 
   @override
   Future<String> generateDoctorNote(String t) async => '';
+
+  // ============ FIELD-LEVEL GENERATION (STUB) ============
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async => '[Stub] $fieldName';
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async* {
+    yield '[Stub] $fieldName';
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async => {for (final f in fieldNames) f: '[Stub] $f'};
 }
 
 void main() {

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:doctor_app/core/ports/llm_port.dart';
+import 'package:doctor_app/core/models/patient_context.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 
@@ -53,5 +56,45 @@ class StubLlmAdapter implements LlmPort {
   Future<String> generateDoctorNote(String transcriptText) async {
     return '$_prefix Doctor note generation is unavailable offline.\n\n'
         'Your raw transcript has been preserved:\n$transcriptText';
+  }
+
+  // ============ FIELD-LEVEL GENERATION (STUB) ============
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 100)); // Simulate latency
+    return '$_prefix $fieldName is unavailable offline. '
+        'Input length: ${transcriptText.length} chars.';
+  }
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async* {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    yield '$_prefix $fieldName ';
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    yield 'unavailable offline. ';
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    yield 'Input length: ${transcriptText.length} chars.';
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    final results = <String, String>{};
+    for (final fieldName in fieldNames) {
+      results[fieldName] = await generateField(fieldName, transcriptText, patientContext: patientContext);
+    }
+    return results;
   }
 }

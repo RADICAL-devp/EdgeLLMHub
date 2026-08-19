@@ -4,7 +4,7 @@ import '../cubit/ai_assist_cubit.dart';
 import '../cubit/ai_assist_state.dart';
 
 class SuggestionPanel extends StatelessWidget {
-  final Function(String) onAccept;
+  final Function(String suggestion, String action) onAccept;
 
   const SuggestionPanel({super.key, required this.onAccept});
 
@@ -110,7 +110,7 @@ class SuggestionPanel extends StatelessWidget {
                       const SizedBox(width: 8),
                       FilledButton.icon(
                         onPressed: () {
-                          onAccept(content);
+                          onAccept(content, action);
                           context.read<AiAssistCubit>().discardSuggestion();
                         },
                         icon: const Icon(Icons.check, size: 18),

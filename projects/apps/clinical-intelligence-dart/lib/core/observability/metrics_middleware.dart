@@ -128,6 +128,42 @@ class InstrumentedLlmPort implements LlmPort {
     );
   }
 
+  // ============ FIELD-LEVEL GENERATION ============
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) {
+    return _timed(
+      'generateField',
+      () => _inner.generateField(fieldName, transcriptText, patientContext: patientContext),
+    );
+  }
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) {
+    // For streaming, we can't easily wrap with timing, so delegate directly
+    return _inner.generateFieldStream(fieldName, transcriptText, patientContext: patientContext);
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) {
+    return _timed(
+      'generateFields',
+      () => _inner.generateFields(fieldNames, transcriptText, patientContext: patientContext),
+    );
+  }
+
   Future<T> _timed<T>(String method, Future<T> Function() call) async {
     final stopwatch = Stopwatch()..start();
     try {

@@ -18,7 +18,9 @@ final class MLCLLMHandler: NSObject {
   private static let doneSentinel = "[DONE]"
   // Model directory name as produced by `mlc_llm package` with HF://HuggingFaceTB/SmolLM-360M-Instruct + q4f16_1
   private static let modelBundleName = "SmolLM-360M-Instruct-q4f16_1-MLC"
-  private static let modelLib = "SmolLM-360M-Instruct-q4f16_1-MLC"
+  // `model_lib` field from bundle/mlc-app-config.json — the compiled system
+  // library registers under this exact name (llama arch + quantization hash).
+  private static let modelLib = "llama_q4f16_1_d5ba06e61253098870aaa5dc3f1a2589"
   private static let maxContextTokens = 2048
 
   private let methodChannel: FlutterMethodChannel
@@ -47,7 +49,8 @@ final class MLCLLMHandler: NSObject {
 
   deinit {
     activeGenerationTask?.cancel()
-    Task { await engine.unload() }
+    let engineCopy = engine
+    Task.detached { await engineCopy.unload() }
   }
 
   private var modelPath: String? {
@@ -195,16 +198,16 @@ final class MLCLLMHandler: NSObject {
   }
 
   private func generateStreaming(prompt: String) async throws {
-    guard eventSink != nil else { throw MLCBridgeError.noEventSink }
+    guard let sink = eventSink else { throw MLCBridgeError.noEventSink }
 
-    try await streamCompletion(prompt: prompt) { [weak self] token in
+    try await streamCompletion(prompt: prompt) { token in
       await MainActor.run {
-        self?.eventSink?(token)
+        sink(token)
       }
     }
 
     await MainActor.run {
-      eventSink?(Self.doneSentinel)
+      sink(Self.doneSentinel)
     }
   }
 

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:doctor_app/core/config/environment.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 import 'package:doctor_app/core/services/sync_queue_service.dart';
 import 'package:doctor_app/features/note_assist/data/local/sync_queue_entry.dart';
@@ -14,7 +13,6 @@ import 'package:get_it/get_it.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockDeviceCapabilityService extends Mock
     implements DeviceCapabilityService {}
@@ -53,7 +51,6 @@ void main() {
   // NOTE: registrations must happen inside each test body — the GetIt
   // container state does not survive across testWidgets bodies.
   Future<void> registerMocks() async {
-    SharedPreferences.setMockInitialValues({prefCloudLlmEnabled: false});
     await GetIt.instance.reset();
     deviceService = _MockDeviceCapabilityService();
     syncQueue = _MockSyncQueueService();
@@ -134,8 +131,7 @@ void main() {
     await pumpSettings(tester);
 
     expect(find.text('Settings'), findsWidgets);
-    expect(find.text('Allow cloud processing'), findsOneWidget);
-    expect(find.text('PHI consent granted'), findsOneWidget);
+    expect(find.text('On-device processing only'), findsOneWidget);
     expect(find.text('Recommended execution mode'), findsOneWidget);
     expect(find.text('CLOUD'), findsOneWidget);
     expect(find.text('Pending syncs'), findsOneWidget);
@@ -144,15 +140,13 @@ void main() {
     expect(find.text('Sync now'), findsOneWidget);
   });
 
-  testWidgets('cloud LLM falls back to environment default when pref missing',
-      (tester) async {
+  testWidgets('no cloud or consent toggles are exposed', (tester) async {
     await registerMocks();
-    SharedPreferences.setMockInitialValues({});
     await pumpSettings(tester);
 
-    expect(find.text('Settings'), findsWidgets);
-    final switchWidget = tester.widget<Switch>(find.byType(Switch).first);
-    expect(switchWidget.value, EnvironmentConfig.cloudLlmEnabled);
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(find.text('Allow cloud processing'), findsNothing);
+    expect(find.text('PHI consent granted'), findsNothing);
   });
 
   testWidgets('spinner is shown while settings load', (tester) async {
@@ -180,79 +174,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Allow cloud processing'), findsOneWidget);
-    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.text('On-device processing only'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Export diagnostics log'), 100);
     await tester.pump();
 
     expect(find.text('Export diagnostics log'), findsOneWidget);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('enabling cloud without consent shows dialog; decline keeps '
-      'cloud off', (tester) async {
-    await registerMocks();
-    await pumpSettings(tester);
-
-    await tester.tap(find.byType(SwitchListTile).first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('PHI consent required'), findsOneWidget);
-    await tester.tap(find.text('Decline'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Cloud processing NOT enabled — PHI consent required.'),
-        findsOneWidget);
-    final switchTile = tester.widget<SwitchListTile>(
-      find.byType(SwitchListTile).first,
-    );
-    expect(switchTile.value, isFalse);
-  });
-
-  testWidgets('consenting in the dialog enables cloud and records consent',
-      (tester) async {
-    await registerMocks();
-    await pumpSettings(tester);
-
-    await tester.tap(find.byType(SwitchListTile).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('I Consent'));
-    await tester.pumpAndSettle();
-
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(prefCloudLlmEnabled), isTrue);
-    expect(prefs.getBool(prefPhiConsentGranted), isTrue);
-    final switchTile = tester.widget<SwitchListTile>(
-      find.byType(SwitchListTile).first,
-    );
-    expect(switchTile.value, isTrue);
-    expect(
-      find.text('Cloud processing enabled. PHI may leave the device.'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('revoking PHI consent also disables cloud processing',
-      (tester) async {
-    await registerMocks();
-    SharedPreferences.setMockInitialValues({
-      prefCloudLlmEnabled: true,
-      prefPhiConsentGranted: true,
-    });
-    await pumpSettings(tester);
-
-    final switches = find.byType(SwitchListTile);
-    await tester.tap(switches.at(1));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.widget<SwitchListTile>(find.byType(SwitchListTile).first).value,
-      isFalse,
-    );
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(prefPhiConsentGranted), isFalse);
-    expect(prefs.getBool(prefCloudLlmEnabled), isFalse);
   });
 
   testWidgets('sync now flushes the queue and reports completion',
@@ -295,52 +223,9 @@ void main() {
     expect(find.textContaining('Diagnostics exported to'), findsOneWidget);
     expect(exporter.lastContents, isNotNull);
     expect(exporter.lastContents, contains('Doctor App Diagnostics Log'));
+    expect(exporter.lastContents, contains('Cloud LLM enabled (config): false'));
     expect(exporter.lastContents, contains('Pending: n1 op=create retry=2/5 error=boom'));
     expect(exporter.lastContents, contains('DEAD: c2 op=update error=permanent'));
-  });
-
-  testWidgets('export includes a timestamped consent audit trail of consent '
-      'changes', (tester) async {
-    await registerMocks();
-    const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(shareChannel, (call) async {
-      return 'dev.fluttercommunity.plus/share/success';
-    });
-    addTearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(shareChannel, null);
-    });
-    await pumpSettings(tester);
-
-    // Grant consent through the cloud-enable dialog…
-    await tester.tap(find.byType(SwitchListTile).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('I Consent'));
-    await tester.pumpAndSettle();
-
-    // …then revoke it via the dedicated consent toggle.
-    await tester.tap(find.byType(SwitchListTile).at(1));
-    await tester.pumpAndSettle();
-    // Let the "cloud enabled" snackbar expire so it cannot cover the
-    // export tile at the bottom of the list.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(find.text('Export diagnostics log'), 100);
-    await tester.tap(find.text('Export diagnostics log'));
-    await tester.pumpAndSettle();
-
-    expect(exporter.lastContents, isNotNull);
-    expect(exporter.lastContents, contains('Consent audit trail:'));
-    expect(
-      exporter.lastContents,
-      contains('consent-changed: {granted: true} at '),
-    );
-    expect(
-      exporter.lastContents,
-      contains('consent-changed: {granted: false} at '),
-    );
   });
 
   testWidgets('export falls back gracefully when share is unavailable',

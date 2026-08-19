@@ -393,4 +393,36 @@ class _FakeLlmPort implements LlmPort {
     calls += 1;
     return 'note';
   }
+
+  // ============ FIELD-LEVEL GENERATION (STUB) ============
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    calls += 1;
+    return '$fieldName';
+  }
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async* {
+    calls += 1;
+    yield '$fieldName';
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    calls += 1;
+    return {for (final f in fieldNames) f: f};
+  }
 }

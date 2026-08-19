@@ -3,9 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// SharedPreferences key backing the PHI consent gate.
 ///
-/// Mirrors `prefPhiConsentGranted` in
-/// `features/note_assist/presentation/pages/settings_page.dart` so the
-/// analytics gate follows the exact flag the settings page persists.
+/// Legacy: the settings page no longer exposes a consent toggle because
+/// cloud processing is disabled by design (PHI never leaves the device),
+/// so this key is never written and analytics tracking stays off.
 const String analyticsConsentPrefKey = 'phi_consent_granted';
 
 /// Resolves whether analytics tracking is currently permitted.

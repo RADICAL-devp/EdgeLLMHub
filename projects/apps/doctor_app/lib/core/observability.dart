@@ -1,6 +1,6 @@
 /// Observability module exports.
 library doctor_app.observability;
 
-export 'json_logger.dart';
-export 'metrics_collector.dart';
-export 'error_boundary.dart';
+export 'observability/json_logger.dart';
+export 'observability/metrics_collector.dart';
+export 'observability/error_boundary.dart';

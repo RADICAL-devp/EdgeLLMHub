@@ -5,6 +5,10 @@ import 'package:doctor_app/core/crypto/phi_encryption_service.dart';
 
 class MockFlutterSecureStorage extends Mock implements FlutterSecureStorage {}
 
+/// A valid base64-encoded 32-byte AES key, so encrypt and decrypt both see
+/// the same key through the mock (decrypt must NOT re-derive a new one).
+const _storedKeyBase64 = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=';
+
 void main() {
   group('PhiEncryptionService', () {
     late MockFlutterSecureStorage mockStorage;
@@ -12,6 +16,14 @@ void main() {
 
     setUp(() {
       mockStorage = MockFlutterSecureStorage();
+      when(() => mockStorage.read(key: any(named: 'key')))
+          .thenAnswer((_) async => _storedKeyBase64);
+      when(() => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),
+            aOptions: any(named: 'aOptions'),
+            iOptions: any(named: 'iOptions'),
+          )).thenAnswer((_) async {});
       service = PhiEncryptionService(secureStorage: mockStorage);
     });
 
@@ -97,16 +109,12 @@ void main() {
     });
 
     test('reuses key from secure storage on subsequent calls', () async {
-      when(() => mockStorage.read(key: 'phi_encryption_key'))
-          .thenAnswer((_) async => null); // First call: no key
-      when(() => mockStorage.write(key: 'phi_encryption_key', value: any()))
-          .thenAnswer((_) async => {}); // Key generation
-
       await service.encryptString('test');
 
       // Second call should read the key
       when(() => mockStorage.read(key: 'phi_encryption_key'))
-          .thenAnswer((_) async => 'existing_key_base64');
+          .thenAnswer((_) async =>
+              'NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ=');
 
       await service.encryptString('test2');
 

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
 import 'package:doctor_app/core/ports/llm_port.dart';
+import 'package:doctor_app/core/models/patient_context.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
@@ -80,6 +82,152 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
     final cleanText = ClinicalPrompts.sanitize(transcriptText);
     final prompt = '${ClinicalPrompts.doctorNote}\n$cleanText';
     return _generate(prompt);
+  }
+
+  // ============ FIELD-LEVEL GENERATION ============
+
+  static const _validFieldNames = {
+    'complaint',
+    'pastHistory',
+    'vitals',
+    'physicalExamination',
+    'investigationOrdered',
+    'diagnosis',
+    'advice',
+    'manualPrescription',
+  };
+
+  String _buildFieldPrompt(
+    String fieldName,
+    String transcriptText,
+    PatientContext? patientContext,
+  ) {
+    final fieldPrompt = ClinicalPrompts.fieldPrompts[fieldName];
+    if (fieldPrompt == null) {
+      throw ArgumentError(
+          'Unknown field: $fieldName. Valid fields: ${_validFieldNames.join(', ')}');
+    }
+
+    final buffer = StringBuffer();
+    if (patientContext != null) {
+      buffer.writeln(patientContext.toPromptContext());
+      buffer.writeln('---');
+    }
+    buffer.write(fieldPrompt);
+    buffer.write(transcriptText);
+    return buffer.toString();
+  }
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    final cleanText = ClinicalPrompts.sanitize(transcriptText);
+    final prompt = _buildFieldPrompt(fieldName, cleanText, patientContext);
+    final response = await _generate(prompt);
+    return parseFieldValue(response, fieldName);
+  }
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) {
+    final cleanText = ClinicalPrompts.sanitize(transcriptText);
+    final prompt = _buildFieldPrompt(fieldName, cleanText, patientContext);
+
+    final controller = StreamController<String>();
+    StreamSubscription? subscription;
+
+    _ensureInitialized().then((_) {
+      subscription = _streamChannel.receiveBroadcastStream().listen(
+        (event) {
+          if (event is String) {
+            if (event == '[DONE]') {
+              subscription?.cancel();
+              controller.close();
+            } else {
+              final buffer = StringBuffer();
+              buffer.write(event);
+              // Emit incremental field value
+              final current = parseFieldValue(buffer.toString(), fieldName);
+              if (current.isNotEmpty) {
+                controller.add(current);
+              }
+            }
+          }
+        },
+        onError: (Object error) {
+          controller.addError(LlmException(
+            'MLC LLM stream error: $error',
+            cause: error,
+            provider: LlmProvider.mlc,
+          ));
+          subscription?.cancel();
+          controller.close();
+        },
+        onDone: () {
+          controller.close();
+        },
+      );
+
+      _methodChannel
+          .invokeMethod<void>('generateStream', {'prompt': prompt})
+          .timeout(_generationTimeout)
+          .catchError((error) {
+            subscription?.cancel();
+            controller.addError(LlmException(
+              'MLC LLM inference error: $error',
+              cause: error,
+              provider: LlmProvider.mlc,
+            ));
+            controller.close();
+          });
+    }).catchError((error) {
+      controller.addError(LlmException(
+        'Failed to initialize iOS native LLM: $error',
+        cause: error,
+        provider: LlmProvider.mlc,
+      ));
+      controller.close();
+    });
+
+    return controller.stream;
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    final results = <String, String>{};
+    for (final fieldName in fieldNames) {
+      results[fieldName] = await generateField(fieldName, transcriptText,
+          patientContext: patientContext);
+    }
+    return results;
+  }
+
+  /// Parse a single field value from the LLM response.
+  String parseFieldValue(String response, String fieldName) {
+    var cleaned = response.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned
+          .replaceAll(RegExp(r'^```(?:json)?\s*'), '')
+          .replaceAll(RegExp(r'\s*```$'), '');
+    }
+
+    try {
+      final json = jsonDecode(cleaned) as Map<String, dynamic>;
+      return (json[fieldName] as String? ?? '').trim();
+    } catch (_) {
+      // Fallback: return cleaned response
+      return cleaned;
+    }
   }
 
   /// Generate text using the iOS MLC LLM via streaming EventChannel.

@@ -1,3 +1,4 @@
+import 'package:doctor_app/core/models/patient_context.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 
@@ -32,4 +33,39 @@ abstract class LlmPort {
 
   /// Generate a doctor note from transcript text.
   Future<String> generateDoctorNote(String transcriptText);
+
+  // ============ FIELD-LEVEL GENERATION FOR EHR ASSISTANCE ============
+
+  /// Generate a single EHR field suggestion from transcript text.
+  ///
+  /// [fieldName] must be one of: complaint, pastHistory, vitals,
+  /// physicalExamination, investigationOrdered, diagnosis, advice,
+  /// manualPrescription
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  });
+
+  /// Stream a single EHR field suggestion from transcript text.
+  ///
+  /// Emits partial results as they are generated. Final emission is the complete field value.
+  /// [fieldName] must be one of: complaint, pastHistory, vitals,
+  /// physicalExamination, investigationOrdered, diagnosis, advice,
+  /// manualPrescription
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  });
+
+  /// Generate multiple fields at once.
+  ///
+  /// [fieldNames] is a list of field names to generate.
+  /// Returns a map of fieldName -> fieldValue.
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  });
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -79,6 +80,125 @@ class OllamaLlmAdapter implements LlmPort {
   Future<String> generateDoctorNote(String transcriptText) async {
     final prompt = '${ClinicalPrompts.doctorNote}\n$transcriptText';
     return _generate(prompt);
+  }
+
+  // ============ FIELD-LEVEL GENERATION ============
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    final prompt = _buildFieldPrompt(fieldName, transcriptText, patientContext);
+    final response = await _generate(prompt);
+    return _extractFieldValue(response, fieldName);
+  }
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async* {
+    final prompt = _buildFieldPrompt(fieldName, transcriptText, patientContext);
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(
+        Uri.parse('$baseUrl/api/generate'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({
+        'model': model,
+        'prompt': prompt,
+        'stream': true,
+        'options': {
+          'temperature': temperature,
+        },
+      }));
+
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        final body = await response.transform(utf8.decoder).join();
+        throw Exception('Ollama API error (${response.statusCode}): $body');
+      }
+
+      final buffer = StringBuffer();
+      await for (final chunk in response.transform(utf8.decoder)) {
+        final lines = chunk.split('\n');
+        for (final line in lines) {
+          if (line.trim().isEmpty) continue;
+          try {
+            final json = jsonDecode(line) as Map<String, dynamic>;
+            final token = json['response'] as String? ?? '';
+            if (token.isNotEmpty) {
+              buffer.write(token);
+              yield buffer.toString();
+            }
+            if (json['done'] == true) {
+              yield _extractFieldValue(buffer.toString(), fieldName);
+              return;
+            }
+          } catch (_) {
+            // Ignore malformed chunks
+          }
+        }
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    final results = <String, String>{};
+    for (final fieldName in fieldNames) {
+      results[fieldName] = await generateField(fieldName, transcriptText, patientContext: patientContext);
+    }
+    return results;
+  }
+
+  /// Build the prompt for a specific field.
+  String _buildFieldPrompt(
+    String fieldName,
+    String transcriptText,
+    PatientContext? patientContext,
+  ) {
+    final fieldPrompt = ClinicalPrompts.fieldPrompts[fieldName];
+    if (fieldPrompt == null) {
+      throw ArgumentError('Unknown field: $fieldName. Valid fields: ${ClinicalPrompts.fieldPrompts.keys.join(', ')}');
+    }
+
+    final buffer = StringBuffer();
+    if (patientContext != null) {
+      buffer.writeln(patientContext.toPromptContext());
+      buffer.writeln('---');
+    }
+    buffer.write(fieldPrompt);
+    buffer.write(transcriptText);
+    return buffer.toString();
+  }
+
+  /// Extract the field value from the JSON response.
+  String _extractFieldValue(String response, String fieldName) {
+    var cleaned = response.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned
+          .replaceAll(RegExp(r'^```(?:json)?\s*'), '')
+          .replaceAll(RegExp(r'\s*```$'), '');
+    }
+
+    try {
+      final json = jsonDecode(cleaned) as Map<String, dynamic>;
+      return (json[fieldName] as String? ?? '').trim();
+    } catch (_) {
+      // Fallback: return cleaned response
+      return cleaned;
+    }
   }
 
   /// Call the Ollama /api/generate endpoint.

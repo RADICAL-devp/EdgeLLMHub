@@ -30,7 +30,7 @@ class PhiEncryptionService {
     await _secureStorage.write(
       key: _keyAlias,
       value: key.base64,
-      aOptions: const AndroidOptions(encryptedSharedPreferences: true),
+      aOptions: const AndroidOptions(),
       iOptions: const IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
     );
     return key;
@@ -45,11 +45,11 @@ class PhiEncryptionService {
     final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.gcm));
     final encrypted = encrypter.encrypt(plaintext, iv: iv);
 
-    // Combine IV + ciphertext + authTag for storage
+    // In encrypt 5.x, the authTag is included in the encrypted.bytes for GCM mode
+    // The format is: ciphertext + authTag (16 bytes)
     final combined = Uint8List.fromList([
       ...iv.bytes,
       ...encrypted.bytes,
-      ...encrypted.authTag!,
     ]);
 
     return base64Encode(combined);
@@ -63,17 +63,16 @@ class PhiEncryptionService {
       final key = await _getOrCreateKey();
       final combined = base64Decode(ciphertextBase64);
 
-      if (combined.length < 16 + 16) {
+      if (combined.length < 16 + 16) { // IV (16) + min ciphertext+tag (16)
         throw FormatException('Ciphertext too short');
       }
 
       final iv = encrypt.IV(combined.sublist(0, 16));
-      final authTag = combined.sublist(combined.length - 16);
-      final ciphertext = combined.sublist(16, combined.length - 16);
+      final ciphertextWithTag = combined.sublist(16);
 
-      final encrypted = encrypt.Encrypted(ciphertext);
+      final encrypted = encrypt.Encrypted(ciphertextWithTag);
       final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.gcm));
-      return encrypter.decrypt(encrypted, iv: iv, authTag: authTag);
+      return encrypter.decrypt(encrypted, iv: iv);
     } catch (e) {
       throw EncryptionException('Failed to decrypt PHI: $e');
     }
@@ -102,7 +101,7 @@ class PhiEncryptionService {
     await _secureStorage.write(
       key: _keyAlias,
       value: newKey.base64,
-      aOptions: const AndroidOptions(encryptedSharedPreferences: true),
+      aOptions: const AndroidOptions(),
       iOptions: const IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
     );
 

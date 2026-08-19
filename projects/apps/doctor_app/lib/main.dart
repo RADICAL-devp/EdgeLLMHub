@@ -6,6 +6,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'dart:ui';
 
 import 'core/config/environment.dart';
@@ -44,6 +45,7 @@ import 'core/application_services/terminology_assistance_service.dart';
 
 import 'features/note_assist/data/local/local_database.dart';
 import 'features/note_assist/data/local/note_local_repository.dart';
+import 'features/note_assist/domain/models/doctor_note.dart';
 import 'features/note_assist/data/remote/note_remote_datasource.dart';
 import 'features/note_assist/data/repositories/note_sync_repository.dart';
 import 'features/note_assist/data/services/on_device_llm_service.dart';
@@ -100,8 +102,16 @@ Future<void> setupDependencies() async {
   getIt.registerSingleton<MetricsCollector>(MetricsCollector.instance);
 
   // ── 2. Database ───────────────────────────────────────────────────
+  // One-time import of notes from the legacy unencrypted DB (pre-SQLCipher
+  // builds). Runs before the encrypted connection opens for the first time.
+  await importLegacyDatabase();
+
   final db = LocalDatabase();
   getIt.registerSingleton<LocalDatabase>(db);
+
+  // Seed an example consultation on first launch so the local list has
+  // content to demonstrate the note-assist workflow.
+  await seedExampleConsultationIfEmpty(db);
 
   final dbService = DatabaseService(db);
   getIt.registerSingleton<DatabaseService>(dbService);
@@ -148,7 +158,7 @@ Future<void> setupDependencies() async {
   getIt.registerSingleton<SpeechService>(speechService);
 
   // ── 6. LLM port (hybrid adapter) ─────────────────────────────────
-  final llmPort = await LlmPortFactory.create(capabilityService, dio: dio);
+  final llmPort = await LlmPortFactory.create(capabilityService);
   getIt.registerSingleton<LlmPort>(llmPort);
   getIt.registerSingleton<HybridLlmAdapter>(llmPort);
 
@@ -437,4 +447,89 @@ class _DisclaimerPoint extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Seeds a demo consultation into the local database on first launch.
+///
+/// Runs when the notes table is empty, or when the seeded demo note
+/// (`n-example-001`) is absent — real patient notes are never touched.
+Future<void> seedExampleConsultationIfEmpty(LocalDatabase db) async {
+  final repo = NoteLocalRepository(db);
+  final existing = await repo.getAllNotes();
+  if (existing.any((n) => n.noteId != 'n-example-001')) return;
+  if (existing.any((n) => n.noteId == 'n-example-001' &&
+      n.rawText.startsWith('The patient is a 34-year-old male'))) {
+    return;
+  }
+
+  final now = DateTime.now();
+  const consultationId = 'c-example-001';
+  const patientId = 'p-male-34';
+  const doctorId = 'd-devansh';
+
+  const rawText = 'The patient is a 34-year-old male who presented with '
+      'complaints of intermittent fever for the last 10 days, associated '
+      'with generalized weakness, body aches, headache, and loss of '
+      'appetite. The patient reports that the fever is more prominent '
+      'during the evening hours and is occasionally accompanied by chills '
+      'and excessive sweating. He also complains of mild abdominal '
+      'discomfort, nausea, and a feeling of bloating after meals. Over '
+      'the past week, he has noticed increasing fatigue, making it '
+      'difficult to perform routine daily activities. The patient denies '
+      'any history of vomiting, diarrhea, chest pain, shortness of '
+      'breath, or recent travel outside the city. He reports inadequate '
+      'sleep due to persistent discomfort and has been self-medicating '
+      'with over-the-counter paracetamol, which provides only temporary '
+      'relief. There is no known history of diabetes, hypertension, '
+      'tuberculosis, or any major chronic illness. The patient states '
+      'that his symptoms have gradually worsened despite rest and '
+      'increased fluid intake. He is seeking medical evaluation to '
+      'determine the underlying cause of the fever and associated '
+      'symptoms and to receive appropriate treatment and further '
+      'diagnostic investigations if required.';
+
+  await repo.saveNote(DoctorNote(
+    noteId: 'n-example-001',
+    consultationId: consultationId,
+    patientId: patientId,
+    doctorId: doctorId,
+    rawText: rawText,
+    richTextDelta: jsonEncode([
+      {'insert': rawText},
+    ]),
+    status: NoteStatus.aiSuggested,
+    extractedFields: const ExtractedFields(
+      symptoms: [
+        'Intermittent fever (10 days)',
+        'Generalized weakness',
+        'Body aches',
+        'Headache',
+        'Loss of appetite',
+        'Abdominal discomfort',
+        'Nausea',
+        'Bloating after meals',
+      ],
+      duration: 'Last 10 days',
+      medications: ['Paracetamol (OTC)'],
+      allergies: [],
+      testsRecommended: [
+        'Complete blood count',
+        'Malaria smear / serology',
+        'Blood cultures',
+        'Widal test',
+      ],
+      followUpActions: [
+        'Re-evaluate after diagnostic results',
+        'Advise adequate hydration and rest',
+      ],
+      provisionalDiagnosis: 'Fever of unknown origin — rule out '
+          'enteric fever / malaria',
+    ),
+    patientRecap:
+        '34-year-old male with 10 days of intermittent evening fever, '
+        'weakness, and body aches; deny vomiting, diarrhea, or travel; '
+        'pending diagnostic workup.',
+    createdAt: now.subtract(const Duration(hours: 2)),
+    updatedAt: now.subtract(const Duration(minutes: 30)),
+  ));
 }

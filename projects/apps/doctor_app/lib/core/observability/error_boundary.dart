@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:developer' as developer;
 
 /// Error boundary widget that catches errors in its subtree and displays
@@ -45,10 +46,12 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       );
     }
     widget.onError?.call(error, stackTrace);
-    setState(() {
-      _error = error;
-      _stackTrace = stackTrace;
-    });
+    if (mounted) {
+      setState(() {
+        _error = error;
+        _stackTrace = stackTrace;
+      });
+    }
   }
 
   @override
@@ -58,29 +61,39 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
           _DefaultErrorFallback(
             error: _error!,
             stackTrace: _stackTrace!,
-            onRetry: () => setState(() {
-              _error = null;
-              _stackTrace = null;
-            }),
+            onRetry: () {
+              if (mounted) {
+                setState(() {
+                  _error = null;
+                  _stackTrace = null;
+                });
+              }
+            },
           );
     }
 
-    return ErrorWidget.builder = (FlutterErrorDetails details) {
-      _handleError(details.exception, details.stack ?? StackTrace.current);
-      return widget.fallbackBuilder?.call(context, details.exception, details.stack ?? StackTrace.current) ??
-          _DefaultErrorFallback(
-            error: details.exception,
-            stackTrace: details.stack ?? StackTrace.current,
-            onRetry: () => setState(() {
-              _error = null;
-              _stackTrace = null;
-            }),
-          );
-    };
-
     // The child is wrapped in a Builder to ensure error catching works
     return Builder(
-      builder: (context) => widget.child,
+      builder: (context) {
+        try {
+          return widget.child;
+        } catch (error, stackTrace) {
+          _handleError(error, stackTrace);
+          return widget.fallbackBuilder?.call(context, error, stackTrace) ??
+              _DefaultErrorFallback(
+                error: error,
+                stackTrace: stackTrace,
+                onRetry: () {
+                  if (mounted) {
+                    setState(() {
+                      _error = null;
+                      _stackTrace = null;
+                    });
+                  }
+                },
+              );
+        }
+      },
     );
   }
 }
@@ -121,8 +134,8 @@ class _DefaultErrorFallback extends StatelessWidget {
               Text(
                 error.toString(),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -174,7 +187,7 @@ class AsyncErrorBoundary {
     void Function(Object error, StackTrace stackTrace)? onError,
     bool logError = true,
   }) async {
-    return await runZonedGuarded(
+    final result = await runZonedGuarded(
       body,
       (error, stackTrace) {
         if (logError) {
@@ -188,6 +201,7 @@ class AsyncErrorBoundary {
         onError?.call(error, stackTrace);
       },
     );
+    return result!;
   }
 
   static void runSync(

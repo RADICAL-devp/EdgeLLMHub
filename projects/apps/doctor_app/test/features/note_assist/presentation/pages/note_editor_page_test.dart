@@ -1,5 +1,8 @@
 import 'package:doctor_app/core/services/speech_service.dart';
 import 'package:doctor_app/core/services/sync_queue_service.dart';
+import 'package:doctor_app/core/ports/llm_port.dart';
+import 'package:doctor_app/core/models/processing_mode.dart';
+import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/features/note_assist/data/local/local_database.dart';
 import 'package:doctor_app/features/note_assist/data/local/note_local_repository.dart';
 import 'package:doctor_app/features/note_assist/data/repositories/note_sync_repository.dart';
@@ -26,6 +29,8 @@ class _MockSpeechService extends Mock implements SpeechService {}
 
 class _MockNoteAssistService extends Mock implements NoteAssistService {}
 
+class _MockLlmPort extends Mock implements LlmPort {}
+
 void main() {
   late LocalDatabase db;
   late SyncQueueService syncQueueService;
@@ -33,6 +38,7 @@ void main() {
   late _MockSyncRepository syncRepository;
   late _MockSpeechService speechService;
   late _MockNoteAssistService assistService;
+  late _MockLlmPort llmPort;
 
   setUp(() {
     registerFallbackValue(DoctorNote(
@@ -45,6 +51,8 @@ void main() {
       updatedAt: DateTime(2026),
     ));
     registerFallbackValue((String _) {});
+    registerFallbackValue(ProcessingMode.cleanTranscript);
+    registerFallbackValue(StructuredSummary());
     db = LocalDatabase.connect(NativeDatabase.memory());
     syncQueueService = SyncQueueService(
       syncRepository: _MockSyncRepository(),
@@ -54,12 +62,20 @@ void main() {
     syncRepository = _MockSyncRepository();
     speechService = _MockSpeechService();
     assistService = _MockNoteAssistService();
+    llmPort = _MockLlmPort();
 
     GetIt.I.registerSingleton<SyncQueueService>(syncQueueService);
     GetIt.I.registerSingleton<SpeechService>(speechService);
+    GetIt.I.registerSingleton<LlmPort>(llmPort);
 
     when(() => syncRepository.syncNoteToBackend('c1'))
         .thenAnswer((_) async {});
+    when(() => llmPort.processText(any(), any()))
+        .thenAnswer((_) async => 'Mock response');
+    when(() => llmPort.generateField(any(), any(), patientContext: any(named: 'patientContext')))
+        .thenAnswer((_) async => 'Mock field response');
+    when(() => llmPort.generateFieldStream(any(), any(), patientContext: any(named: 'patientContext')))
+        .thenAnswer((_) => Stream.value('Mock field response'));
   });
 
   tearDown(() async {

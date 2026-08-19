@@ -186,6 +186,133 @@ abstract final class RequestSchemas {
       'updatedAt': {'type': 'string', 'format': 'date-time'},
     },
   };
+
+  // ============ EHR ASSISTANCE ROUTES ============
+
+  /// POST /api/v1/ehr/field-suggestion
+  static const Map<String, dynamic> ehrFieldSuggestion = {
+    'type': 'object',
+    'additionalProperties': false,
+    'required': ['transcriptText', 'fieldName'],
+    'properties': {
+      'transcriptText': {
+        'type': 'string',
+        'minLength': 1,
+        'pattern': '\\S',
+        'maxLength': 10000000,
+      },
+      'fieldName': {
+        'type': 'string',
+        'enum': [
+          'complaint',
+          'pastHistory',
+          'vitals',
+          'physicalExamination',
+          'investigationOrdered',
+          'diagnosis',
+          'advice',
+          'manualPrescription',
+        ],
+      },
+      'patientContext': {
+        'type': 'object',
+        'properties': {
+          'patientName': {'type': 'string'},
+          'sleepLab': {'type': 'string'},
+          'consultationDate': {'type': 'string'},
+          'patientId': {'type': 'string'},
+          'age': {'type': 'integer'},
+          'gender': {'type': 'string'},
+          'referringDoctor': {'type': 'string'},
+        },
+      },
+    },
+  };
+
+  /// POST /api/v1/ehr/stream-field
+  static const Map<String, dynamic> ehrStreamField = {
+    'type': 'object',
+    'additionalProperties': false,
+    'required': ['transcriptText', 'fieldName'],
+    'properties': {
+      'transcriptText': {
+        'type': 'string',
+        'minLength': 1,
+        'pattern': '\\S',
+        'maxLength': 10000000,
+      },
+      'fieldName': {
+        'type': 'string',
+        'enum': [
+          'complaint',
+          'pastHistory',
+          'vitals',
+          'physicalExamination',
+          'investigationOrdered',
+          'diagnosis',
+          'advice',
+          'manualPrescription',
+        ],
+      },
+      'patientContext': {
+        'type': 'object',
+        'properties': {
+          'patientName': {'type': 'string'},
+          'sleepLab': {'type': 'string'},
+          'consultationDate': {'type': 'string'},
+          'patientId': {'type': 'string'},
+          'age': {'type': 'integer'},
+          'gender': {'type': 'string'},
+          'referringDoctor': {'type': 'string'},
+        },
+      },
+    },
+  };
+
+  /// POST /api/v1/ehr/full-summary
+  static const Map<String, dynamic> ehrFullSummary = {
+    'type': 'object',
+    'additionalProperties': false,
+    'required': ['transcriptText'],
+    'properties': {
+      'transcriptText': {
+        'type': 'string',
+        'minLength': 1,
+        'pattern': '\\S',
+        'maxLength': 10000000,
+      },
+      'fieldNames': {
+        'type': 'array',
+        'items': {
+          'type': 'string',
+          'enum': [
+            'complaint',
+            'pastHistory',
+            'vitals',
+            'physicalExamination',
+            'investigationOrdered',
+            'diagnosis',
+            'advice',
+            'manualPrescription',
+          ],
+        },
+        'minItems': 1,
+        'maxItems': 8,
+      },
+      'patientContext': {
+        'type': 'object',
+        'properties': {
+          'patientName': {'type': 'string'},
+          'sleepLab': {'type': 'string'},
+          'consultationDate': {'type': 'string'},
+          'patientId': {'type': 'string'},
+          'age': {'type': 'integer'},
+          'gender': {'type': 'string'},
+          'referringDoctor': {'type': 'string'},
+        },
+      },
+    },
+  };
 }
 
 /// Validates POST request bodies against a JSON Schema.

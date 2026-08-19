@@ -104,6 +104,9 @@ Map<String, Object?> _readyModelInfo() => {
       'ready': true,
       'checksumSha256': 'abc123',
       'path': '/models/smol',
+      // Without a modelVersion the cubit assumes an upgrade is needed and
+      // routes into downloadModel() instead of reporting ready.
+      'modelVersion': EnvironmentConfig.bundledModelVersion.version,
     };
 
 /// Capability service answering like a physical, local-LLM-capable device.
@@ -186,19 +189,24 @@ void main() {
   });
 
   group('ModelManagerCubit.downloadModel (simulated path)', () {
-    test('reaches ready without a configured URL', () async {
+    test('ends in an error without a configured URL', () async {
       final dir = await Directory.systemTemp.createTemp('model-test');
       final cubit = ModelManagerCubit(capabilityService: capabilityService);
 
       final future = cubit.downloadModel(downloadDirectory: dir);
 
-      while (cubit.state is! ModelManagerReady) {
-        expect(cubit.state, isNot(isA<ModelManagerError>()));
+      while (cubit.state is! ModelManagerError) {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
       await future;
 
-      expect(File('${dir.path}/$_modelFileName').existsSync(), isTrue);
+      expect((cubit.state as ModelManagerError).message,
+          contains('MODEL_DOWNLOAD_URL'));
+      expect(
+        File('${dir.path}/$_modelFileName').existsSync(),
+        isFalse,
+        reason: 'no placeholder artifact should be left behind',
+      );
       await cubit.close();
     });
   });

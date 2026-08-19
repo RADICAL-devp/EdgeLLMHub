@@ -717,6 +717,11 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   }
 
   /// Simulated download used when no signed download URL is configured.
+  ///
+  /// Animates progress so the UI can be exercised, but MUST NOT emit
+  /// [ModelManagerReady]: no real model artifact is produced, so the native
+  /// MLC engine would still report the model as not installed. Ends in an
+  /// honest error telling the developer how to supply the model instead.
   Future<void> _simulateDownload(File modelFile) async {
     developer.log(
       'MODEL_DOWNLOAD_URL not set — using simulated progress.',
@@ -733,11 +738,17 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       ));
     }
 
-    // Create placeholder so subsequent checks pass
-    if (!await modelFile.exists()) {
-      await modelFile.writeAsString('placeholder_model_data');
+    // Do not leave a placeholder artifact behind — it is not a real model
+    // and would only confuse later checks.
+    if (await modelFile.exists()) {
+      await modelFile.delete();
     }
 
-    emit(ModelManagerReady(modelFile.path, executionMode: 'local'));
+    emit(const ModelManagerError(
+      'No model download URL is configured for this build. '
+      'Bundle the SmolLM-360M model into the app, or launch with '
+      '--dart-define=MODEL_DOWNLOAD_URL=... and MODEL_CHECKSUM_SHA256=...',
+      canRetry: false,
+    ));
   }
 }

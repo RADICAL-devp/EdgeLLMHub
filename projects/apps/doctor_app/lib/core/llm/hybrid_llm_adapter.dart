@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:doctor_app/core/ports/llm_port.dart';
+import 'package:doctor_app/core/models/patient_context.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
@@ -78,6 +79,95 @@ class HybridLlmAdapter implements LlmPort {
       'generateDoctorNote',
       native: () => _nativeAdapter.generateDoctorNote(transcriptText),
       stub: () => _stubAdapter.generateDoctorNote(transcriptText),
+    );
+  }
+
+  // ============ FIELD-LEVEL GENERATION ============
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) {
+    return _withFallback(
+      'generateField',
+      native: () => _nativeAdapter.generateField(
+        fieldName,
+        transcriptText,
+        patientContext: patientContext,
+      ),
+      stub: () => _stubAdapter.generateField(
+        fieldName,
+        transcriptText,
+        patientContext: patientContext,
+      ),
+    );
+  }
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) {
+    // For streaming, we try native first, then fall back to stub
+    // Note: This is a simplified fallback - in production you might want
+    // more sophisticated stream fallback handling
+    if (_nativeAvailable) {
+      try {
+        return _nativeAdapter.generateFieldStream(
+          fieldName,
+          transcriptText,
+          patientContext: patientContext,
+        ).handleError((error) {
+          _log('generateFieldStream', 'Native stream failed: $error');
+          _nativeAvailable = false;
+          return _stubAdapter.generateFieldStream(
+            fieldName,
+            transcriptText,
+            patientContext: patientContext,
+          );
+        });
+      } on UnsupportedPlatformException {
+        _log('generateFieldStream', 'Native not supported on this platform');
+        _nativeAvailable = false;
+      } on LlmInitializationException catch (e) {
+        _log('generateFieldStream', 'Native LLM not initialized: $e');
+        _nativeAvailable = false;
+      } catch (e) {
+        _log('generateFieldStream', 'Native LLM unexpected error: $e');
+        _nativeAvailable = false;
+      }
+    }
+
+    // --- Tier 2: Stub ---
+    _log('generateFieldStream', 'Falling back to offline stub');
+    return _stubAdapter.generateFieldStream(
+      fieldName,
+      transcriptText,
+      patientContext: patientContext,
+    );
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) {
+    return _withFallback(
+      'generateFields',
+      native: () => _nativeAdapter.generateFields(
+        fieldNames,
+        transcriptText,
+        patientContext: patientContext,
+      ),
+      stub: () => _stubAdapter.generateFields(
+        fieldNames,
+        transcriptText,
+        patientContext: patientContext,
+      ),
     );
   }
 

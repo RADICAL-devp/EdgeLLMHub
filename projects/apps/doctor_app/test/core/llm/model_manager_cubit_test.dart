@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:bloc/bloc.dart';
@@ -32,8 +35,10 @@ void main() {
     });
 
     group('checkModelExists', () {
-      test('emits ModelManagerInitial on simulator', () async {
+      test('falls back to cloud mode on simulator', () async {
         when(() => mockCapabilityService.isSimulator).thenAnswer((_) async => true);
+        when(() => mockCapabilityService.getRecommendedExecutionMode())
+            .thenAnswer((_) async => ExecutionMode.cloud);
 
         final cubit = ModelManagerCubit(
           capabilityService: mockCapabilityService,
@@ -46,8 +51,10 @@ void main() {
         expect((cubit.state as ModelManagerReady).executionMode, 'cloud');
       });
 
-      test('emits ModelManagerInitial on low-capability device', () async {
+      test('falls back to cloud mode on low-capability device', () async {
         when(() => mockCapabilityService.canRunLocalLlm()).thenAnswer((_) async => false);
+        when(() => mockCapabilityService.getRecommendedExecutionMode())
+            .thenAnswer((_) async => ExecutionMode.cloud);
 
         final cubit = ModelManagerCubit(
           capabilityService: mockCapabilityService,
@@ -62,21 +69,25 @@ void main() {
     });
 
     group('downloadModel', () {
-      test('simulates download when URL is empty', () async {
+      test('simulated path ends in an error when URL is empty', () async {
+        final dir = await Directory.systemTemp.createTemp('model-test');
         final cubit = ModelManagerCubit(
           capabilityService: mockCapabilityService,
           downloader: mockDownloader,
         );
 
-        await cubit.downloadModel(downloadUrl: '');
+        await cubit.downloadModel(downloadUrl: '', downloadDirectory: dir);
 
-        expect(cubit.state, isA<ModelManagerReady>());
-        expect((cubit.state as ModelManagerReady).executionMode, 'local');
+        expect(cubit.state, isA<ModelManagerError>());
+        expect((cubit.state as ModelManagerError).message,
+            contains('MODEL_DOWNLOAD_URL'));
+        await cubit.close();
       });
 
       test('emits downloading progress during download', () async {
         final progressStates = <ModelManagerDownloading>[];
         final completer = Completer<void>();
+        final dir = await Directory.systemTemp.createTemp('model-test');
 
         when(() => mockDownloader.download(any(), any(), onReceiveProgress: any(named: 'onReceiveProgress')))
             .thenAnswer((invocation) async {
@@ -101,92 +112,15 @@ void main() {
 
         await cubit.downloadModel(
           downloadUrl: 'https://example.com/model.zip',
-          checksumSha256: 'a'.repeat(64),
+          checksumSha256: List.filled(64, 'a').join(),
+          downloadDirectory: dir,
         );
 
         await completer.future.timeout(const Duration(seconds: 5));
 
         expect(progressStates.length, greaterThan(1));
         expect(progressStates.last.progress, 1.0);
-      });
-
-      test('verifies checksum after download', () async {
-        final validChecksum = 'a'.repeat(64);
-        final testFile = File('/tmp/test_model.zip');
-
-        when(() => mockDownloader.download(any(), any(), onReceiveProgress: any(named: 'onReceiveProgress')))
-            .thenAnswer((_) async {});
-
-        final cubit = ModelManagerCubit(
-          capabilityService: mockCapabilityService,
-          downloader: mockDownloader,
-        );
-
-        // Note: This test would need a real file for full integration test
-        // For unit test, we verify the _verifyChecksum logic separately
-        expect(cubit.state, isA<ModelManagerInitial>());
-      });
-    });
-
-    group('_verifyChecksum', () {
-      test('passes when checksum matches', () async {
-        // Test the constant-time comparison logic directly
-        final expected = 'a'.repeat(64);
-        final actualBytes = List<int>.generate(32, (i) => 0xaa);
-        final expectedBytes = List<int>.generate(32, (i) => 0xaa);
-
-        final cubit = ModelManagerCubit(
-          capabilityService: mockCapabilityService,
-          downloader: mockDownloader,
-        );
-
-        // Use reflection or test the static method indirectly
-        // For now, verify the logic exists
-        expect(ModelManagerCubit._constantTimeEquals(expectedBytes, actualBytes), isTrue);
-      });
-
-      test('fails when checksum mismatches', () async {
-        final actualBytes = List<int>.generate(32, (i) => 0xaa);
-        final expectedBytes = List<int>.generate(32, (i) => 0xbb);
-
-        expect(ModelManagerCubit._constantTimeEquals(expectedBytes, actualBytes), isFalse);
-      });
-
-      test('fails when lengths differ', () async {
-        final actualBytes = List<int>.generate(32, (i) => 0xaa);
-        final expectedBytes = List<int>.generate(31, (i) => 0xaa);
-
-        expect(ModelManagerCubit._constantTimeEquals(expectedBytes, actualBytes), isFalse);
-      });
-    });
-
-    group('_parseHex', () {
-      test('parses valid hex string', () {
-        const hex = 'aabbccdd';
-        final result = ModelManagerCubit._parseHex(hex);
-
-        expect(result, isNotNull);
-        expect(result!.length, 4);
-        expect(result[0], 0xaa);
-        expect(result[1], 0xbb);
-        expect(result[2], 0xcc);
-        expect(result[3], 0xdd);
-      });
-
-      test('returns null for odd length', () {
-        expect(ModelManagerCubit._parseHex('abc'), isNull);
-      });
-
-      test('returns null for invalid characters', () {
-        expect(ModelManagerCubit._parseHex('xyz'), isNull);
-      });
-
-      test('handles uppercase', () {
-        const hex = 'AABBCCDD';
-        final result = ModelManagerCubit._parseHex(hex);
-
-        expect(result, isNotNull);
-        expect(result![0], 0xaa);
+        await cubit.close();
       });
     });
   });
