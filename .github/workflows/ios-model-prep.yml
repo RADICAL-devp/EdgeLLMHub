@@ -57,7 +57,7 @@ jobs:
           shasum -a 256 -c SHA256SUMS.txt
 
       - name: Upload model artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smollm-350m-instruct-q4f16_1-mlc
           path: projects/apps/doctor_app/ios/mlc-llm/**
