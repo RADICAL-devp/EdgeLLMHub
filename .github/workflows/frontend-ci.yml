@@ -60,7 +60,7 @@ jobs:
           channel: stable
           cache: true
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Accept Android licenses
         run: yes | flutter doctor --android-licenses
