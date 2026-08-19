@@ -30,7 +30,7 @@ dependencies:
   shared_preferences: ^2.3.0
   shared_models:
     path: ../../packages/shared_models
-  permission_handler: ^11.3.1
+  permission_handler: ^13.0.1
   workmanager: ^0.10.8
   crypto: ^3.0.3
   convert: ^3.1.2
