@@ -35,7 +35,7 @@ dependencies:
   crypto: ^3.0.3
   convert: ^3.1.2
   encrypt: ^5.0.3
-  sqlite3: ^3.4.0
+  sqlite3: ^3.5.1
   flutter_quill: ^11.5.1
   flutter_localizations:
     sdk: flutter
