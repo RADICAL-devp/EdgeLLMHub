@@ -62,7 +62,7 @@ jobs:
             --passphrase-fd 0 --armor --detach-sign clinical-intelligence-dart-linux-x64.tar.gz
 
       - name: Attach to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/clinical-intelligence-dart-linux-x64.tar.gz
@@ -70,7 +70,7 @@ jobs:
 
       - name: Attach GPG signature to release
         if: ${{ secrets.RELEASE_GPG_PRIVATE_KEY != '' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/clinical-intelligence-dart-linux-x64.tar.gz.asc
 
@@ -105,7 +105,7 @@ jobs:
         run: flutter build appbundle --release
 
       - name: Attach to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: build/app/outputs/bundle/release/app-release.aab
 
@@ -135,6 +135,6 @@ jobs:
           zip -rq ../../../dist/doctor-app-ios.zip build/ios/iphoneos/Runner.app
 
       - name: Attach to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/doctor-app-ios.zip
