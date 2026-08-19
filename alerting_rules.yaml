@@ -1,0 +1,89 @@
+# Alerting rules for the Clinical Intelligence Platform.
+#
+# Prometheus alerting rules (alertmanager-compatible format).
+# Scrape targets:
+#   - Backend (Dart Frog):     GET /metrics  (exempt from auth)
+#   - Nodes:                   node_exporter (disk usage rule)
+#
+# Metric families recorded by the backend (see
+# projects/apps/clinical-intelligence-dart/lib/core/observability/):
+#   http_requests_total                 counter   {method, path, status}
+#   http_request_duration_seconds       histogram {method, path, status}
+#   llm_inference_duration_seconds      histogram {method}
+#   llm_inference_errors_total          counter   {method}
+#   active_consultations                gauge
+groups:
+  - name: clinical-intelligence-platform
+    rules:
+      # ── 1. Error rate > 5% (5xx over the last 5 minutes) ────────────────
+      - alert: HighHttpErrorRate
+        expr: |
+          sum by (job, instance) (
+            rate(http_requests_total{status=~"5.."}[5m])
+          )
+          /
+          sum by (job, instance) (
+            rate(http_requests_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "HTTP 5xx error rate above 5% ({{ $value | humanizePercentage }})"
+          description: >
+            The backend is serving more than 5% of requests with 5xx responses
+            over the last 5 minutes (currently {{ $value | humanizePercentage }}).
+            Check LLM adapter health, database connectivity and recent deploys.
+
+      # ── 2. p99 latency > 5s (LLM-backed endpoints) ───────────────────────
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket[5m])
+            )
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "p99 HTTP latency above 5s ({{ $value }}s)"
+          description: >
+            The p99 latency of the backend exceeded 5 seconds for 10 minutes
+            (currently {{ $value }}s). On-device/edge models or the Ollama
+            service may be overloaded; review llm_inference_duration_seconds.
+
+      # ── 3. Model load failures > 0 ───────────────────────────────────────
+      - alert: LlmModelLoadFailures
+        expr: |
+          increase(llm_inference_errors_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "LLM inference failures detected ({{ $value }} in 5m)"
+          description: >
+            At least one LLM inference call failed in the last 5 minutes
+            ({{ $value }} failures). The model may have failed to load or the
+            inference backend is unreachable. Inspect llm_inference_errors_total
+            by method label and the server logs.
+
+      # ── 4. Disk usage > 80% (node_exporter) ──────────────────────────────
+      - alert: HighDiskUsage
+        expr: |
+          (1 - node_filesystem_avail_bytes{mountpoint="/"} /
+              node_filesystem_size_bytes{mountpoint="/"}) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Root filesystem usage above 80% ({{ $value | humanizePercentage }})"
+          description: >
+            The root filesystem on {{ $labels.instance }} is
+            {{ $value | humanizePercentage }} full. SQLite databases and
+            model artifacts grow on disk; free space or purge old data soon.

@@ -12,6 +12,7 @@
         "drift",
         "http",
         "jose",
+        "json_schema",
         "meta",
         "path",
         "pointycastle",
@@ -137,9 +138,29 @@
       ]
     },
     {
+      "name": "json_schema",
+      "version": "5.2.2",
+      "dependencies": [
+        "collection",
+        "http",
+        "logging",
+        "rfc_6901",
+        "uri"
+      ]
+    },
+    {
       "name": "args",
       "version": "2.7.0",
       "dependencies": []
+    },
+    {
+      "name": "pointycastle",
+      "version": "3.9.1",
+      "dependencies": [
+        "collection",
+        "convert",
+        "js"
+      ]
     },
     {
       "name": "jose",
@@ -706,6 +727,26 @@
       ]
     },
     {
+      "name": "uri",
+      "version": "1.0.0",
+      "dependencies": [
+        "matcher",
+        "quiver"
+      ]
+    },
+    {
+      "name": "rfc_6901",
+      "version": "0.2.1",
+      "dependencies": []
+    },
+    {
+      "name": "convert",
+      "version": "3.1.2",
+      "dependencies": [
+        "typed_data"
+      ]
+    },
+    {
       "name": "archive",
       "version": "4.0.9",
       "dependencies": [
@@ -738,6 +779,16 @@
       ]
     },
     {
+      "name": "crypto_keys",
+      "version": "0.3.0+1",
+      "dependencies": [
+        "collection",
+        "meta",
+        "pointycastle",
+        "quiver"
+      ]
+    },
+    {
       "name": "equatable",
       "version": "2.1.0",
       "dependencies": [
@@ -754,13 +805,6 @@
       "name": "ffi",
       "version": "2.2.0",
       "dependencies": []
-    },
-    {
-      "name": "convert",
-      "version": "3.1.2",
-      "dependencies": [
-        "typed_data"
-      ]
     },
     {
       "name": "fixnum",
@@ -889,19 +933,19 @@
       ]
     },
     {
+      "name": "quiver",
+      "version": "3.2.2",
+      "dependencies": [
+        "matcher"
+      ]
+    },
+    {
       "name": "posix",
       "version": "6.5.2",
       "dependencies": [
         "ffi",
         "meta",
         "path"
-      ]
-    },
-    {
-      "name": "quiver",
-      "version": "3.2.2",
-      "dependencies": [
-        "matcher"
       ]
     },
     {
@@ -913,25 +957,6 @@
         "stream_transform",
         "vm_service",
         "watcher"
-      ]
-    },
-    {
-      "name": "crypto_keys",
-      "version": "0.3.0+1",
-      "dependencies": [
-        "collection",
-        "meta",
-        "pointycastle",
-        "quiver"
-      ]
-    },
-    {
-      "name": "pointycastle",
-      "version": "3.9.1",
-      "dependencies": [
-        "collection",
-        "convert",
-        "js"
       ]
     }
   ],

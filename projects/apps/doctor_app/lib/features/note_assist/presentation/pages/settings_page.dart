@@ -1,21 +1,18 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:doctor_app/core/config/environment.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 import 'package:doctor_app/core/services/sync_queue_service.dart';
 import 'package:doctor_app/features/note_assist/data/local/sync_queue_entry.dart';
+import 'package:doctor_app/features/note_assist/domain/services/diagnostics_exporter.dart';
 
-/// Keys persisted via [SharedPreferences].
-const String prefCloudLlmEnabled = 'cloud_llm_enabled';
-const String prefPhiConsentGranted = 'phi_consent_granted';
-
-/// App settings: privacy toggles (cloud processing / PHI consent), device
+/// App settings: privacy info (on-device processing only), device
 /// capability info, and sync-queue diagnostics with log export.
+///
+/// Cloud processing is disabled by design — PHI must never leave the
+/// device — so there is no cloud/consent toggle to expose.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -24,10 +21,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  late SharedPreferences _prefs;
   bool _loaded = false;
-  bool _cloudLlmEnabled = false;
-  bool _phiConsentGranted = false;
   ExecutionMode _recommendedMode = ExecutionMode.cloud;
 
   @override
@@ -37,36 +31,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
     final capability = GetIt.I<DeviceCapabilityService>();
     final recommended = await capability.getRecommendedExecutionMode();
 
     if (!mounted) return;
     setState(() {
-      _prefs = prefs;
-      _cloudLlmEnabled = prefs.getBool(prefCloudLlmEnabled) ??
-          EnvironmentConfig.cloudLlmEnabled;
-      _phiConsentGranted =
-          prefs.getBool(prefPhiConsentGranted) ?? false;
       _recommendedMode = recommended;
       _loaded = true;
     });
-  }
-
-  Future<void> _setCloudLlm(bool value) async {
-    setState(() => _cloudLlmEnabled = value);
-    await _prefs.setBool(prefCloudLlmEnabled, value);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(value
-          ? 'Cloud processing enabled. PHI may leave the device.'
-          : 'On-device processing only. PHI stays on the device.'),
-    ));
-  }
-
-  Future<void> _setPhiConsent(bool value) async {
-    setState(() => _phiConsentGranted = value);
-    await _prefs.setBool(prefPhiConsentGranted, value);
   }
 
   Future<void> _exportLog() async {
@@ -82,15 +54,19 @@ class _SettingsPageState extends State<SettingsPage> {
       ..writeln('----------------------------------------')
       ..writeln('Environment: ${EnvironmentConfig.environment.name}')
       ..writeln('API base URL: ${EnvironmentConfig.apiBaseUrl}')
-      ..writeln('Cloud LLM enabled (pref): $_cloudLlmEnabled')
-      ..writeln('PHI consent granted: $_phiConsentGranted')
+      ..writeln(
+        'Cloud LLM enabled (config): '
+        '${EnvironmentConfig.cloudLlmEnabled} — disabled by design, '
+        'PHI never leaves the device',
+      )
       ..writeln('Recommended execution mode: ${_recommendedMode.name}')
       ..writeln('Is simulator: $simulator')
       ..writeln('Supported model: ${EnvironmentConfig.supportedModels.join(', ')}')
       ..writeln()
-      ..writeln('Pending sync entries: ${pending.length}')
-      ..writeln('Dead letter entries: ${dead.length}')
-      ..writeln();
+      ..writeln('Pending sync entries: ${pending.length}');
+
+    buffer.writeln('Dead letter entries: ${dead.length}');
+    buffer.writeln();
     for (final entry in pending) {
       buffer
         ..writeln('Pending: ${entry.noteId} op=${entry.operation} '
@@ -105,16 +81,28 @@ class _SettingsPageState extends State<SettingsPage> {
         ..writeln();
     }
 
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/diagnostics-'
-        '${DateTime.now().millisecondsSinceEpoch}.log');
-    await file.writeAsString(buffer.toString());
+    final filePath =
+        await GetIt.I<DiagnosticsExporter>().exportLog(buffer.toString());
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Diagnostics exported to ${file.path}'),
-      duration: const Duration(seconds: 6),
-    ));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: buffer.toString(),
+          subject: 'Clinical Intelligence diagnostics log',
+        ),
+      );
+      messenger.showSnackBar(SnackBar(
+        content: Text('Diagnostics exported to $filePath'),
+        duration: const Duration(seconds: 6),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('Exported to $filePath (share unavailable)'),
+        duration: const Duration(seconds: 6),
+      ));
+    }
   }
 
   Future<void> _syncNow() async {
@@ -142,24 +130,13 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         children: [
           const _SectionHeader('Privacy & Processing'),
-          SwitchListTile(
-            title: const Text('Allow cloud processing'),
+          const ListTile(
+            leading: Icon(Icons.lock_outline),
+            title: Text('On-device processing only'),
             subtitle: Text(
-              _cloudLlmEnabled
-                  ? 'Enabled: PHI may be sent to the Ollama cloud service.'
-                  : 'Disabled: all processing stays on-device where available.',
+              'All AI runs locally on this device. PHI never leaves the '
+              'device — cloud processing is disabled by design.',
             ),
-            value: _cloudLlmEnabled,
-            onChanged: _setCloudLlm,
-          ),
-          SwitchListTile(
-            title: const Text('PHI consent granted'),
-            subtitle: const Text(
-              'Consent to process protected health information. '
-              'Required before any cloud request is made.',
-            ),
-            value: _phiConsentGranted,
-            onChanged: _setPhiConsent,
           ),
           ListTile(
             leading: const Icon(Icons.memory),
@@ -200,7 +177,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ListTile(
             leading: const Icon(Icons.file_download_outlined),
             title: const Text('Export diagnostics log'),
-            subtitle: const Text('Writes a device log to app documents'),
+            subtitle: const Text('Share a device log with support'),
             onTap: _exportLog,
           ),
           ListTile(

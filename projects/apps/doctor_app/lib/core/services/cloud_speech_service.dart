@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
-import 'package:doctor_app/core/exceptions/app_exceptions.dart';
-import 'package:doctor_app/core/network/dio_error_handler.dart';
 import 'speech_service.dart';
 
 /// Cloud-based speech-to-text service for environments where native
@@ -23,17 +23,22 @@ class CloudSpeechService implements SpeechService {
     Duration? silenceTimeout,
     double? listenTimeout,
   }) async {
-    // Verify the backend is reachable
+    // Verify the backend is reachable.
+    // The mock STT below works fully offline, so a failing health check
+    // must NOT fail app startup — degrade gracefully instead.
     try {
       // A simple health check — in production, this would ping a
       // speech-specific endpoint
       await _dio.get('/');
       return true;
     } on DioException catch (e) {
-      throw SpeechException(
-        'Cloud STT service is not available: ${DioErrorHandler.handle(e).message}',
-        cause: e,
+      developer.log(
+        'Cloud STT backend unreachable: ${e.message} — '
+        'continuing with offline mock STT.',
+        name: 'CloudSpeechService',
+        error: e,
       );
+      return true;
     } catch (e) {
       // If backend is not reachable, fall through gracefully
       // The mock behavior below will provide a usable experience

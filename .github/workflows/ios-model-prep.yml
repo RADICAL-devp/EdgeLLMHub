@@ -1,0 +1,113 @@
+name: iOS Model Prep
+
+on:
+  push:
+    tags: ['model-*']
+  workflow_dispatch:
+
+concurrency:
+  group: ios-model-prep
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  IOS_DIR: projects/apps/doctor_app/ios
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  MODEL_BUNDLE_DIR: SmolLM-350M-Instruct-q4f16_1-MLC
+  MODEL_ARCHIVE: smolLM-350M-Instruct-q4f16_1-MLC.zip
+
+jobs:
+  compile:
+    name: Compile SmolLM-350M & Verify Checksums
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
+
+      - name: Create MLC venv
+        run: |
+          python3 -m venv "$IOS_DIR/venv-mlc"
+          "$IOS_DIR/venv-mlc/bin/python" -m pip install --upgrade pip
+          "$IOS_DIR/venv-mlc/bin/python" -m pip install cmake ninja pytest
+
+      - name: Install mlc_llm wheels
+        run: |
+          "$IOS_DIR/venv-mlc/bin/python" -m pip install --pre -f https://mlc.ai/wheels mlc-ai-cpu mlc-llm-cpu
+
+      - name: Build vendored tvm-ffi
+        run: |
+          FFI_DIR="$IOS_DIR/mlc-llm/3rdparty/tvm/3rdparty/tvm-ffi"
+          if [ -d "$FFI_DIR/.git" ]; then
+            git -C "$FFI_DIR" checkout 3c35034fd
+          fi
+          "$IOS_DIR/venv-mlc/bin/python" -m pip install "$FFI_DIR"
+
+      - name: Compile model & update config
+        working-directory: projects/apps/doctor_app
+        run: ./ios/scripts/setup_ios_mlc.sh
+
+      - name: Verify SHA256 checksums
+        working-directory: projects/apps/doctor_app
+        run: |
+          cd ios/mlc-llm
+          shasum -a 256 -c SHA256SUMS.txt
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smollm-350m-instruct-q4f16_1-mlc
+          path: projects/apps/doctor_app/ios/mlc-llm/**
+          if-no-files-found: error
+
+      - name: Attach to GitHub release (tagged runs only)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: projects/apps/doctor_app/ios/mlc-llm/**
+
+      - name: Configure AWS credentials (model artifacts bucket)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.MODEL_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.MODEL_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.MODEL_AWS_REGION }}
+
+      - name: Package model bundle for in-app download
+        working-directory: projects/apps/doctor_app
+        run: |
+          cd ios/mlc-llm
+          zip -r "../$MODEL_ARCHIVE" "$MODEL_BUNDLE_DIR"
+          cd ..
+          shasum -a 256 "$MODEL_ARCHIVE" > "$MODEL_ARCHIVE.sha256"
+          cat "$MODEL_ARCHIVE.sha256"
+          echo "ARCHIVE_SHA=$(cut -d' ' -f1 "$MODEL_ARCHIVE.sha256")" >> "$GITHUB_ENV"
+
+      - name: Upload to S3 (CloudFront CDN)
+        working-directory: projects/apps/doctor_app
+        run: |
+          aws s3 cp "ios/$MODEL_ARCHIVE" \
+            "s3://${{ secrets.MODEL_S3_BUCKET }}/models/$MODEL_ARCHIVE" \
+            --content-type application/zip \
+            --cache-control "public, max-age=3600, immutable" \
+            --metadata sha256="$ARCHIVE_SHA"
+          aws s3 cp "ios/$MODEL_ARCHIVE.sha256" \
+            "s3://${{ secrets.MODEL_S3_BUCKET }}/models/$MODEL_ARCHIVE.sha256" \
+            --content-type text/plain \
+            --cache-control "no-cache"
+
+      - name: Invalidate CloudFront cache
+        if: secrets.MODEL_CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.MODEL_CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/models/$MODEL_ARCHIVE" "/models/$MODEL_ARCHIVE.sha256"
+
+      - name: Print download URL + checksum for EnvironmentConfig
+        run: |
+          echo "Configure in doctor_app/lib/core/config/environment.dart:"
+          echo "  modelDownloadUrl = https://${{ secrets.MODEL_CLOUDFRONT_HOST }}/models/$MODEL_ARCHIVE"
+          echo "  modelChecksumSha256 = $ARCHIVE_SHA"

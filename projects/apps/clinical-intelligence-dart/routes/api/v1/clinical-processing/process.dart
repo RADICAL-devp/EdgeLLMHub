@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:clinical_intelligence_dart/api/dto/clinical_processing_request.dart';
 import 'package:clinical_intelligence_dart/application/services/clinical_processing_orchestrator.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
+import 'package:clinical_intelligence_dart/core/validation/request_validator.dart';
 import 'package:dart_frog/dart_frog.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// POST /api/v1/clinical-processing/process
 ///
@@ -19,7 +20,9 @@ import 'package:dart_frog/dart_frog.dart';
 ///   - SUMMARIZE: structured clinical summary
 ///   - GENERATE_DOCTOR_NOTE: doctor note generation
 Future<Response> onRequest(RequestContext context) async {
-  return requireAuth(_handleRequest, scopes: ['clinical:write'])(context);
+  return jsonSchemaValidation(RequestSchemas.clinicalProcess)(
+    requireAuth(_handleRequest, scopes: ['clinical:write']),
+  )(context);
 }
 
 Future<Response> _handleRequest(RequestContext context) async {
@@ -46,6 +49,18 @@ Future<Response> _handleRequest(RequestContext context) async {
     }
 
     final json = jsonDecode(body) as Map<String, dynamic>;
+
+    if (json['processingMode'] != null &&
+        ProcessingMode.tryParse(json['processingMode'] as String?) == null) {
+      return Response(
+        statusCode: HttpStatus.badRequest,
+        body: jsonEncode({
+          'error': 'Unknown processingMode: ${json['processingMode']}',
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
     final request = ClinicalProcessingRequest.fromJson(json);
 
     final orchestrator = context.read<ClinicalProcessingOrchestrator>();

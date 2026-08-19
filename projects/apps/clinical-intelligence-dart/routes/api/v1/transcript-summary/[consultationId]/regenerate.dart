@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:clinical_intelligence_dart/application/services/summary_orchestrator.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
+import 'package:clinical_intelligence_dart/core/observability/metric_registry.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// POST /api/v1/transcript-summary/[consultationId]/regenerate
@@ -12,11 +13,11 @@ import 'package:dart_frog/dart_frog.dart';
 Future<Response> onRequest(
   RequestContext context,
   String consultationId,
-) async {
-  return requireAuth(_handleRegenerate, scopes: ['clinical:write'])(
-    context,
-    consultationId,
-  );
+) {
+  return requireAuth(
+    (ctx) => _handleRegenerate(ctx, consultationId),
+    scopes: ['clinical:write'],
+  )(context);
 }
 
 Future<Response> _handleRegenerate(
@@ -34,6 +35,12 @@ Future<Response> _handleRegenerate(
   try {
     final orchestrator = context.read<SummaryOrchestrator>();
     final response = await orchestrator.regenerateSummary(consultationId);
+
+    // The regenerated summary replaces the active consultation summary.
+    context
+        .read<MetricRegistry>()
+        .gauge('active_consultations', help: 'Active consultation summaries.')
+        .decrement();
 
     return Response.json(body: response.toJson());
   } on ValidationException catch (e) {

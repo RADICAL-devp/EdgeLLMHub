@@ -1,4 +1,4 @@
-import 'package:doctor_app/core/dto/clinical_processing_response.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// Port for persisting processed output from clinical text processing.
 abstract class ProcessedOutputRepository {

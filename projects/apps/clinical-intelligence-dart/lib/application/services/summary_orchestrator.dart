@@ -1,9 +1,9 @@
-import 'package:uuid/uuid.dart';
 import 'package:shared_models/shared_models.dart';
+import 'package:uuid/uuid.dart';
 
-import '../../api/dto/transcript_summary_request.dart';
-import '../../api/dto/transcript_summary_response.dart';
+import '../../application/ports/embedding_service.dart';
 import '../../application/ports/vector_store_port.dart';
+import '../ports/llm_port.dart';
 import '../ports/transcript_repository.dart';
 import '../ports/transcript_summary_repository.dart';
 import 'doctor_note_generation_service.dart';
@@ -20,13 +20,13 @@ import 'validation_service.dart';
 ///   2. Persist transcript
 ///   3. Normalize transcript
 ///   4. Chunk transcript if needed
-///   5. Run LLM generation (structured summary, executive summary, doctor note)
-///   6. Aggregate chunk outputs if chunked
-///   7. Generate embeddings for vector store
-///   8. Persist summary bundle
-///   9. Return response
-///
-/// Milestone 2: Partially implemented / scaffolded.
+///   5. Retrieve similar past consultations from the vector store
+///   6. Run LLM generation (context-enriched structured summary,
+///      executive summary, doctor note)
+///   7. Aggregate chunk outputs if chunked
+///   8. Generate embeddings for vector store
+///   9. Persist summary bundle
+///   10. Return response
 class SummaryOrchestrator {
   SummaryOrchestrator({
     required this.validationService,
@@ -38,6 +38,7 @@ class SummaryOrchestrator {
     required this.transcriptRepository,
     required this.summaryRepository,
     required this.vectorStore,
+    required this.embeddingService,
     required this.llmPort,
   });
 
@@ -50,7 +51,14 @@ class SummaryOrchestrator {
   final TranscriptRepository transcriptRepository;
   final TranscriptSummaryRepository summaryRepository;
   final VectorStorePort vectorStore;
+  final EmbeddingService embeddingService;
   final LlmPort llmPort;
+
+  /// How many past consultations to retrieve as context, at most.
+  static const int retrievalTopK = 3;
+
+  /// Maximum characters of each retrieved past consultation to include.
+  static const int retrievalTranscriptLimit = 2000;
 
   /// Generate a full summary bundle from a transcript.
   Future<TranscriptSummaryResponse> generateSummary(
@@ -85,13 +93,21 @@ class SummaryOrchestrator {
     // 4. Chunk if needed
     final chunks = chunkingService.chunk(normalizedText);
 
-    // 5. Generate structured summary
-    // For single chunk, generate directly. For multiple, aggregate.
-    final structuredSummary = await summaryGenerationService.generate(
-      chunks.length == 1 ? chunks.first : normalizedText,
-    );
+    // 5. Retrieve similar past consultations from the vector store and use
+    //    them as context for a context-enriched summary.
+    final pastContext = await buildPastContext(normalizedText);
 
-    // 6. Generate doctor note
+    // 6. Generate structured summary
+    // For single chunk, generate directly. For multiple, aggregate.
+    final generationInput = chunks.length == 1 ? chunks.first : normalizedText;
+    final structuredSummary = pastContext.isEmpty
+        ? await summaryGenerationService.generate(generationInput)
+        : await llmPort.generateContextEnrichedSummary(
+            generationInput,
+            pastContext,
+          );
+
+    // 6b. Generate doctor note
     final doctorNote = await doctorNoteGenerationService.generate(
       normalizedText: normalizedText,
       consultationId: request.consultationId,
@@ -130,6 +146,40 @@ class SummaryOrchestrator {
     );
   }
 
+  /// Build a context block from the most similar past consultations.
+  ///
+  /// Returns an empty string when no similar consultations exist (or the
+  /// vector store is unavailable), so callers can skip context enrichment.
+  Future<String> buildPastContext(
+    String transcriptText, {
+    int k = retrievalTopK,
+  }) async {
+    try {
+      final query = await embeddingService.embed(transcriptText);
+      final matches = await vectorStore.search(queryEmbedding: query, k: k);
+      _log('Retrieved ${matches.length} similar past consultation(s)');
+
+      final blocks = <String>[];
+      for (final match in matches) {
+        try {
+          final metadata = match.metadata;
+          final text = (metadata['transcriptText'] as String?) ?? '';
+          final summary = metadata['structuredSummary'];
+          if (text.isEmpty && summary == null) continue;
+          blocks.add('Consultation ${match.id}:\n'
+              '${text.length > retrievalTranscriptLimit ? text.substring(0, retrievalTranscriptLimit) : text}\n'
+              'Summary: $summary');
+        } catch (e) {
+          _log('Skipping malformed vector match ${match.id}: $e');
+        }
+      }
+      return blocks.join('\n\n---\n\n');
+    } catch (e) {
+      _log('Failed to retrieve past context (continuing without it): $e');
+      return '';
+    }
+  }
+
   /// Store embeddings in vector store for future context-enriched queries.
   Future<void> _storeEmbeddings({
     required String consultationId,
@@ -138,9 +188,7 @@ class SummaryOrchestrator {
     required StructuredSummary structuredSummary,
   }) async {
     try {
-      // Create embedding from transcript text (in production, use a proper embedding model)
-      // For now, we'll use a simple hash-based approach as placeholder
-      final embedding = _createPlaceholderEmbedding(transcriptText);
+      final embedding = await embeddingService.embed(transcriptText);
 
       await vectorStore.add(
         id: consultationId,
@@ -148,7 +196,8 @@ class SummaryOrchestrator {
         metadata: {
           'consultationId': consultationId,
           'transcriptId': transcriptId,
-          'transcriptText': transcriptText.substring(0, 500), // Truncate for storage
+          'transcriptText':
+              transcriptText.substring(0, 500), // Truncate for storage
           'structuredSummary': structuredSummary.toJson(),
           'resource_type': 'consultation',
           'resource_id': consultationId,
@@ -156,26 +205,18 @@ class SummaryOrchestrator {
       );
     } catch (e) {
       // Don't fail the request if vector store fails
-      print('[SummaryOrchestrator] Failed to store embedding: $e');
+      _log('Failed to store embedding: $e');
     }
   }
 
-  /// Placeholder embedding generation.
-  /// In production, replace with proper embedding model (e.g., sentence-transformers via Python bridge).
-  List<double> _createPlaceholderEmbedding(String text) {
-    final hash = text.codeUnits.fold(0, (a, b) => (a * 31 + b) & 0x7fffffff);
-    final random = List<double>.generate(960, (i) {
-      return ((hash * (i + 1) * 16807) % 2147483647) / 2147483647.0;
-    });
-    // Normalize
-    final norm = math.sqrt(random.fold(0.0, (a, b) => a + b * b));
-    return random.map((v) => v / norm).toList();
+  void _log(String message) {
+    // ignore: avoid_print
+    print('[SummaryOrchestrator] $message');
   }
 
   /// Retrieve a previously generated summary.
   Future<TranscriptSummaryResponse?> getSummary(String consultationId) async {
-    final bundle =
-        await summaryRepository.findByConsultationId(consultationId);
+    final bundle = await summaryRepository.findByConsultationId(consultationId);
     if (bundle == null) return null;
 
     return TranscriptSummaryResponse(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../application/ports/llm_port.dart';
 import 'package:shared_models/shared_models.dart';
 
@@ -57,6 +59,46 @@ class StubLlmAdapter implements LlmPort {
   Future<String> generateDoctorNote(String transcriptText) async {
     return '[Stub] Doctor note not generated — LLM not connected. '
         'Input length: ${transcriptText.length} chars.';
+  }
+
+  // ============ FIELD-LEVEL GENERATION (STUB) ============
+
+  @override
+  Future<String> generateField(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 100)); // Simulate latency
+    return '[Stub] $fieldName not generated — LLM not connected. '
+        'Input length: ${transcriptText.length} chars.';
+  }
+
+  @override
+  Stream<String> generateFieldStream(
+    String fieldName,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async* {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    yield '[Stub] $fieldName ';
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    yield 'not generated — ';
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    yield 'LLM not connected.';
+  }
+
+  @override
+  Future<Map<String, String>> generateFields(
+    List<String> fieldNames,
+    String transcriptText, {
+    PatientContext? patientContext,
+  }) async {
+    final results = <String, String>{};
+    for (final fieldName in fieldNames) {
+      results[fieldName] = await generateField(fieldName, transcriptText, patientContext: patientContext);
+    }
+    return results;
   }
 
   /// On-device VOCAB_ASSIST processing (no LLM required).

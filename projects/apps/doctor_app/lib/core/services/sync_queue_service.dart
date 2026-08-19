@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
@@ -41,20 +42,26 @@ class SyncQueueService {
   }
 
   /// Register the background sync task with workmanager.
+  /// Periodic tasks are Android-only in the workmanager plugin — the iOS
+  /// side does not implement `registerPeriodicTask` and throws
+  /// PlatformException("Unhandled method registerPeriodicTask"), which
+  /// would crash app startup.
   Future<void> _registerBackgroundTask() async {
     await Workmanager().initialize(
       callbackDispatcher,
       isInDebugMode: false,
     );
-    await Workmanager().registerPeriodicTask(
-      'syncQueueBackgroundSync',
-      _backgroundSyncTask,
-      frequency: const Duration(minutes: 15),
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-        requiresCharging: false,
-      ),
-    );
+    if (Platform.isAndroid) {
+      await Workmanager().registerPeriodicTask(
+        'syncQueueBackgroundSync',
+        _backgroundSyncTask,
+        frequency: const Duration(minutes: 15),
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+          requiresCharging: false,
+        ),
+      );
+    }
   }
 
   /// Start listening for connectivity changes.
@@ -154,7 +161,7 @@ class SyncQueueService {
     }
   }
 
-  /// Handle retry with exponential backoff.
+/// Handle retry with exponential backoff.
   Future<void> _handleRetry(SyncQueueEntry entry, NetworkException error) async {
     final nextRetryCount = entry.retryCount + 1;
     
@@ -167,11 +174,16 @@ class SyncQueueService {
       return;
     }
 
-    // Calculate exponential backoff: 2^retry * baseDelay + jitter
-    final baseDelay = const Duration(seconds: 30);
+    // Exponential backoff: min(2^n * 1s, 60s) + jitter (0-1s)
+    const baseDelaySeconds = 1;
+    final cappedDelaySeconds = math.min(
+      (baseDelaySeconds * math.pow(2, nextRetryCount - 1)).round(),
+      60,
+    );
+    final jitterMillis = math.Random().nextInt(1000); // 0-1000ms
     final delay = Duration(
-      seconds: (baseDelay.inSeconds * math.pow(2, nextRetryCount - 1)).round() +
-          math.Random().nextInt(30),
+      seconds: cappedDelaySeconds,
+      milliseconds: jitterMillis,
     );
 
     final nextRetryAt = DateTime.now().toUtc().add(delay);

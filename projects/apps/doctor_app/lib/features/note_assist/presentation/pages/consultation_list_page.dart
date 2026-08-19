@@ -3,13 +3,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get_it/get_it.dart';
 
+import 'package:doctor_app/core/services/sync_queue_service.dart';
 import 'package:doctor_app/features/note_assist/data/local/note_local_repository.dart';
 import 'package:doctor_app/features/note_assist/domain/models/doctor_note.dart';
 import '../cubit/consultation_list_cubit.dart';
 import '../cubit/consultation_list_state.dart';
 
 /// Home screen: searchable, filterable list of consultations backed by the
-/// on-device note store. Supports pull-to-refresh and incremental loading.
+/// on-device note store. Supports pull-to-refresh (which flushes the sync
+/// queue) and incremental loading.
 class ConsultationListPage extends StatelessWidget {
   const ConsultationListPage({super.key});
 
@@ -18,6 +20,7 @@ class ConsultationListPage extends StatelessWidget {
     return BlocProvider(
       create: (context) => ConsultationListCubit(
         localRepository: GetIt.I<NoteLocalRepository>(),
+        syncQueueService: GetIt.I<SyncQueueService>(),
       )..load(),
       child: Scaffold(
         appBar: AppBar(
@@ -106,6 +109,10 @@ class _ConsultationListBody extends StatelessWidget {
         _StatusFilterBar(
           selected: state.statusFilter,
           onSelected: cubit.filterByStatus,
+        ),
+        _DateFilterBar(
+          selected: state.dateFilter,
+          onSelected: cubit.filterByDate,
         ),
         Expanded(
           child: RefreshIndicator(
@@ -302,6 +309,37 @@ class _StatusFilterBar extends StatelessWidget {
       selected: isSelected,
       onSelected: (_) => onSelected(isSelected ? null : status),
       showCheckmark: false,
+    );
+  }
+}
+
+class _DateFilterBar extends StatelessWidget {
+  final DateFilter selected;
+  final ValueChanged<DateFilter> onSelected;
+
+  const _DateFilterBar({required this.selected, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          children: [
+            for (final filter in DateFilter.values) ...[
+              if (filter != DateFilter.all) const SizedBox(width: 8),
+              FilterChip(
+                label: Text(filter.label),
+                selected: selected == filter,
+                onSelected: (_) => onSelected(filter),
+                showCheckmark: false,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

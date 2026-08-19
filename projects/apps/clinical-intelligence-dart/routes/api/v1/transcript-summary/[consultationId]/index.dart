@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:clinical_intelligence_dart/api/dto/transcript_summary_request.dart';
 import 'package:clinical_intelligence_dart/application/services/summary_orchestrator.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:clinical_intelligence_dart/core/auth/require_auth.dart';
+import 'package:clinical_intelligence_dart/core/observability/metric_registry.dart';
+import 'package:clinical_intelligence_dart/core/validation/request_validator.dart';
 import 'package:dart_frog/dart_frog.dart';
+import 'package:shared_models/shared_models.dart';
 
 /// GET /api/v1/transcript-summary/[consultationId]
 ///   - Retrieve a previously generated summary.
@@ -18,7 +20,9 @@ Future<Response> onRequest(
   String consultationId,
 ) async {
   if (consultationId == 'generate') {
-    return requireAuth(_handleGenerate, scopes: ['clinical:write'])(context);
+    return jsonSchemaValidation(RequestSchemas.summaryBundle)(
+      requireAuth(_handleGenerate, scopes: ['clinical:write']),
+    )(context);
   }
 
   return requireAuth(
@@ -52,6 +56,12 @@ Future<Response> _handleGenerate(RequestContext context) async {
 
     final orchestrator = context.read<SummaryOrchestrator>();
     final response = await orchestrator.generateSummary(request);
+
+    // A new consultation summary became active.
+    context
+        .read<MetricRegistry>()
+        .gauge('active_consultations', help: 'Active consultation summaries.')
+        .increment();
 
     return Response.json(body: response.toJson());
   } on ValidationException catch (e) {

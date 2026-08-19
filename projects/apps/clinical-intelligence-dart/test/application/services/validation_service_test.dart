@@ -1,5 +1,3 @@
-import 'package:clinical_intelligence_dart/api/dto/clinical_processing_request.dart';
-import 'package:clinical_intelligence_dart/api/dto/transcript_summary_request.dart';
 import 'package:clinical_intelligence_dart/application/services/validation_service.dart';
 import 'package:shared_models/shared_models.dart';
 import 'package:test/test.dart';

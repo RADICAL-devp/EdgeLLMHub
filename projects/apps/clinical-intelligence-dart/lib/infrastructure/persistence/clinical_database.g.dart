@@ -1894,6 +1894,591 @@ class AuditLogsCompanion extends UpdateCompanion<AuditLog> {
   }
 }
 
+class $SyncedDoctorNotesTable extends SyncedDoctorNotes
+    with TableInfo<$SyncedDoctorNotesTable, SyncedDoctorNote> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncedDoctorNotesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _noteIdMeta = const VerificationMeta('noteId');
+  @override
+  late final GeneratedColumn<String> noteId = GeneratedColumn<String>(
+      'note_id', aliasedName, false,
+      additionalChecks:
+          GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 128),
+      type: DriftSqlType.string,
+      requiredDuringInsert: true);
+  static const VerificationMeta _consultationIdMeta =
+      const VerificationMeta('consultationId');
+  @override
+  late final GeneratedColumn<String> consultationId = GeneratedColumn<String>(
+      'consultation_id', aliasedName, false,
+      additionalChecks:
+          GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 64),
+      type: DriftSqlType.string,
+      requiredDuringInsert: true);
+  static const VerificationMeta _patientIdMeta =
+      const VerificationMeta('patientId');
+  @override
+  late final GeneratedColumn<String> patientId = GeneratedColumn<String>(
+      'patient_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _doctorIdMeta =
+      const VerificationMeta('doctorId');
+  @override
+  late final GeneratedColumn<String> doctorId = GeneratedColumn<String>(
+      'doctor_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _rawTextMeta =
+      const VerificationMeta('rawText');
+  @override
+  late final GeneratedColumn<String> rawText = GeneratedColumn<String>(
+      'raw_text', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _richTextDeltaMeta =
+      const VerificationMeta('richTextDelta');
+  @override
+  late final GeneratedColumn<String> richTextDelta = GeneratedColumn<String>(
+      'rich_text_delta', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _extractedFieldsMeta =
+      const VerificationMeta('extractedFields');
+  @override
+  late final GeneratedColumn<String> extractedFields = GeneratedColumn<String>(
+      'extracted_fields', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _patientRecapMeta =
+      const VerificationMeta('patientRecap');
+  @override
+  late final GeneratedColumn<String> patientRecap = GeneratedColumn<String>(
+      'patient_recap', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        noteId,
+        consultationId,
+        patientId,
+        doctorId,
+        rawText,
+        richTextDelta,
+        status,
+        extractedFields,
+        patientRecap,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'synced_doctor_notes';
+  @override
+  VerificationContext validateIntegrity(Insertable<SyncedDoctorNote> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('note_id')) {
+      context.handle(_noteIdMeta,
+          noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta));
+    } else if (isInserting) {
+      context.missing(_noteIdMeta);
+    }
+    if (data.containsKey('consultation_id')) {
+      context.handle(
+          _consultationIdMeta,
+          consultationId.isAcceptableOrUnknown(
+              data['consultation_id']!, _consultationIdMeta));
+    } else if (isInserting) {
+      context.missing(_consultationIdMeta);
+    }
+    if (data.containsKey('patient_id')) {
+      context.handle(_patientIdMeta,
+          patientId.isAcceptableOrUnknown(data['patient_id']!, _patientIdMeta));
+    }
+    if (data.containsKey('doctor_id')) {
+      context.handle(_doctorIdMeta,
+          doctorId.isAcceptableOrUnknown(data['doctor_id']!, _doctorIdMeta));
+    }
+    if (data.containsKey('raw_text')) {
+      context.handle(_rawTextMeta,
+          rawText.isAcceptableOrUnknown(data['raw_text']!, _rawTextMeta));
+    } else if (isInserting) {
+      context.missing(_rawTextMeta);
+    }
+    if (data.containsKey('rich_text_delta')) {
+      context.handle(
+          _richTextDeltaMeta,
+          richTextDelta.isAcceptableOrUnknown(
+              data['rich_text_delta']!, _richTextDeltaMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('extracted_fields')) {
+      context.handle(
+          _extractedFieldsMeta,
+          extractedFields.isAcceptableOrUnknown(
+              data['extracted_fields']!, _extractedFieldsMeta));
+    }
+    if (data.containsKey('patient_recap')) {
+      context.handle(
+          _patientRecapMeta,
+          patientRecap.isAcceptableOrUnknown(
+              data['patient_recap']!, _patientRecapMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {noteId};
+  @override
+  SyncedDoctorNote map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncedDoctorNote(
+      noteId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note_id'])!,
+      consultationId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}consultation_id'])!,
+      patientId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}patient_id']),
+      doctorId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}doctor_id']),
+      rawText: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}raw_text'])!,
+      richTextDelta: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}rich_text_delta']),
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      extractedFields: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}extracted_fields']),
+      patientRecap: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}patient_recap']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $SyncedDoctorNotesTable createAlias(String alias) {
+    return $SyncedDoctorNotesTable(attachedDatabase, alias);
+  }
+}
+
+class SyncedDoctorNote extends DataClass
+    implements Insertable<SyncedDoctorNote> {
+  final String noteId;
+  final String consultationId;
+  final String? patientId;
+  final String? doctorId;
+  final String rawText;
+  final String? richTextDelta;
+  final String status;
+  final String? extractedFields;
+  final String? patientRecap;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const SyncedDoctorNote(
+      {required this.noteId,
+      required this.consultationId,
+      this.patientId,
+      this.doctorId,
+      required this.rawText,
+      this.richTextDelta,
+      required this.status,
+      this.extractedFields,
+      this.patientRecap,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['note_id'] = Variable<String>(noteId);
+    map['consultation_id'] = Variable<String>(consultationId);
+    if (!nullToAbsent || patientId != null) {
+      map['patient_id'] = Variable<String>(patientId);
+    }
+    if (!nullToAbsent || doctorId != null) {
+      map['doctor_id'] = Variable<String>(doctorId);
+    }
+    map['raw_text'] = Variable<String>(rawText);
+    if (!nullToAbsent || richTextDelta != null) {
+      map['rich_text_delta'] = Variable<String>(richTextDelta);
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || extractedFields != null) {
+      map['extracted_fields'] = Variable<String>(extractedFields);
+    }
+    if (!nullToAbsent || patientRecap != null) {
+      map['patient_recap'] = Variable<String>(patientRecap);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SyncedDoctorNotesCompanion toCompanion(bool nullToAbsent) {
+    return SyncedDoctorNotesCompanion(
+      noteId: Value(noteId),
+      consultationId: Value(consultationId),
+      patientId: patientId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(patientId),
+      doctorId: doctorId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(doctorId),
+      rawText: Value(rawText),
+      richTextDelta: richTextDelta == null && nullToAbsent
+          ? const Value.absent()
+          : Value(richTextDelta),
+      status: Value(status),
+      extractedFields: extractedFields == null && nullToAbsent
+          ? const Value.absent()
+          : Value(extractedFields),
+      patientRecap: patientRecap == null && nullToAbsent
+          ? const Value.absent()
+          : Value(patientRecap),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SyncedDoctorNote.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncedDoctorNote(
+      noteId: serializer.fromJson<String>(json['noteId']),
+      consultationId: serializer.fromJson<String>(json['consultationId']),
+      patientId: serializer.fromJson<String?>(json['patientId']),
+      doctorId: serializer.fromJson<String?>(json['doctorId']),
+      rawText: serializer.fromJson<String>(json['rawText']),
+      richTextDelta: serializer.fromJson<String?>(json['richTextDelta']),
+      status: serializer.fromJson<String>(json['status']),
+      extractedFields: serializer.fromJson<String?>(json['extractedFields']),
+      patientRecap: serializer.fromJson<String?>(json['patientRecap']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'noteId': serializer.toJson<String>(noteId),
+      'consultationId': serializer.toJson<String>(consultationId),
+      'patientId': serializer.toJson<String?>(patientId),
+      'doctorId': serializer.toJson<String?>(doctorId),
+      'rawText': serializer.toJson<String>(rawText),
+      'richTextDelta': serializer.toJson<String?>(richTextDelta),
+      'status': serializer.toJson<String>(status),
+      'extractedFields': serializer.toJson<String?>(extractedFields),
+      'patientRecap': serializer.toJson<String?>(patientRecap),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SyncedDoctorNote copyWith(
+          {String? noteId,
+          String? consultationId,
+          Value<String?> patientId = const Value.absent(),
+          Value<String?> doctorId = const Value.absent(),
+          String? rawText,
+          Value<String?> richTextDelta = const Value.absent(),
+          String? status,
+          Value<String?> extractedFields = const Value.absent(),
+          Value<String?> patientRecap = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      SyncedDoctorNote(
+        noteId: noteId ?? this.noteId,
+        consultationId: consultationId ?? this.consultationId,
+        patientId: patientId.present ? patientId.value : this.patientId,
+        doctorId: doctorId.present ? doctorId.value : this.doctorId,
+        rawText: rawText ?? this.rawText,
+        richTextDelta:
+            richTextDelta.present ? richTextDelta.value : this.richTextDelta,
+        status: status ?? this.status,
+        extractedFields: extractedFields.present
+            ? extractedFields.value
+            : this.extractedFields,
+        patientRecap:
+            patientRecap.present ? patientRecap.value : this.patientRecap,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  SyncedDoctorNote copyWithCompanion(SyncedDoctorNotesCompanion data) {
+    return SyncedDoctorNote(
+      noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      consultationId: data.consultationId.present
+          ? data.consultationId.value
+          : this.consultationId,
+      patientId: data.patientId.present ? data.patientId.value : this.patientId,
+      doctorId: data.doctorId.present ? data.doctorId.value : this.doctorId,
+      rawText: data.rawText.present ? data.rawText.value : this.rawText,
+      richTextDelta: data.richTextDelta.present
+          ? data.richTextDelta.value
+          : this.richTextDelta,
+      status: data.status.present ? data.status.value : this.status,
+      extractedFields: data.extractedFields.present
+          ? data.extractedFields.value
+          : this.extractedFields,
+      patientRecap: data.patientRecap.present
+          ? data.patientRecap.value
+          : this.patientRecap,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncedDoctorNote(')
+          ..write('noteId: $noteId, ')
+          ..write('consultationId: $consultationId, ')
+          ..write('patientId: $patientId, ')
+          ..write('doctorId: $doctorId, ')
+          ..write('rawText: $rawText, ')
+          ..write('richTextDelta: $richTextDelta, ')
+          ..write('status: $status, ')
+          ..write('extractedFields: $extractedFields, ')
+          ..write('patientRecap: $patientRecap, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      noteId,
+      consultationId,
+      patientId,
+      doctorId,
+      rawText,
+      richTextDelta,
+      status,
+      extractedFields,
+      patientRecap,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncedDoctorNote &&
+          other.noteId == this.noteId &&
+          other.consultationId == this.consultationId &&
+          other.patientId == this.patientId &&
+          other.doctorId == this.doctorId &&
+          other.rawText == this.rawText &&
+          other.richTextDelta == this.richTextDelta &&
+          other.status == this.status &&
+          other.extractedFields == this.extractedFields &&
+          other.patientRecap == this.patientRecap &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SyncedDoctorNotesCompanion extends UpdateCompanion<SyncedDoctorNote> {
+  final Value<String> noteId;
+  final Value<String> consultationId;
+  final Value<String?> patientId;
+  final Value<String?> doctorId;
+  final Value<String> rawText;
+  final Value<String?> richTextDelta;
+  final Value<String> status;
+  final Value<String?> extractedFields;
+  final Value<String?> patientRecap;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const SyncedDoctorNotesCompanion({
+    this.noteId = const Value.absent(),
+    this.consultationId = const Value.absent(),
+    this.patientId = const Value.absent(),
+    this.doctorId = const Value.absent(),
+    this.rawText = const Value.absent(),
+    this.richTextDelta = const Value.absent(),
+    this.status = const Value.absent(),
+    this.extractedFields = const Value.absent(),
+    this.patientRecap = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncedDoctorNotesCompanion.insert({
+    required String noteId,
+    required String consultationId,
+    this.patientId = const Value.absent(),
+    this.doctorId = const Value.absent(),
+    required String rawText,
+    this.richTextDelta = const Value.absent(),
+    required String status,
+    this.extractedFields = const Value.absent(),
+    this.patientRecap = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  })  : noteId = Value(noteId),
+        consultationId = Value(consultationId),
+        rawText = Value(rawText),
+        status = Value(status),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<SyncedDoctorNote> custom({
+    Expression<String>? noteId,
+    Expression<String>? consultationId,
+    Expression<String>? patientId,
+    Expression<String>? doctorId,
+    Expression<String>? rawText,
+    Expression<String>? richTextDelta,
+    Expression<String>? status,
+    Expression<String>? extractedFields,
+    Expression<String>? patientRecap,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (noteId != null) 'note_id': noteId,
+      if (consultationId != null) 'consultation_id': consultationId,
+      if (patientId != null) 'patient_id': patientId,
+      if (doctorId != null) 'doctor_id': doctorId,
+      if (rawText != null) 'raw_text': rawText,
+      if (richTextDelta != null) 'rich_text_delta': richTextDelta,
+      if (status != null) 'status': status,
+      if (extractedFields != null) 'extracted_fields': extractedFields,
+      if (patientRecap != null) 'patient_recap': patientRecap,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncedDoctorNotesCompanion copyWith(
+      {Value<String>? noteId,
+      Value<String>? consultationId,
+      Value<String?>? patientId,
+      Value<String?>? doctorId,
+      Value<String>? rawText,
+      Value<String?>? richTextDelta,
+      Value<String>? status,
+      Value<String?>? extractedFields,
+      Value<String?>? patientRecap,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return SyncedDoctorNotesCompanion(
+      noteId: noteId ?? this.noteId,
+      consultationId: consultationId ?? this.consultationId,
+      patientId: patientId ?? this.patientId,
+      doctorId: doctorId ?? this.doctorId,
+      rawText: rawText ?? this.rawText,
+      richTextDelta: richTextDelta ?? this.richTextDelta,
+      status: status ?? this.status,
+      extractedFields: extractedFields ?? this.extractedFields,
+      patientRecap: patientRecap ?? this.patientRecap,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (noteId.present) {
+      map['note_id'] = Variable<String>(noteId.value);
+    }
+    if (consultationId.present) {
+      map['consultation_id'] = Variable<String>(consultationId.value);
+    }
+    if (patientId.present) {
+      map['patient_id'] = Variable<String>(patientId.value);
+    }
+    if (doctorId.present) {
+      map['doctor_id'] = Variable<String>(doctorId.value);
+    }
+    if (rawText.present) {
+      map['raw_text'] = Variable<String>(rawText.value);
+    }
+    if (richTextDelta.present) {
+      map['rich_text_delta'] = Variable<String>(richTextDelta.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (extractedFields.present) {
+      map['extracted_fields'] = Variable<String>(extractedFields.value);
+    }
+    if (patientRecap.present) {
+      map['patient_recap'] = Variable<String>(patientRecap.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncedDoctorNotesCompanion(')
+          ..write('noteId: $noteId, ')
+          ..write('consultationId: $consultationId, ')
+          ..write('patientId: $patientId, ')
+          ..write('doctorId: $doctorId, ')
+          ..write('rawText: $rawText, ')
+          ..write('richTextDelta: $richTextDelta, ')
+          ..write('status: $status, ')
+          ..write('extractedFields: $extractedFields, ')
+          ..write('patientRecap: $patientRecap, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$ClinicalDatabase extends GeneratedDatabase {
   _$ClinicalDatabase(QueryExecutor e) : super(e);
   $ClinicalDatabaseManager get managers => $ClinicalDatabaseManager(this);
@@ -1902,12 +2487,19 @@ abstract class _$ClinicalDatabase extends GeneratedDatabase {
   late final $ProcessedOutputsTable processedOutputs =
       $ProcessedOutputsTable(this);
   late final $AuditLogsTable auditLogs = $AuditLogsTable(this);
+  late final $SyncedDoctorNotesTable syncedDoctorNotes =
+      $SyncedDoctorNotesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [transcripts, summaryBundles, processedOutputs, auditLogs];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+        transcripts,
+        summaryBundles,
+        processedOutputs,
+        auditLogs,
+        syncedDoctorNotes
+      ];
 }
 
 typedef $$TranscriptsTableCreateCompanionBuilder = TranscriptsCompanion
@@ -2830,6 +3422,279 @@ typedef $$AuditLogsTableProcessedTableManager = ProcessedTableManager<
     (AuditLog, BaseReferences<_$ClinicalDatabase, $AuditLogsTable, AuditLog>),
     AuditLog,
     PrefetchHooks Function()>;
+typedef $$SyncedDoctorNotesTableCreateCompanionBuilder
+    = SyncedDoctorNotesCompanion Function({
+  required String noteId,
+  required String consultationId,
+  Value<String?> patientId,
+  Value<String?> doctorId,
+  required String rawText,
+  Value<String?> richTextDelta,
+  required String status,
+  Value<String?> extractedFields,
+  Value<String?> patientRecap,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$SyncedDoctorNotesTableUpdateCompanionBuilder
+    = SyncedDoctorNotesCompanion Function({
+  Value<String> noteId,
+  Value<String> consultationId,
+  Value<String?> patientId,
+  Value<String?> doctorId,
+  Value<String> rawText,
+  Value<String?> richTextDelta,
+  Value<String> status,
+  Value<String?> extractedFields,
+  Value<String?> patientRecap,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$SyncedDoctorNotesTableFilterComposer
+    extends Composer<_$ClinicalDatabase, $SyncedDoctorNotesTable> {
+  $$SyncedDoctorNotesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get noteId => $composableBuilder(
+      column: $table.noteId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get consultationId => $composableBuilder(
+      column: $table.consultationId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get patientId => $composableBuilder(
+      column: $table.patientId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get doctorId => $composableBuilder(
+      column: $table.doctorId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get rawText => $composableBuilder(
+      column: $table.rawText, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get extractedFields => $composableBuilder(
+      column: $table.extractedFields,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get patientRecap => $composableBuilder(
+      column: $table.patientRecap, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$SyncedDoctorNotesTableOrderingComposer
+    extends Composer<_$ClinicalDatabase, $SyncedDoctorNotesTable> {
+  $$SyncedDoctorNotesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get noteId => $composableBuilder(
+      column: $table.noteId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get consultationId => $composableBuilder(
+      column: $table.consultationId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get patientId => $composableBuilder(
+      column: $table.patientId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get doctorId => $composableBuilder(
+      column: $table.doctorId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get rawText => $composableBuilder(
+      column: $table.rawText, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get extractedFields => $composableBuilder(
+      column: $table.extractedFields,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get patientRecap => $composableBuilder(
+      column: $table.patientRecap,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$SyncedDoctorNotesTableAnnotationComposer
+    extends Composer<_$ClinicalDatabase, $SyncedDoctorNotesTable> {
+  $$SyncedDoctorNotesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get noteId =>
+      $composableBuilder(column: $table.noteId, builder: (column) => column);
+
+  GeneratedColumn<String> get consultationId => $composableBuilder(
+      column: $table.consultationId, builder: (column) => column);
+
+  GeneratedColumn<String> get patientId =>
+      $composableBuilder(column: $table.patientId, builder: (column) => column);
+
+  GeneratedColumn<String> get doctorId =>
+      $composableBuilder(column: $table.doctorId, builder: (column) => column);
+
+  GeneratedColumn<String> get rawText =>
+      $composableBuilder(column: $table.rawText, builder: (column) => column);
+
+  GeneratedColumn<String> get richTextDelta => $composableBuilder(
+      column: $table.richTextDelta, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get extractedFields => $composableBuilder(
+      column: $table.extractedFields, builder: (column) => column);
+
+  GeneratedColumn<String> get patientRecap => $composableBuilder(
+      column: $table.patientRecap, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$SyncedDoctorNotesTableTableManager extends RootTableManager<
+    _$ClinicalDatabase,
+    $SyncedDoctorNotesTable,
+    SyncedDoctorNote,
+    $$SyncedDoctorNotesTableFilterComposer,
+    $$SyncedDoctorNotesTableOrderingComposer,
+    $$SyncedDoctorNotesTableAnnotationComposer,
+    $$SyncedDoctorNotesTableCreateCompanionBuilder,
+    $$SyncedDoctorNotesTableUpdateCompanionBuilder,
+    (
+      SyncedDoctorNote,
+      BaseReferences<_$ClinicalDatabase, $SyncedDoctorNotesTable,
+          SyncedDoctorNote>
+    ),
+    SyncedDoctorNote,
+    PrefetchHooks Function()> {
+  $$SyncedDoctorNotesTableTableManager(
+      _$ClinicalDatabase db, $SyncedDoctorNotesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncedDoctorNotesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncedDoctorNotesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncedDoctorNotesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> noteId = const Value.absent(),
+            Value<String> consultationId = const Value.absent(),
+            Value<String?> patientId = const Value.absent(),
+            Value<String?> doctorId = const Value.absent(),
+            Value<String> rawText = const Value.absent(),
+            Value<String?> richTextDelta = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> extractedFields = const Value.absent(),
+            Value<String?> patientRecap = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncedDoctorNotesCompanion(
+            noteId: noteId,
+            consultationId: consultationId,
+            patientId: patientId,
+            doctorId: doctorId,
+            rawText: rawText,
+            richTextDelta: richTextDelta,
+            status: status,
+            extractedFields: extractedFields,
+            patientRecap: patientRecap,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String noteId,
+            required String consultationId,
+            Value<String?> patientId = const Value.absent(),
+            Value<String?> doctorId = const Value.absent(),
+            required String rawText,
+            Value<String?> richTextDelta = const Value.absent(),
+            required String status,
+            Value<String?> extractedFields = const Value.absent(),
+            Value<String?> patientRecap = const Value.absent(),
+            required DateTime createdAt,
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncedDoctorNotesCompanion.insert(
+            noteId: noteId,
+            consultationId: consultationId,
+            patientId: patientId,
+            doctorId: doctorId,
+            rawText: rawText,
+            richTextDelta: richTextDelta,
+            status: status,
+            extractedFields: extractedFields,
+            patientRecap: patientRecap,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$SyncedDoctorNotesTableProcessedTableManager = ProcessedTableManager<
+    _$ClinicalDatabase,
+    $SyncedDoctorNotesTable,
+    SyncedDoctorNote,
+    $$SyncedDoctorNotesTableFilterComposer,
+    $$SyncedDoctorNotesTableOrderingComposer,
+    $$SyncedDoctorNotesTableAnnotationComposer,
+    $$SyncedDoctorNotesTableCreateCompanionBuilder,
+    $$SyncedDoctorNotesTableUpdateCompanionBuilder,
+    (
+      SyncedDoctorNote,
+      BaseReferences<_$ClinicalDatabase, $SyncedDoctorNotesTable,
+          SyncedDoctorNote>
+    ),
+    SyncedDoctorNote,
+    PrefetchHooks Function()>;
 
 class $ClinicalDatabaseManager {
   final _$ClinicalDatabase _db;
@@ -2842,4 +3707,6 @@ class $ClinicalDatabaseManager {
       $$ProcessedOutputsTableTableManager(_db, _db.processedOutputs);
   $$AuditLogsTableTableManager get auditLogs =>
       $$AuditLogsTableTableManager(_db, _db.auditLogs);
+  $$SyncedDoctorNotesTableTableManager get syncedDoctorNotes =>
+      $$SyncedDoctorNotesTableTableManager(_db, _db.syncedDoctorNotes);
 }

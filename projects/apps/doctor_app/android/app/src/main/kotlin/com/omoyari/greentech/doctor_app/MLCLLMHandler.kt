@@ -1,6 +1,7 @@
 package com.omoyari.greentech.doctor_app
 
 import android.content.Context
+import android.os.Build
 import android.util.Base64
 import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -36,8 +37,8 @@ class MLCLLMHandler(
         const val METHOD_CHANNEL = "com.example.clinical/llm"
         const val STREAM_CHANNEL = "com.example.clinical/llm_stream"
         const val DONE_SENTINEL = "[DONE]"
-        const val MODEL_BUNDLE_NAME = "SmolLM-350M-Instruct-q4f16_1-MLC"
-        const val MODEL_LIB = "SmolLM-350M-Instruct-q4f16_1-MLC"
+const val MODEL_BUNDLE_NAME = "SmolLM-360M-Instruct-q4f16_1-MLC"
+    const val MODEL_LIB = "SmolLM-360M-Instruct-q4f16_1-MLC"
         const val MAX_CONTEXT_TOKENS = 2048
         private const val TAG = "MLCLLMHandler"
     }
@@ -138,15 +139,13 @@ class MLCLLMHandler(
     private fun initializeEngine() {
         if (isEngineReady) return
 
+        // Single source of truth: the Dart ModelManagerCubit downloads,
+        // checksum-verifies and extracts the model into the app files dir
+        // (= path_provider's getApplicationDocumentsDirectory on Android).
         val modelDir = File(context.filesDir, MODEL_BUNDLE_NAME)
         if (!modelDir.exists()) {
-            // Try assets first
-            copyModelFromAssets(modelDir)
-        }
-
-        if (!modelDir.exists()) {
             throw IllegalStateException(
-                "SmolLM-350M not found. Copy model to assets/$MODEL_BUNDLE_NAME/ or run prepare_model.sh"
+                "SmolLM-360M not found. Download it from the Model Manager screen first."
             )
         }
 
@@ -154,24 +153,6 @@ class MLCLLMHandler(
         engine?.reload(modelDir.absolutePath, MODEL_LIB)
         isEngineReady = true
         Log.i(TAG, "MLC engine initialized at ${modelDir.absolutePath}")
-    }
-
-    private fun copyModelFromAssets(destDir: File) {
-        try {
-            val assetManager = context.assets
-            val files = assetManager.list(MODEL_BUNDLE_NAME) ?: return
-            if (!destDir.exists()) destDir.mkdirs()
-
-            for (file in files) {
-                val input = assetManager.open("$MODEL_BUNDLE_NAME/$file")
-                val output = File(destDir, file)
-                output.copyFrom(input)
-                input.close()
-            }
-            Log.i(TAG, "Model copied from assets to ${destDir.absolutePath}")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to copy model from assets", e)
-        }
     }
 
     private fun generateNonStreaming(prompt: String): String {
@@ -219,12 +200,28 @@ class MLCLLMHandler(
             "modelId" to MODEL_BUNDLE_NAME,
             "modelLib" to MODEL_LIB,
             "modelPath" to modelDir.absolutePath,
-            "bundled" to modelDir.exists(),
+            "installed" to modelDir.exists(),
             "ready" to isEngineReady,
             "contextWindowTokens" to MAX_CONTEXT_TOKENS,
             "checksumSha256" to checksum ?: "",
-            "runtime" to "MLCAndroid"
+            "runtime" to "MLCAndroid",
+            "processor" to deviceProcessor()
         )
+    }
+
+    /** Human-readable execution device: Vulkan-capable GPU name (if any),
+     *  otherwise the CPU ABI. */
+    private fun deviceProcessor(): String {
+        val gpu = try {
+            context.getSystemService(Context.VULKAN_SERVICE)?.toString()
+        } catch (e: Exception) {
+            null
+        }
+        return if (gpu != null && gpu.isNotBlank()) {
+            gpu
+        } else {
+            "CPU (${Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"})"
+        }
     }
 
     private fun computeChecksum(dir: File): String? {

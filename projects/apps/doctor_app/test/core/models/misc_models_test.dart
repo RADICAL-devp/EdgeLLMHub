@@ -149,10 +149,10 @@ void main() {
 
     test('loading and error states compare by value', () {
       final loading = NoteEditorLoading();
-      final error = NoteEditorError('boom');
+      const error = NoteEditorError('boom');
       expect(loading, NoteEditorLoading());
-      expect(error, NoteEditorError('boom'));
-      expect(error == NoteEditorError('other'), isFalse);
+      expect(error, const NoteEditorError('boom'));
+      expect(error == const NoteEditorError('other'), isFalse);
     });
   });
 

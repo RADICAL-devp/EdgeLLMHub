@@ -14,12 +14,10 @@ void main() {
   });
 
   late MockLlmPort mockNative;
-  late MockLlmPort mockCloud;
   late MockLlmPort mockStub;
 
   setUp(() {
     mockNative = MockLlmPort();
-    mockCloud = MockLlmPort();
     mockStub = MockLlmPort();
 
     // Default stub responses
@@ -51,12 +49,10 @@ void main() {
             ));
   });
 
-  HybridLlmAdapter createAdapter({bool cloudEnabled = false}) {
+  HybridLlmAdapter createAdapter() {
     return HybridLlmAdapter(
       nativeAdapter: mockNative,
-      cloudAdapter: mockCloud,
       stubAdapter: mockStub,
-      cloudEnabled: cloudEnabled,
     );
   }
 
@@ -70,44 +66,65 @@ void main() {
 
       expect(result, 'native result');
       verify(() => mockNative.processText('test', ProcessingMode.vocabAssist)).called(1);
-      verifyNever(() => mockCloud.processText(any(), any()));
       verifyNever(() => mockStub.processText(any(), any()));
+    });
+
+    test('uses native for generateStructuredSummary when available', () async {
+      when(() => mockNative.generateStructuredSummary(any()))
+          .thenAnswer((_) async => StructuredSummary(
+                complaint: 'native',
+                pastHistory: 'native',
+                vitals: 'native',
+                physicalExamination: 'native',
+                investigationOrdered: 'native',
+                diagnosis: 'native',
+                advice: 'native',
+              ));
+
+      final adapter = createAdapter();
+      final result = await adapter.generateStructuredSummary('text');
+
+      expect(result.complaint, 'native');
+      verifyNever(() => mockStub.generateStructuredSummary(any()));
     });
   });
 
-  group('Tier 2: Cloud fallback', () {
-    test('falls back to cloud when native throws LlmInitializationException', () async {
-      when(() => mockNative.processText(any(), any()))
-          .thenThrow(const LlmInitializationException('not initialized'));
-      when(() => mockCloud.processText(any(), any()))
-          .thenAnswer((_) async => 'cloud result');
-
-      final adapter = createAdapter(cloudEnabled: true);
-      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
-
-      expect(result, 'cloud result');
-    });
-
-    test('skips cloud when cloudEnabled is false', () async {
+  group('Tier 2: Stub fallback', () {
+    test('falls back to stub when native throws LlmInitializationException', () async {
       when(() => mockNative.processText(any(), any()))
           .thenThrow(const LlmInitializationException('not initialized'));
 
-      final adapter = createAdapter(cloudEnabled: false);
+      final adapter = createAdapter();
       final result = await adapter.processText('test', ProcessingMode.vocabAssist);
 
       expect(result, '[STUB] result');
-      verifyNever(() => mockCloud.processText(any(), any()));
     });
-  });
 
-  group('Tier 3: Stub fallback', () {
-    test('falls back to stub when both native and cloud fail', () async {
+    test('falls back to stub when native throws LlmException', () async {
       when(() => mockNative.processText(any(), any()))
           .thenThrow(const LlmException('native died'));
-      when(() => mockCloud.processText(any(), any()))
-          .thenThrow(const NetworkException('cloud died', isTransient: false));
 
-      final adapter = createAdapter(cloudEnabled: true);
+      final adapter = createAdapter();
+      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
+
+      expect(result, '[STUB] result');
+    });
+
+    test('falls back to stub when native throws UnsupportedPlatformException', () async {
+      when(() => mockNative.processText(any(), any()))
+          .thenThrow(const UnsupportedPlatformException('not supported'));
+
+      final adapter = createAdapter();
+      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
+
+      expect(result, '[STUB] result');
+    });
+
+    test('falls back to stub when native throws unexpected error', () async {
+      when(() => mockNative.processText(any(), any()))
+          .thenThrow(Exception('unexpected'));
+
+      final adapter = createAdapter();
       final result = await adapter.processText('test', ProcessingMode.vocabAssist);
 
       expect(result, '[STUB] result');
@@ -130,6 +147,19 @@ void main() {
       verifyNever(() => mockNative.processText('test2', ProcessingMode.vocabAssist));
     });
 
+    test('marks native unavailable after LlmInitializationException', () async {
+      when(() => mockNative.processText(any(), any()))
+          .thenThrow(const LlmInitializationException('not initialized'));
+
+      final adapter = createAdapter();
+
+      await adapter.processText('test1', ProcessingMode.vocabAssist);
+      verify(() => mockNative.processText(any(), any())).called(1);
+
+      await adapter.processText('test2', ProcessingMode.vocabAssist);
+      verifyNever(() => mockNative.processText('test2', ProcessingMode.vocabAssist));
+    });
+
     test('resetAvailability restores native tier', () async {
       when(() => mockNative.processText(any(), any()))
           .thenThrow(const UnsupportedPlatformException('not supported'));
@@ -145,9 +175,24 @@ void main() {
       final result = await adapter.processText('test2', ProcessingMode.vocabAssist);
       expect(result, 'native recovered');
     });
+
+    test('does not disable native for transient LlmException', () async {
+      // First call fails with LlmException
+      when(() => mockNative.processText(any(), any()))
+          .thenThrow(const LlmException('transient failure'));
+
+      final adapter = createAdapter();
+      await adapter.processText('test1', ProcessingMode.vocabAssist);
+
+      // Second call should still try native (LlmException doesn't permanently disable)
+      when(() => mockNative.processText(any(), any()))
+          .thenAnswer((_) async => 'native recovered');
+      final result = await adapter.processText('test2', ProcessingMode.vocabAssist);
+      expect(result, 'native recovered');
+    });
   });
 
-  group('All LlmPort methods', () {
+  group('All LlmPort methods use fallback chain', () {
     test('generateStructuredSummary uses fallback chain', () async {
       when(() => mockNative.generateStructuredSummary(any()))
           .thenThrow(const LlmException('fail'));
@@ -198,55 +243,32 @@ void main() {
       verifyNever(() => mockStub.generateContextEnrichedSummary(any(), any()));
     });
 
-    test('generateContextEnrichedSummary falls back to cloud', () async {
+    test('generateContextEnrichedSummary falls back to stub when native fails', () async {
       when(() => mockNative.generateContextEnrichedSummary(any(), any()))
           .thenThrow(const LlmInitializationException('fail'));
-      when(() => mockCloud.generateContextEnrichedSummary(any(), any()))
-          .thenAnswer((_) async => StructuredSummary(
-                complaint: 'cloud',
-                pastHistory: 'cloud',
-                vitals: 'cloud',
-                physicalExamination: 'cloud',
-                investigationOrdered: 'cloud',
-                diagnosis: 'cloud',
-                advice: 'cloud',
-              ));
 
-      final adapter = createAdapter(cloudEnabled: true);
+      final adapter = createAdapter();
       final result =
           await adapter.generateContextEnrichedSummary('text', 'context');
 
-      expect(result.complaint, 'cloud');
+      expect(result.complaint, 'stub');
     });
 
-    test('generateStructuredSummary falls back to cloud', () async {
+    test('generateStructuredSummary falls back to stub when native fails', () async {
       when(() => mockNative.generateStructuredSummary(any()))
           .thenThrow(const LlmInitializationException('fail'));
-      when(() => mockCloud.generateStructuredSummary(any()))
-          .thenAnswer((_) async => StructuredSummary(
-                complaint: 'cloud',
-                pastHistory: 'cloud',
-                vitals: 'cloud',
-                physicalExamination: 'cloud',
-                investigationOrdered: 'cloud',
-                diagnosis: 'cloud',
-                advice: 'cloud',
-              ));
 
-      final adapter = createAdapter(cloudEnabled: true);
+      final adapter = createAdapter();
       final result = await adapter.generateStructuredSummary('text');
 
-      expect(result.complaint, 'cloud');
+      expect(result.complaint, 'stub');
     });
 
-    test('generateExecutiveSummary falls back to stub when cloud fails',
-        () async {
+    test('generateExecutiveSummary falls back to stub when native fails', () async {
       when(() => mockNative.generateExecutiveSummary(any()))
           .thenThrow(const LlmException('native died'));
-      when(() => mockCloud.generateExecutiveSummary(any()))
-          .thenThrow(const NetworkException('cloud died', isTransient: false));
 
-      final adapter = createAdapter(cloudEnabled: true);
+      final adapter = createAdapter();
       final result = await adapter.generateExecutiveSummary('text');
 
       expect(result, '[STUB] summary');

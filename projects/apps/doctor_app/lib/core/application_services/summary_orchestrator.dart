@@ -1,11 +1,8 @@
 import 'package:uuid/uuid.dart';
 
-import 'package:doctor_app/core/dto/transcript_summary_request.dart';
-import 'package:doctor_app/core/dto/transcript_summary_response.dart';
-import 'package:doctor_app/core/models/consultation_transcript.dart';
-import 'package:doctor_app/core/models/transcript_summary_bundle.dart';
 import 'package:doctor_app/core/ports/transcript_repository.dart';
 import 'package:doctor_app/core/ports/transcript_summary_repository.dart';
+import 'package:shared_models/shared_models.dart';
 import 'doctor_note_generation_service.dart';
 import 'summary_generation_service.dart';
 import 'transcript_chunking_service.dart';

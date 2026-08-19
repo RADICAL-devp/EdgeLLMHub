@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:dart_frog/dart_frog.dart';
 import 'package:clinical_intelligence_dart/core/audit/audit_logger.dart';
 import 'package:clinical_intelligence_dart/core/audit/phi_redactor.dart';
@@ -11,14 +10,6 @@ Middleware auditMiddleware(AuditLogger auditLogger) {
       final stopwatch = Stopwatch()..start();
       final correlationId = context.request.headers['x-correlation-id'] ?? 
           DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-      
-      // Add correlation ID to response headers
-      context.response = context.response.copyWith(
-        headers: {
-          ...context.response.headers,
-          'x-correlation-id': correlationId,
-        },
-      );
 
       // Read request body for logging
       String? requestBody;
@@ -42,9 +33,22 @@ Middleware auditMiddleware(AuditLogger auditLogger) {
       // Log the request/response
       _logRequest(auditLogger, context, correlationId, response, stopwatch.elapsedMilliseconds, requestBody);
 
-      return response;
+      // Add correlation ID to response headers
+      return response.copyWith(headers: {'x-correlation-id': correlationId});
     };
   };
+}
+
+/// Reads the optional [AuthContext] provided by [authMiddleware].
+///
+/// `context.read<AuthContext?>()` would look up a provider registered under
+/// the `AuthContext?` key, so we use the non-nullable type instead.
+AuthContext? _readAuth(RequestContext context) {
+  try {
+    return context.read<AuthContext>();
+  } on StateError {
+    return null;
+  }
 }
 
 void _logRequest(
@@ -55,7 +59,7 @@ void _logRequest(
   int latencyMs,
   String? requestBody,
 ) {
-  final auth = context.read<AuthContext?>();
+  final auth = _readAuth(context);
   final method = context.request.method.value;
   final path = context.request.uri.path;
   final queryParams = context.request.uri.queryParameters;
@@ -113,7 +117,7 @@ void _logError(
   int latencyMs,
   String? requestBody,
 ) {
-  final auth = context.read<AuthContext?>();
+  final auth = _readAuth(context);
   final method = context.request.method.value;
   final path = context.request.uri.path;
 

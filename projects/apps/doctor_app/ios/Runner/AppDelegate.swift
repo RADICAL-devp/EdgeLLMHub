@@ -3,8 +3,10 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+#if canImport(MLCSwift)
   /// Keep a strong reference to the MLC handler so it isn't deallocated.
   private var mlcHandler: MLCLLMHandler?
+#endif
 
   override func application(
     _ application: UIApplication,
@@ -13,15 +15,20 @@ import UIKit
     // Register Flutter plugins
     GeneratedPluginRegistrant.register(with: self)
 
-    // Register the MLC LLM MethodChannel handler directly against
-    // the engine's binary messenger — NOT via registrar(forPlugin:)
-    // to avoid access-control issues.
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Register the MLC LLM MethodChannel handler against the plugin
+    // registrar's messenger. With the scene-based lifecycle the window
+    // (and its FlutterViewController) may not exist yet during
+    // didFinishLaunching, so the registrar messenger is the reliable way
+    // to reach the engine's binary messenger.
+    if let registrar = self.registrar(forPlugin: "MLCLLMHandler") {
+      let messenger = registrar.messenger()
+#if canImport(MLCSwift)
+      mlcHandler = MLCLLMHandler(messenger: messenger)
+#else
+      // MLCSwift package not linked — native LLM unavailable until it is
+      // added in Xcode; the app falls back to the cloud LLM.
+#endif
     }
-
-    let messenger = controller.binaryMessenger
-    mlcHandler = MLCLLMHandler(messenger: messenger)
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

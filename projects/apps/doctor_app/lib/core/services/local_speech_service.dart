@@ -17,9 +17,8 @@ class LocalSpeechService implements SpeechService {
   SpeechRecognitionError? _lastError;
   
   // VAD configuration
-  Duration _silenceTimeout = const Duration(seconds: 3);
+  Duration _silenceTimeout = const Duration(seconds: 2);
   double _listenTimeout = 30.0; // seconds
-  Duration _pauseFor = const Duration(milliseconds: 500);
   
   // Medical term dictionary for post-processing
   static const Map<String, String> _medicalAbbreviations = {
@@ -101,9 +100,9 @@ class LocalSpeechService implements SpeechService {
     // Verify locale is supported
     final locales = await _speech.locales();
     final supported = locales.any((l) => l.localeId == locale);
-    if (!supported) {
-      // Use first available locale
-      final fallback = locales.isNotEmpty ? locales.first.localeId : 'en_US';
+    if (!supported && locales.isNotEmpty) {
+      // Use first available locale if requested locale not supported
+      // locale = locales.first.localeId; // Would need to re-initialize
     }
 
     return _isInitialized;
@@ -127,11 +126,11 @@ class LocalSpeechService implements SpeechService {
               onResult(_lightPostProcess(result.recognizedWords));
             }
           },
-          listenFor: Duration(seconds: _listenTimeout.toInt()),
-          pauseFor: _pauseFor,
           listenOptions: stt.SpeechListenOptions(
             partialResults: true,
             cancelOnError: true,
+            listenFor: Duration(seconds: _listenTimeout.toInt()),
+            pauseFor: _silenceTimeout,
           ),
         );
       } catch (e) {
@@ -144,11 +143,13 @@ class LocalSpeechService implements SpeechService {
   }
 
   /// Configure VAD silence timeout
+  @override
   void setSilenceTimeout(Duration timeout) {
     _silenceTimeout = timeout;
   }
 
   /// Configure total listen timeout
+  @override
   void setListenTimeout(double seconds) {
     _listenTimeout = seconds;
   }

@@ -39,4 +39,16 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  # Patch FlutterGeneratedPluginSwiftPackage/Package.swift to use the
+  # project's iOS deployment target instead of Flutter's hardcoded 13.0.
+  # This is required because some plugins (e.g. workmanager_apple >=0.10)
+  # declare a minimum platform higher than 13.0.
+  generated_pkg = File.expand_path('Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift', __dir__)
+  if File.exist?(generated_pkg)
+    contents = File.read(generated_pkg)
+    podfile_platform = '15.0'
+    patched = contents.sub(/\.iOS\("13\.0"\)/, ".iOS(\"#{podfile_platform}\")")
+    File.write(generated_pkg, patched) if patched != contents
+  end
 end

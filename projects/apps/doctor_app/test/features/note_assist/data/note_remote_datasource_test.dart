@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
@@ -35,24 +36,93 @@ DioException _dioException(
 void main() {
   late Dio dio;
   late NoteRemoteDatasource datasource;
+  late _FakeAdapter adapter;
 
   setUp(() {
     dio = Dio(BaseOptions(baseUrl: 'https://example.com'));
     datasource = NoteRemoteDatasource(dio);
+    adapter = _FakeAdapter();
+    dio.httpClientAdapter = adapter;
   });
 
   group('syncNote', () {
-    test('succeeds when the backend accepts the note', () async {
-      // The scaffold does not dispatch a real request yet; it always
-      // pretends success. Ensure it completes without error.
+    test('POSTs the note and succeeds when the backend accepts it', () async {
+      adapter.responses.add(
+        const _Response(
+          statusCode: 200,
+          body: {'synced': true, 'noteId': 'n1'},
+        ),
+      );
+
       await datasource.syncNote(_note());
+
+      expect(adapter.paths, ['/api/v1/notes/sync']);
+      expect(adapter.methods, ['POST']);
+      final payload =
+          jsonDecode(adapter.bodies.single) as Map<String, dynamic>;
+      expect(payload['noteId'], 'n1');
+      expect(payload['consultationId'], 'c1');
+      expect(payload['status'], 'draft');
+    });
+
+    test('throws NetworkException on server failure (500)', () async {
+      adapter.errors.add(_dioException(DioExceptionType.badResponse, statusCode: 500));
+
+      await expectLater(
+        datasource.syncNote(_note()),
+        throwsA(isA<NetworkException>()),
+      );
+    });
+
+    test('throws NetworkException on connection failure', () async {
+      adapter.errors.add(_dioException(DioExceptionType.connectionError));
+
+      await expectLater(
+        datasource.syncNote(_note()),
+        throwsA(isA<NetworkException>()),
+      );
     });
   });
 
   group('fetchNoteForConsultation', () {
+    test('parses the note returned by the backend', () async {
+      adapter.responses.add(
+        const _Response(
+          statusCode: 200,
+          body: {
+            'noteId': 'n1',
+            'consultationId': 'c1',
+            'patientId': 'p1',
+            'doctorId': 'd1',
+            'rawText': 'content',
+            'richTextDelta': '{"ops":[]}',
+            'status': 'finalized',
+            'extractedFields': {
+              'symptoms': ['SOB'],
+              'provisionalDiagnosis': 'DM2',
+            },
+            'patientRecap': 'Known DM2.',
+            'createdAt': '2026-01-01T00:00:00.000Z',
+            'updatedAt': '2026-01-02T00:00:00.000Z',
+          },
+        ),
+      );
+
+      final note = await datasource.fetchNoteForConsultation('c1');
+
+      expect(note, isNotNull);
+      expect(note!.noteId, 'n1');
+      expect(note.rawText, 'content');
+      expect(note.status, NoteStatus.finalized);
+      expect(note.richTextDelta, '{"ops":[]}');
+      expect(note.extractedFields?.provisionalDiagnosis, 'DM2');
+      expect(note.patientRecap, 'Known DM2.');
+      expect(adapter.paths, ['/api/v1/notes/consultation/c1']);
+    });
+
     test('returns null when the note does not exist (404)', () async {
-      dio.httpClientAdapter = _ThrowingAdapter(
-        _dioException(DioExceptionType.badResponse, statusCode: 404),
+      adapter.responses.add(
+        const _Response(statusCode: 404, body: {}),
       );
 
       final result = await datasource.fetchNoteForConsultation('c1');
@@ -60,9 +130,7 @@ void main() {
     });
 
     test('throws NetworkException for non-404 Dio failures', () async {
-      dio.httpClientAdapter = _ThrowingAdapter(
-        _dioException(DioExceptionType.badResponse, statusCode: 500),
-      );
+      adapter.errors.add(_dioException(DioExceptionType.badResponse, statusCode: 500));
 
       await expectLater(
         datasource.fetchNoteForConsultation('c1'),
@@ -72,10 +140,21 @@ void main() {
   });
 }
 
-class _ThrowingAdapter implements HttpClientAdapter {
-  final Object error;
+class _Response {
+  const _Response({required this.statusCode, required this.body});
 
-  _ThrowingAdapter(this.error);
+  final int statusCode;
+  final Map<String, dynamic> body;
+}
+
+/// Fake adapter recording requests, with queues for success responses
+/// and thrown errors.
+class _FakeAdapter implements HttpClientAdapter {
+  final List<String> paths = [];
+  final List<String> methods = [];
+  final List<String> bodies = [];
+  final List<Object> errors = [];
+  final List<_Response> responses = [];
 
   @override
   Future<ResponseBody> fetch(
@@ -83,8 +162,23 @@ class _ThrowingAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    if (error is DioException) throw error;
-    throw error;
+    paths.add(options.path);
+    methods.add(options.method);
+    final body =
+        requestStream != null ? await utf8.decoder.bind(requestStream).join() : '';
+    bodies.add(body);
+
+    if (errors.isNotEmpty) {
+      throw errors.removeAt(0);
+    }
+    final response = responses.removeAt(0);
+    return ResponseBody.fromString(
+      jsonEncode(response.body),
+      response.statusCode,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
   }
 
   @override

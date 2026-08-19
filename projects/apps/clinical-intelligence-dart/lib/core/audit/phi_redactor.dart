@@ -40,7 +40,7 @@ class PhiRedactor {
     return value;
   }
 
-  static String _redactMatch(RegExpMatch match) {
+  static String _redactMatch(Match match) {
     final matched = match.group(0)!;
     // Preserve first and last char for context, redact middle
     if (matched.length <= 4) return '[REDACTED]';

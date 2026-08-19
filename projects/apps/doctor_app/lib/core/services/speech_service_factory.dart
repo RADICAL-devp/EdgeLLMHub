@@ -6,6 +6,8 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'speech_service.dart';
 import 'local_speech_service.dart';
+import 'ios_speech_service.dart';
+import 'android_speech_service.dart';
 import 'cloud_speech_service.dart';
 import 'device_capability_service.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
@@ -26,31 +28,35 @@ class SpeechServiceFactory {
   /// [locale] - BCP-47 locale code (e.g., 'en_US', 'en_GB', 'es_ES')
   /// [silenceTimeout] - VAD silence timeout for local STT
   /// [listenTimeout] - Maximum listening duration in seconds
+  /// [operatingSystem] - override injected for tests; defaults to the real
+  /// host OS (`Platform.operatingSystem`).
   static Future<SpeechService> create(
     DeviceCapabilityService deviceService, {
     Dio? dio,
     String locale = 'en_US',
     Duration? silenceTimeout,
     double? listenTimeout,
+    String? operatingSystem,
   }) async {
+    final os = operatingSystem ?? Platform.operatingSystem;
     final canUseLocalStt = await deviceService.canUseSpeechToText();
 
     if (canUseLocalStt) {
       // Request microphone permission on physical devices
-      if (Platform.isIOS || Platform.isAndroid) {
+      if (os == 'ios' || os == 'android') {
         final status = await Permission.microphone.request();
         if (!status.isGranted) {
-          throw SpeechException(
+          throw const SpeechException(
             'Microphone permission is required for speech recognition.',
           );
         }
       }
 
       developer.log(
-        'Using LocalSpeechService (physical device)',
+        'Using ${_platformAdapter(os)} (physical device)',
         name: 'SpeechServiceFactory',
       );
-      final local = LocalSpeechService();
+      final local = _createPlatformAdapter(os);
       await local.initialize(
         locale: locale,
         silenceTimeout: silenceTimeout,
@@ -82,11 +88,13 @@ class SpeechServiceFactory {
     String locale = 'en_US',
     Duration? silenceTimeout,
     double? listenTimeout,
+    String? operatingSystem,
   }) async {
+    final os = operatingSystem ?? Platform.operatingSystem;
     final canUseLocalStt = await deviceService.canUseSpeechToText();
 
     if (canUseLocalStt) {
-      final local = LocalSpeechService();
+      final local = _createPlatformAdapter(os);
       try {
         await local.initialize(
           locale: locale,
@@ -94,7 +102,7 @@ class SpeechServiceFactory {
           listenTimeout: listenTimeout,
         );
         developer.log(
-          'LocalSpeechService initialized successfully',
+          '${_platformAdapter(os)} initialized successfully',
           name: 'SpeechServiceFactory',
         );
         return local;
@@ -114,5 +122,21 @@ class SpeechServiceFactory {
       listenTimeout: listenTimeout,
     );
     return cloud;
+  }
+
+  /// Name of the platform adapter selected for the current OS.
+  static String _platformAdapter(String os) {
+    if (os == 'ios') return 'IosSpeechService';
+    if (os == 'android') return 'AndroidSpeechService';
+    return 'LocalSpeechService';
+  }
+
+  /// Create the platform-specific local STT adapter (thin wrappers around
+  /// the `speech_to_text` plugin, which bridges Speech.framework on iOS and
+  /// RecognizerIntent on Android).
+  static LocalSpeechService _createPlatformAdapter(String os) {
+    if (os == 'ios') return IosSpeechService();
+    if (os == 'android') return AndroidSpeechService();
+    return LocalSpeechService();
   }
 }

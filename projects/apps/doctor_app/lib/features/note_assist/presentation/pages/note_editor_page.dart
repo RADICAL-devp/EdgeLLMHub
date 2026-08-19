@@ -3,15 +3,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import '../cubit/note_editor_cubit.dart';
 import '../cubit/note_editor_state.dart';
-import '../cubit/ai_assist_cubit.dart';
-import '../cubit/ai_assist_state.dart';
+import '../cubit/ehr_assist_cubit.dart';
+import '../../../../core/ports/llm_port.dart';
 import '../../../../core/services/speech_service.dart';
+import '../../../../core/services/telemetry_service.dart';
+import '../../../../core/models/patient_context.dart';
 import '../../domain/models/doctor_note.dart';
 import 'package:get_it/get_it.dart';
 import 'dart:convert';
 import '../widgets/ai_toolbar.dart';
 import '../widgets/suggestion_panel.dart';
 import '../widgets/sync_status_indicator.dart';
+import '../widgets/ehr_field_assist_button.dart';
 
 class NoteEditorPage extends StatefulWidget {
   final String consultationId;
@@ -162,26 +165,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<NoteEditorCubit, NoteEditorState>(
-      listener: (context, state) {
-        if (state is NoteEditorLoaded && !_initialized) {
-          _initialized = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _restoreContent(state.note);
-          });
-        }
-      },
-      builder: (context, state) {
-        if (state is NoteEditorLoading || state is NoteEditorInitial) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<EhrAssistCubit>(
+          create: (_) => EhrAssistCubit(
+            llmPort: GetIt.I<LlmPort>(),
+            telemetry: TelemetryService(),
+          ),
+        ),
+      ],
+      child: BlocConsumer<NoteEditorCubit, NoteEditorState>(
+        listener: (context, state) {
+          if (state is NoteEditorLoaded && !_initialized) {
+            _initialized = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _restoreContent(state.note);
+            });
+          }
+        },
+        builder: (context, state) {
+          if (state is NoteEditorLoading || state is NoteEditorInitial) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        if (state is NoteEditorError) {
-          return Center(child: Text('Error: ${state.message}'));
-        }
+          if (state is NoteEditorError) {
+            return Center(child: Text('Error: ${state.message}'));
+          }
 
-        if (state is NoteEditorLoaded) {
-          return Scaffold(
+          if (state is NoteEditorLoaded) {
+            return Scaffold(
             appBar: AppBar(
               title: const Text('Consultation Notes'),
               actions: [
@@ -194,14 +206,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ],
             ),
-            body: Column(
-              children: [
-                SuggestionPanel(
-                  onAccept: (suggestion) {
-                    final aiState = context.read<AiAssistCubit>().state;
-                    if (aiState is AiAssistSuggestionReady) {
-                      if (aiState.action == 'extracting fields') {
-                        // For extraction, we update the note's extractedFields instead of text
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SuggestionPanel(
+                    onAccept: (suggestion, action) {
+                      if (action == 'extracting fields') {
                         final currentNote = state.note;
                         try {
                           final parsedJson = jsonDecode(suggestion);
@@ -219,7 +231,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                     Text('Failed to parse extracted fields.')),
                           );
                         }
-                      } else if (aiState.action == 'generating recap') {
+                      } else if (action == 'generating recap') {
                         final currentNote = state.note;
                         final updatedNote =
                             currentNote.copyWith(patientRecap: suggestion);
@@ -229,124 +241,114 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       } else {
                         _insertAtEnd(suggestion, separator: '\n\n');
                       }
-                    }
-                  },
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        _EditorStatusBar(
-                          status: state.note.status,
-                          fontSize: _fontSize,
-                          onDecreaseFont: () => setState(() {
-                            _fontSize = (_fontSize - 2)
-                                .clamp(_minFontSize, _maxFontSize);
-                          }),
-                          onIncreaseFont: () => setState(() {
-                            _fontSize = (_fontSize + 2)
-                                .clamp(_minFontSize, _maxFontSize);
-                          }),
-                        ),
-                        const SizedBox(height: 8),
-                        QuillSimpleToolbar(
-                          controller: _quillController,
-                          config: const QuillSimpleToolbarConfig(
-                            multiRowsDisplay: true,
-                            showDividers: false,
-                            showFontFamily: false,
-                            showFontSize: false,
-                            showHeaderStyle: true,
-                            showColorButton: true,
-                            showBackgroundColorButton: false,
-                            showInlineCode: false,
-                            showStrikeThrough: true,
-                            showUnderLineButton: true,
-                            showClearFormat: true,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: QuillEditor.basic(
-                              controller: _quillController,
-                              config: QuillEditorConfig(
-                                placeholder:
-                                    'Start typing or dictating your notes...',
-                                expands: true,
-                                padding: const EdgeInsets.all(12),
-                                customStyles: DefaultStyles(
-                                  paragraph: DefaultTextBlockStyle(
-                                    Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium!
-                                        .copyWith(
-                                          fontSize: _fontSize,
-                                          height: 1.4,
-                                        ),
-                                    const HorizontalSpacing(0, 0),
-                                    const VerticalSpacing(8, 0),
-                                    const VerticalSpacing(0, 0),
-                                    null,
-                                  ),
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _EditorStatusBar(
+                    status: state.note.status,
+                    fontSize: _fontSize,
+                    onDecreaseFont: () => setState(() {
+                      _fontSize = (_fontSize - 2)
+                          .clamp(_minFontSize, _maxFontSize);
+                    }),
+                    onIncreaseFont: () => setState(() {
+                      _fontSize = (_fontSize + 2)
+                          .clamp(_minFontSize, _maxFontSize);
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  _EhrAssistPanel(
+                    consultationId: widget.consultationId,
+                    patientId: widget.patientId,
+                    doctorId: widget.doctorId,
+                    transcriptText: _plainText,
+                  ),
+                  const SizedBox(height: 8),
+                  QuillSimpleToolbar(
+                    controller: _quillController,
+                    config: const QuillSimpleToolbarConfig(
+                      multiRowsDisplay: true,
+                      showDividers: false,
+                      showFontFamily: false,
+                      showFontSize: false,
+                      showHeaderStyle: true,
+                      showColorButton: true,
+                      showBackgroundColorButton: false,
+                      showInlineCode: false,
+                      showStrikeThrough: true,
+                      showUnderLineButton: true,
+                      showClearFormat: true,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 300),
+                    child: QuillEditor.basic(
+                      controller: _quillController,
+                      config: QuillEditorConfig(
+                        placeholder:
+                            'Start typing or dictating your notes...',
+                        expands: false,
+                        padding: const EdgeInsets.all(12),
+                        customStyles: DefaultStyles(
+                          paragraph: DefaultTextBlockStyle(
+                            Theme.of(context)
+                                .textTheme
+                                .bodyMedium!
+                                .copyWith(
+                                  fontSize: _fontSize,
+                                  height: 1.4,
                                 ),
-                              ),
-                            ),
+                            const HorizontalSpacing(0, 0),
+                            const VerticalSpacing(8, 0),
+                            const VerticalSpacing(0, 0),
+                            null,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        AiToolbar(currentText: _plainText),
-                        if (state.note.extractedFields != null) ...[
-                          const SizedBox(height: 16),
-                          ExpansionTile(
-                            title: const Text('Extracted Fields'),
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Text(_formatExtractedFields(
-                                    state.note.extractedFields!)),
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (state.note.patientRecap != null) ...[
-                          const SizedBox(height: 16),
-                          ExpansionTile(
-                            title: const Text('Patient Recap'),
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Text(state.note.patientRecap!),
-                              ),
-                            ],
-                          ),
-                        ],
-                        const Divider(height: 24),
-                        Semantics(
-                          label: '$_wordCount words',
-                          child: Text(
-                            '$_wordCount words · '
-                            '${_plainText.characters.length} chars',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey,
-                                    ),
-                          ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  AiToolbar(currentText: _plainText),
+                  if (state.note.extractedFields != null) ...[
+                    const SizedBox(height: 16),
+                    ExpansionTile(
+                      title: const Text('Extracted Fields'),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(_formatExtractedFields(
+                              state.note.extractedFields!)),
                         ),
                       ],
                     ),
+                  ],
+                  if (state.note.patientRecap != null) ...[
+                    const SizedBox(height: 16),
+                    ExpansionTile(
+                      title: const Text('Patient Recap'),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(state.note.patientRecap!),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const Divider(height: 24),
+                  Semantics(
+                    label: '$_wordCount words',
+                    child: Text(
+                      '$_wordCount words · '
+                      '${_plainText.characters.length} chars',
+                      style:
+                          Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey,
+                              ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             floatingActionButton: Semantics(
               label: state.isListening
@@ -369,24 +371,33 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
         return const SizedBox.shrink();
       },
-    );
-  }
+    ),
+  );
+}
 
   String _formatExtractedFields(ExtractedFields fields) {
     final buffer = StringBuffer();
-    if (fields.provisionalDiagnosis != null)
+    if (fields.provisionalDiagnosis != null) {
       buffer.writeln('Diagnosis: ${fields.provisionalDiagnosis}');
-    if (fields.duration != null) buffer.writeln('Duration: ${fields.duration}');
-    if (fields.symptoms.isNotEmpty)
+    }
+    if (fields.duration != null) {
+      buffer.writeln('Duration: ${fields.duration}');
+    }
+    if (fields.symptoms.isNotEmpty) {
       buffer.writeln('Symptoms: ${fields.symptoms.join(', ')}');
-    if (fields.medications.isNotEmpty)
+    }
+    if (fields.medications.isNotEmpty) {
       buffer.writeln('Medications: ${fields.medications.join(', ')}');
-    if (fields.allergies.isNotEmpty)
+    }
+    if (fields.allergies.isNotEmpty) {
       buffer.writeln('Allergies: ${fields.allergies.join(', ')}');
-    if (fields.testsRecommended.isNotEmpty)
+    }
+    if (fields.testsRecommended.isNotEmpty) {
       buffer.writeln('Tests: ${fields.testsRecommended.join(', ')}');
-    if (fields.followUpActions.isNotEmpty)
+    }
+    if (fields.followUpActions.isNotEmpty) {
       buffer.writeln('Follow Up: ${fields.followUpActions.join(', ')}');
+    }
     return buffer.toString().trim();
   }
 }
@@ -474,5 +485,166 @@ class _EditorStatusBar extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Panel with AI assist buttons for each EHR field.
+class _EhrAssistPanel extends StatelessWidget {
+  final String consultationId;
+  final String patientId;
+  final String doctorId;
+  final String transcriptText;
+
+  const _EhrAssistPanel({
+    required this.consultationId,
+    required this.patientId,
+    required this.doctorId,
+    required this.transcriptText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // In a real app, patient info would come from the note or patient repository
+    final patientContext = PatientContext(
+      patientName: 'Patient $patientId', // TODO: Fetch actual name
+      sleepLab: 'Nidra Sleep Center',
+      consultationDate: DateTime.now().toIso8601String().split('T').first,
+      patientId: patientId,
+    );
+
+    // Helper to update the note with the accepted suggestion
+    void _updateField(String fieldName, String value) {
+      // In a real implementation, this would update structured fields
+      // For now, insert at cursor position in the editor
+      final noteEditorCubit = context.read<NoteEditorCubit>();
+      final currentNote = context.read<NoteEditorCubit>().state;
+      if (currentNote is NoteEditorLoaded) {
+        final fieldLabel = _getFieldLabel(fieldName);
+        final formatted = '\n\n$fieldLabel:\n$value';
+        noteEditorCubit.updateText(
+          currentNote.note.rawText + formatted,
+        );
+      }
+    }
+
+    return ExpansionTile(
+      initiallyExpanded: true,
+      title: Row(
+        children: [
+          Icon(Icons.auto_awesome, size: 20, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            'AI Field Assist',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+          ),
+        ],
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            children: [
+              EhrFieldAssistButton(
+                fieldName: 'complaint',
+                fieldLabel: 'Complaints',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('complaint', s),
+                useStreaming: true,
+              ),
+              const SizedBox(height: 8),
+              EhrFieldAssistButton(
+                fieldName: 'pastHistory',
+                fieldLabel: 'Past History',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('pastHistory', s),
+                useStreaming: true,
+              ),
+              const SizedBox(height: 8),
+              EhrFieldAssistButton(
+                fieldName: 'vitals',
+                fieldLabel: 'Vitals',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('vitals', s),
+                useStreaming: true,
+              ),
+              const SizedBox(height: 8),
+              EhrFieldAssistButton(
+                fieldName: 'physicalExamination',
+                fieldLabel: 'Physical Examination',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('physicalExamination', s),
+                useStreaming: true,
+              ),
+              const SizedBox(height: 8),
+              EhrFieldAssistButton(
+                fieldName: 'investigationOrdered',
+                fieldLabel: 'Investigations Ordered',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('investigationOrdered', s),
+                useStreaming: true,
+              ),
+              const SizedBox(height: 8),
+              EhrFieldAssistButton(
+                fieldName: 'diagnosis',
+                fieldLabel: 'Diagnosis',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('diagnosis', s),
+                useStreaming: true,
+              ),
+              const SizedBox(height: 8),
+              EhrFieldAssistButton(
+                fieldName: 'advice',
+                fieldLabel: 'Advice',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('advice', s),
+                useStreaming: true,
+              ),
+              const SizedBox(height: 8),
+              EhrFieldAssistButton(
+                fieldName: 'manualPrescription',
+                fieldLabel: 'Manual Prescription',
+                transcriptText: transcriptText,
+                patientContext: patientContext,
+                onSuggestionAccepted: (s) => _updateField('manualPrescription', s),
+                useStreaming: true,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getFieldLabel(String fieldName) {
+    switch (fieldName) {
+      case 'complaint':
+        return 'Complaints';
+      case 'pastHistory':
+        return 'Past History';
+      case 'vitals':
+        return 'Vitals';
+      case 'physicalExamination':
+        return 'Physical Examination';
+      case 'investigationOrdered':
+        return 'Investigations Ordered';
+      case 'diagnosis':
+        return 'Diagnosis';
+      case 'advice':
+        return 'Advice';
+      case 'manualPrescription':
+        return 'Manual Prescription';
+      default:
+        return fieldName;
+    }
   }
 }

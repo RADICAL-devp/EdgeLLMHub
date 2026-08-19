@@ -67,6 +67,24 @@ class AuditLogs extends Table {
   // Don't override primaryKey when using autoIncrement()
 }
 
+/// Doctor notes synced from the mobile app (PHI fields encrypted).
+class SyncedDoctorNotes extends Table {
+  TextColumn get noteId => text().withLength(min: 1, max: 128)();
+  TextColumn get consultationId => text().withLength(min: 1, max: 64)();
+  TextColumn get patientId => text().nullable()();
+  TextColumn get doctorId => text().nullable()();
+  TextColumn get rawText => text()();
+  TextColumn get richTextDelta => text().nullable()();
+  TextColumn get status => text()();
+  TextColumn get extractedFields => text().nullable()(); // JSON string
+  TextColumn get patientRecap => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {noteId};
+}
+
 /// Type converters
 class StringListConverter extends TypeConverter<List<String>, String> {
   const StringListConverter();
@@ -85,7 +103,13 @@ class JsonMapConverter extends TypeConverter<Map<String, dynamic>, String> {
 }
 
 /// Database class
-@DriftDatabase(tables: [Transcripts, SummaryBundles, ProcessedOutputs, AuditLogs])
+@DriftDatabase(tables: [
+  Transcripts,
+  SummaryBundles,
+  ProcessedOutputs,
+  AuditLogs,
+  SyncedDoctorNotes,
+])
 class ClinicalDatabase extends _$ClinicalDatabase {
   ClinicalDatabase([String? dbPath]) : super(_openConnection(dbPath));
 
