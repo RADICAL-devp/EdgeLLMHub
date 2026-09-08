@@ -37,8 +37,8 @@ class MLCLLMHandler(
         const val METHOD_CHANNEL = "com.example.clinical/llm"
         const val STREAM_CHANNEL = "com.example.clinical/llm_stream"
         const val DONE_SENTINEL = "[DONE]"
-const val MODEL_BUNDLE_NAME = "SmolLM-360M-Instruct-q4f16_1-MLC"
-    const val MODEL_LIB = "SmolLM-360M-Instruct-q4f16_1-MLC"
+ const val MODEL_BUNDLE_NAME = "Qwen3-0.6B-Q4_K_M-MLC"
+ const val MODEL_LIB = "Qwen3-0.6B-Q4_K_M-MLC"
         const val MAX_CONTEXT_TOKENS = 2048
         private const val TAG = "MLCLLMHandler"
     }
@@ -145,7 +145,7 @@ const val MODEL_BUNDLE_NAME = "SmolLM-360M-Instruct-q4f16_1-MLC"
         val modelDir = File(context.filesDir, MODEL_BUNDLE_NAME)
         if (!modelDir.exists()) {
             throw IllegalStateException(
-                "SmolLM-360M not found. Download it from the Model Manager screen first."
+                "Qwen 3 0.6B not found. Download it from the Model Manager screen first."
             )
         }
 

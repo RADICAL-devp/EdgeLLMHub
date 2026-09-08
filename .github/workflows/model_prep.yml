@@ -1,0 +1,42 @@
+name: Model Preparation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'
+
+jobs:
+  prepare-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install llm transformers auto-gptq optimum
+
+      - name: Download and quantize Qwen 3 0.6B
+        run: |
+          python -m llm.convert \
+            --model Qwen/Qwen3-0.6B \
+            --quant Q4_K_M \
+            --output qwen3-0.6b-Q4_K_M.gguf
+
+      - name: Verify checksum
+        run: |
+          shasum -a 256 qwen3-0.6b-Q4_K_M.gguf > qwen3-0.6b-Q4_K_M.gguf.sha256
+          cat qwen3-0.6b-Q4_K_M.gguf.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: qwen3-0.6b-Q4_K_M
+          path: |
+            qwen3-0.6b-Q4_K_M.gguf
+            qwen3-0.6b-Q4_K_M.gguf.sha256

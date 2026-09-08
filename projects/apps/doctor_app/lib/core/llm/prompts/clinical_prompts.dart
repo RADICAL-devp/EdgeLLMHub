@@ -12,7 +12,60 @@ import 'dart:convert';
 class ClinicalPrompts {
   ClinicalPrompts._();
 
-  /// Basic prompt-injection defense and input sanitization.
+  static const cardiologySummary = '''
+  You are a cardiology specialist AI assistant.
+  Given clinical text, generate a cardiology-focused summary with:
+  - Cardiac history and risk factors (HTN, DM, HLD, smoking, family history)
+  - Current cardiac symptoms (chest pain, dyspnea, palpitations, syncope)
+  - ECG/echo/stress test findings (ST elevations, Q waves, EF%, wall motion abnormalities)
+  - Cardiac medications (beta-blockers, ACEi, statins, antiplatelets)
+  - Relevant ICD-10 codes (I00-I99: I20-I25 for CAD, I48 for AFib, I50 for HF)
+  - Differential diagnosis (ACS, stable angina, HF, arrhythmia)
+  - Urgent vs. non-urgent triage recommendations
+  ''';
+
+  static const neurologySummary = '''
+  You are a neurology specialist AI assistant.
+  Focus on:
+  - Neurological symptoms (seizures, headaches, focal deficits, ataxia, cognitive decline)
+  - Stroke risk factors (AFib, HTN, DM, hyperlipidemia, prior TIA/CVA)
+  - MRI/CT findings (infarct location, hemorrhage, mass effect, midline shift)
+  - Neurological exam findings (CN deficits, motor/sensory loss, reflexes, coordination)
+  - Medications (antiepileptics, anticoagulants, migranes, Parkinson's)
+  - ICD-10 codes (G00-G99: G40 for epilepsy, G43 for migraine, I63-I64 for stroke)
+  - NIH Stroke Scale (if applicable)
+  - Red flags (sudden onset, thunderclap headache, focal neuro deficits)
+  ''';
+
+  static const pediatricsSummary = '''
+  You are a pediatrics specialist AI assistant.
+  Focus on:
+  - Growth and development milestones (age-appropriate)
+  - Vaccination status (up-to-date, missed vaccines)
+  - Pediatric-specific vital signs (age-based normals)
+  - Congenital conditions (heart defects, metabolic disorders)
+  - Neonatal concerns (jaundice, feeding issues, birth history)
+  - ICD-10 codes (P00-P96, Q00-Q99)
+  - Developmental delays (speech, motor, social)
+  - Immunization contraindications
+  ''';
+
+  static const Map<String, String> specialtyPrompts = {
+    'cardiology': cardiologySummary,
+    'neurology': neurologySummary,
+    'pediatrics': pediatricsSummary,
+  };
+
+  static String structuredSummaryWithSpecialty(String transcript, {String? specialty}) {
+    final specialtyPrompt = specialty != null
+        ? '\n\nSpecialty: $specialty\n${specialtyPrompts[specialty] ?? ''}'
+        : '';
+    return '''
+    You are a clinical documentation assistant. Given the following transcript, generate a structured medical summary.
+    $specialtyPrompt
+    Transcript: "$transcript"
+    ''';
+  }
   /// Removes potentially dangerous HTML/XML-like tags and trims whitespace.
   static String sanitize(String input) {
     if (input.isEmpty) return input;

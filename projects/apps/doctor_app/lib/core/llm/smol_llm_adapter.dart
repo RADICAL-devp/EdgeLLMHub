@@ -7,6 +7,7 @@ import 'package:doctor_app/core/models/patient_context.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
+import '../utils/debounce.dart';
 import 'prompts/clinical_prompts.dart';
 
 /// Android native LLM adapter using MLC Android runtime via MethodChannel.
@@ -122,14 +123,15 @@ class SmolLLMAdapter implements LlmPort {
     String fieldName,
     String transcriptText, {
     PatientContext? patientContext,
-  }) {
+  }) async* {
     final cleanText = ClinicalPrompts.sanitize(transcriptText);
     final prompt = _buildFieldPrompt(fieldName, cleanText, patientContext);
-
+    final debouncer = Debouncer(delay: const Duration(milliseconds: 50));
     final controller = StreamController<String>();
     StreamSubscription? subscription;
 
-    _ensureInitialized().then((_) {
+    try {
+      await _ensureInitialized();
       subscription = _streamChannel.receiveBroadcastStream().listen(
         (event) {
           if (event is String) {
@@ -137,13 +139,13 @@ class SmolLLMAdapter implements LlmPort {
               subscription?.cancel();
               controller.close();
             } else {
-              final buffer = StringBuffer();
-              buffer.write(event);
-              // Emit incremental field value
-              final current = _parseFieldValue(buffer.toString(), fieldName);
-              if (current.isNotEmpty) {
-                controller.add(current);
-              }
+              debouncer.run(() {
+                final buffer = StringBuffer()..write(event);
+                final current = _parseFieldValue(buffer.toString(), fieldName);
+                if (current.isNotEmpty) {
+                  controller.add(current);
+                }
+              });
             }
           }
         },
@@ -156,33 +158,19 @@ class SmolLLMAdapter implements LlmPort {
           subscription?.cancel();
           controller.close();
         },
-        onDone: () {
-          controller.close();
-        },
+        onDone: () => controller.close(),
       );
 
-      _methodChannel
-          .invokeMethod<void>('generateStream', {'prompt': prompt})
-          .timeout(_generationTimeout)
-          .catchError((error) {
-            subscription?.cancel();
-            controller.addError(LlmException(
-              'MLC Android LLM inference error: $error',
-              cause: error,
-              provider: LlmProvider.mlc,
-            ));
-            controller.close();
-          });
-    }).catchError((error) {
+      await _methodChannel.invokeMethod<void>('generateStream', {'prompt': prompt});
+      await for (final token in controller.stream) {
+        yield token;
+      }
+    } catch (e) {
       controller.addError(LlmException(
-        'Failed to initialize Android native LLM: $error',
-        cause: error,
+        'Failed to generate field stream: $e',
         provider: LlmProvider.mlc,
       ));
-      controller.close();
-    });
-
-    return controller.stream;
+    }
   }
 
   @override

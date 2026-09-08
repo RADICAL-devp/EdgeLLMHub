@@ -9,6 +9,7 @@ import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 import 'package:doctor_app/core/llm/native_llm_parsing.dart';
+import '../utils/debounce.dart';
 import 'prompts/clinical_prompts.dart';
 
 /// iOS native LLM adapter using MLC LLM via MethodChannel.
@@ -135,14 +136,15 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
     String fieldName,
     String transcriptText, {
     PatientContext? patientContext,
-  }) {
+  }) async* {
     final cleanText = ClinicalPrompts.sanitize(transcriptText);
     final prompt = _buildFieldPrompt(fieldName, cleanText, patientContext);
-
+    final debouncer = Debouncer(delay: const Duration(milliseconds: 50));
     final controller = StreamController<String>();
     StreamSubscription? subscription;
 
-    _ensureInitialized().then((_) {
+    try {
+      await _ensureInitialized();
       subscription = _streamChannel.receiveBroadcastStream().listen(
         (event) {
           if (event is String) {
@@ -150,13 +152,13 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
               subscription?.cancel();
               controller.close();
             } else {
-              final buffer = StringBuffer();
-              buffer.write(event);
-              // Emit incremental field value
-              final current = parseFieldValue(buffer.toString(), fieldName);
-              if (current.isNotEmpty) {
-                controller.add(current);
-              }
+              debouncer.run(() {
+                final buffer = StringBuffer()..write(event);
+                final current = parseFieldValue(buffer.toString(), fieldName);
+                if (current.isNotEmpty) {
+                  controller.add(current);
+                }
+              });
             }
           }
         },
@@ -169,33 +171,19 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
           subscription?.cancel();
           controller.close();
         },
-        onDone: () {
-          controller.close();
-        },
+        onDone: () => controller.close(),
       );
 
-      _methodChannel
-          .invokeMethod<void>('generateStream', {'prompt': prompt})
-          .timeout(_generationTimeout)
-          .catchError((error) {
-            subscription?.cancel();
-            controller.addError(LlmException(
-              'MLC LLM inference error: $error',
-              cause: error,
-              provider: LlmProvider.mlc,
-            ));
-            controller.close();
-          });
-    }).catchError((error) {
+      await _methodChannel.invokeMethod<void>('generateStream', {'prompt': prompt});
+      await for (final token in controller.stream) {
+        yield token;
+      }
+    } catch (e) {
       controller.addError(LlmException(
-        'Failed to initialize iOS native LLM: $error',
-        cause: error,
+        'Failed to generate field stream: $e',
         provider: LlmProvider.mlc,
       ));
-      controller.close();
-    });
-
-    return controller.stream;
+    }
   }
 
   @override

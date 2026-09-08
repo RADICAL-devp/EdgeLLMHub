@@ -1,0 +1,53 @@
+name: Qwen 3 0.6B Clinical Validation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'projects/apps/doctor_app/lib/core/llm/**'
+      - 'projects/apps/doctor_app/test/llm/**'
+      - 'projects/apps/doctor_app/test/fixtures/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'projects/apps/doctor_app/lib/core/llm/**'
+      - 'projects/apps/doctor_app/test/llm/**'
+      - 'projects/apps/doctor_app/test/fixtures/**'
+
+jobs:
+  validate:
+    name: Clinical Validation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.5'
+          channel: 'stable'
+
+      - name: Get Flutter dependencies
+        run: |
+          cd projects/apps/doctor_app
+          flutter pub get
+
+      - name: Run clinical validation
+        run: |
+          cd projects/apps/doctor_app
+          dart run ../../scripts/validate_clinical_samples.dart
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: clinical-validation-results
+          path: |
+            projects/apps/doctor_app/test-results/
+            projects/apps/doctor_app/coverage/

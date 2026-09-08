@@ -93,9 +93,13 @@ class EnvironmentConfig {
 
   /// Whether cloud LLM fallback is enabled.
   ///
-  /// Hardcoded to false — PHI must NOT leave the device.
+  /// Configurable via `--dart-define=CLOUD_LLM_ENABLED=true`.
+  /// Default: false — PHI must NOT leave the device.
   /// On-device inference only (native MLC → stub fallback).
-  static bool get cloudLlmEnabled => false;
+  static bool get cloudLlmEnabled {
+    const explicit = String.fromEnvironment('CLOUD_LLM_ENABLED');
+    return explicit.isNotEmpty && explicit.toLowerCase() == 'true';
+  }
 
   /// Whether the app is in debug/development mode.
   static bool get isDebug => environment == AppEnvironment.dev;
@@ -110,21 +114,19 @@ class EnvironmentConfig {
   );
 
   /// Current model version embedded in the app bundle.
-  ///
-  /// Updated when a new model is bundled with the app release.
   static ModelVersion get bundledModelVersion => ModelVersion(
-        version: '1.0.0',
+        version: '1.2.0',
         minimumCompatibleVersion: '1.0.0',
-        releaseDate: DateTime.utc(2026, 8, 15),
-        changelog: 'Initial SmolLM-360M-Instruct-q4f16_1-MLC release',
+        releaseDate: DateTime.utc(2026, 9, 8),
+        changelog: 'Qwen 3 0.6B medical LLM with specialty prompts, download UI, and clinical validation',
       );
 
   /// Supported model tiers for on-device inference.
   static const List<String> supportedModels = [
-    'SmolLM-360M-Instruct-q4f16_1-MLC',
+    'Qwen3-0.6B-Q4_K_M-MLC',
   ];
 
-  /// URL the SmolLM model binary is downloaded from.
+  /// URL the Qwen 3 0.6B model binary is downloaded from.
   ///
   /// Override via `--dart-define=MODEL_DOWNLOAD_URL=...`.
   /// In production, this should point to a signed GCP/AWS bucket URL.
@@ -132,49 +134,33 @@ class EnvironmentConfig {
     const explicit = String.fromEnvironment('MODEL_DOWNLOAD_URL');
     if (explicit.isNotEmpty) return explicit;
 
-    // Environment-specific defaults for CI/CD
     return switch (environment) {
       AppEnvironment.dev => '',
-      AppEnvironment.staging => 'https://storage.googleapis.com/doctorapp-staging/models/smolLM-360M-Instruct-q4f16_1-MLC.zip',
-      AppEnvironment.prod => 'https://storage.googleapis.com/doctorapp-prod/models/smolLM-360M-Instruct-q4f16_1-MLC.zip',
+      AppEnvironment.staging => 'https://storage.googleapis.com/doctorapp-staging/models/qwen3-0.6b-Q4_K_M.zip',
+      AppEnvironment.prod => 'https://storage.googleapis.com/doctorapp-prod/models/qwen3-0.6b-Q4_K_M.zip',
     };
   }
 
-  /// Expected SHA-256 of the model binary (hex), used to verify downloads.
+  /// Expected SHA-256 of the Qwen 3 0.6B model binary (hex), used to verify downloads.
   ///
   /// Override via `--dart-define=MODEL_CHECKSUM_SHA256=...`.
-  /// In production, this must match the uploaded artifact.
   static String get modelChecksumSha256 {
     const explicit = String.fromEnvironment('MODEL_CHECKSUM_SHA256');
     if (explicit.isNotEmpty) return explicit;
 
-    // Environment-specific defaults for CI/CD
     return switch (environment) {
       AppEnvironment.dev => '',
-      AppEnvironment.staging => 'STAGING_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
-      AppEnvironment.prod => 'PROD_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
+      AppEnvironment.staging => 'STAGING_QWEN3_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
+      AppEnvironment.prod => 'PROD_QWEN3_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
     };
   }
 
-  /// File name of the on-device model artifact.
-  ///
-  /// Defaults to the MLC-packaged archive for the first-run download flow
-  /// (both platforms); legacy single-binary downloads are still supported.
-  static const String modelFileName = 'smolLM-360M-Instruct-q4f16_1-MLC.zip';
+  /// File name of the Qwen 3 0.6B on-device model artifact.
+  static const String modelFileName = 'qwen3-0.6b-Q4_K_M.zip';
 
-  /// Directory name the downloaded model archive is extracted into; the
-  /// platform handlers load the model from this well-known location.
-  static const String modelBundleDirName = 'SmolLM-360M-Instruct-q4f16_1-MLC';
+  /// Directory name the downloaded Qwen 3 model archive is extracted into.
+  static const String modelBundleDirName = 'Qwen3-0.6B-Q4_K_M-MLC';
 
   /// Minimum free disk space required for model download + extraction (bytes).
-  static const int minFreeDiskSpaceBytes = 2 * 1024 * 1024 * 1024; // 2 GB
-
-  /// Maximum model download size (bytes) — used for progress validation.
-  static const int maxModelDownloadSizeBytes = 500 * 1024 * 1024; // 500 MB
-
-  /// Timeout for model download (seconds).
-  static const int modelDownloadTimeoutSeconds = 300; // 5 minutes
-
-  /// Timeout for model verification inference (seconds).
-  static const int modelVerificationTimeoutSeconds = 30;
+  static const int minFreeDiskSpaceBytes = 500 * 1024 * 1024; // 500 MB (was 2GB for SmolLM)
 }

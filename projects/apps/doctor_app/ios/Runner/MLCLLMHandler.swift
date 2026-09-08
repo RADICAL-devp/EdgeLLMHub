@@ -1,31 +1,29 @@
 import Flutter
 import Foundation
+
 #if canImport(MLCSwift)
 import MLCSwift
-#else
-// Native on-device LLM is disabled until the MLCSwift Swift Package is
-// added to the Xcode project (File → Add Package Dependencies → Add Local
-// → ios/mlc-llm/ios/MLCSwift). The Dart adapter then reports the engine as
-// unavailable and the app falls back to the cloud LLM.
 #endif
 
-#if canImport(MLCSwift)
-
-/// Bridges Flutter to MLCSwift for on-device SmolLM-360M inference.
+/// Bridges Flutter to MLCSwift for on-device inference.
+/// When MLCSwift is not linked, provides a stub handler that
+/// registers the method channel so the Dart adapter reports
+/// unavailability gracefully instead of crashing.
 final class MLCLLMHandler: NSObject {
   private static let methodChannelName = "com.example.clinical/llm"
   private static let streamChannelName = "com.example.clinical/llm_stream"
   private static let doneSentinel = "[DONE]"
-  // Model directory name as produced by `mlc_llm package` with HF://HuggingFaceTB/SmolLM-360M-Instruct + q4f16_1
-  private static let modelBundleName = "SmolLM-360M-Instruct-q4f16_1-MLC"
-  // `model_lib` field from bundle/mlc-app-config.json — the compiled system
-  // library registers under this exact name (llama arch + quantization hash).
+  // Model directory name as produced by `mlc_llm package` with HuggingFace/Qwen/Qwen3-0.6B + Q4_K_M
+  private static let modelBundleName = "Qwen3-0.6B-Q4_K_M-MLC"
   private static let modelLib = "llama_q4f16_1_d5ba06e61253098870aaa5dc3f1a2589"
   private static let maxContextTokens = 2048
 
   private let methodChannel: FlutterMethodChannel
   private let streamChannel: FlutterEventChannel
+
+  #if canImport(MLCSwift)
   private let engine = MLCEngine()
+  #endif
 
   private var eventSink: FlutterEventSink?
   private var isEngineReady = false
@@ -49,15 +47,13 @@ final class MLCLLMHandler: NSObject {
 
   deinit {
     activeGenerationTask?.cancel()
+    #if canImport(MLCSwift)
     let engineCopy = engine
     Task.detached { await engineCopy.unload() }
+    #endif
   }
 
   private var modelPath: String? {
-    // Primary: the model downloaded on first run. The Dart ModelManagerCubit
-    // downloads and checksum-verifies the archive into the app Documents
-    // directory and extracts it there, so this is the single source of truth
-    // for both platforms.
     if let documentsDir = FileManager.default.urls(
       for: .documentDirectory,
       in: .userDomainMask
@@ -72,14 +68,9 @@ final class MLCLLMHandler: NSObject {
         return downloaded.path
       }
     }
-    // Legacy/dev fallback: the model folder bundled into the app bundle
-    // (pre-download era, and local `flutter run` setups that copy the model
-    // in as a folder reference).
     if let path = Bundle.main.path(forResource: Self.modelBundleName, ofType: nil) {
       return path
     }
-    // Fallback: synchronized groups may flatten resources — scan the
-    // bundle for any directory whose name contains the model lib.
     let matchingDir = Bundle.main.urls(
       forResourcesWithExtension: nil,
       subdirectory: nil
@@ -97,6 +88,7 @@ final class MLCLLMHandler: NSObject {
     _ call: FlutterMethodCall,
     result: @escaping FlutterResult
   ) {
+    #if canImport(MLCSwift)
     switch call.method {
     case "isAvailable":
       result(isEngineReady)
@@ -158,6 +150,52 @@ final class MLCLLMHandler: NSObject {
     default:
       result(FlutterMethodNotImplemented)
     }
+    #else
+    // MLCSwift not linked — report engine as unavailable
+    switch call.method {
+    case "isAvailable":
+      result(false)
+    case "getModelInfo":
+      result([
+        "modelId": Self.modelBundleName,
+        "modelPath": "",
+        "installed": false,
+        "ready": false,
+        "contextWindowTokens": Self.maxContextTokens,
+        "checksumSha256": "",
+        "runtime": "MLCSwift (unavailable)",
+        "processor": "CPU",
+      ])
+    case "initialize":
+      result(FlutterError(
+        code: "MLCSWIFT_NOT_LINKED",
+        message: "MLCSwift not linked. Add MLCSwift Swift Package to Xcode project.",
+        details: nil
+      ))
+    case "generate":
+      result(FlutterError(
+        code: "MLCSWIFT_NOT_LINKED",
+        message: "MLCSwift not linked. Add MLCSwift Swift Package to Xcode project.",
+        details: nil
+      ))
+    case "generateStream":
+      result(FlutterError(
+        code: "MLCSWIFT_NOT_LINKED",
+        message: "MLCSwift not linked. Add MLCSwift Swift Package to Xcode project.",
+        details: nil
+      ))
+    case "warmUp":
+      result(FlutterError(
+        code: "MLCSWIFT_NOT_LINKED",
+        message: "MLCSwift not linked.",
+        details: nil
+      ))
+    case "cancel":
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+    #endif
   }
 
   private func promptArgument(
@@ -177,14 +215,14 @@ final class MLCLLMHandler: NSObject {
     return prompt
   }
 
+  #if canImport(MLCSwift)
   private func initializeEngine() async throws {
     guard !isEngineReady else { return }
     guard let path = modelPath else {
       throw MLCBridgeError.modelNotFound(
-        "SmolLM-360M not installed. Download it from the Model Manager screen first."
+        "Qwen 3 0.6B not installed. Download it from the Model Manager screen first."
       )
     }
-
     await engine.reload(modelPath: path, modelLib: Self.modelLib)
     isEngineReady = true
   }
@@ -199,16 +237,10 @@ final class MLCLLMHandler: NSObject {
 
   private func generateStreaming(prompt: String) async throws {
     guard let sink = eventSink else { throw MLCBridgeError.noEventSink }
-
     try await streamCompletion(prompt: prompt) { token in
-      await MainActor.run {
-        sink(token)
-      }
+      await MainActor.run { sink(token) }
     }
-
-    await MainActor.run {
-      sink(Self.doneSentinel)
-    }
+    await MainActor.run { sink(Self.doneSentinel) }
   }
 
   private func streamCompletion(
@@ -216,21 +248,13 @@ final class MLCLLMHandler: NSObject {
     onToken: @escaping (String) async -> Void
   ) async throws {
     guard isEngineReady else { throw MLCBridgeError.engineNotReady }
-
-    let messages = [
-      ChatCompletionMessage(role: .user, content: prompt)
-    ]
-
+    let messages = [ChatCompletionMessage(role: .user, content: prompt)]
     for await chunk in await engine.chat.completions.create(messages: messages) {
-      if Task.isCancelled {
-        throw MLCBridgeError.cancelled
-      }
+      if Task.isCancelled { throw MLCBridgeError.cancelled }
       guard let choice = chunk.choices.first,
             let content = choice.delta.content,
             case let .text(token) = content,
-            !token.isEmpty else {
-        continue
-      }
+            !token.isEmpty else { continue }
       await onToken(token)
     }
   }
@@ -250,9 +274,6 @@ final class MLCLLMHandler: NSObject {
     ]
   }
 
-  /// Human-readable execution device: the Metal GPU name when a Metal device
-  /// is available (physical A-series hardware), otherwise the CPU (simulator
-  /// or devices without Metal).
   private func deviceProcessor() -> String {
     if let metalDevice = MTLCreateSystemDefaultDevice() {
       return "\(metalDevice.name) (Metal)"
@@ -272,13 +293,8 @@ final class MLCLLMHandler: NSObject {
   }
 
   private func bundleChecksum() -> String? {
-    // The downloaded-model flow verifies the SHA-256 in Dart (single source
-    // of truth); a checksums.sha256 file may still accompany the model in
-    // the Documents dir (written by the download tooling) or ship inside
-    // the bundle for dev builds.
     if let documentsDir = FileManager.default.urls(
-      for: .documentDirectory,
-      in: .userDomainMask
+      for: .documentDirectory, in: .userDomainMask
     ).first {
       let checksumFile = documentsDir.appendingPathComponent("checksums.sha256")
       if let value = try? String(contentsOf: checksumFile, encoding: .utf8)
@@ -286,35 +302,22 @@ final class MLCLLMHandler: NSObject {
         return value
       }
     }
-    guard let checksumPath = Bundle.main.path(forResource: "checksums", ofType: "sha256") else {
-      return nil
-    }
+    guard let checksumPath = Bundle.main.path(forResource: "checksums", ofType: "sha256") else { return nil }
     return try? String(contentsOfFile: checksumPath, encoding: .utf8)
       .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private func flutterError(from error: Error) -> FlutterError {
     if let bridgeError = error as? MLCBridgeError {
-      return FlutterError(
-        code: bridgeError.code,
-        message: bridgeError.localizedDescription,
-        details: nil
-      )
+      return FlutterError(code: bridgeError.code, message: bridgeError.localizedDescription, details: nil)
     }
-
-    return FlutterError(
-      code: "GENERATION_FAILED",
-      message: error.localizedDescription,
-      details: nil
-    )
+    return FlutterError(code: "GENERATION_FAILED", message: error.localizedDescription, details: nil)
   }
+  #endif
 }
 
 extension MLCLLMHandler: FlutterStreamHandler {
-  func onListen(
-    withArguments arguments: Any?,
-    eventSink events: @escaping FlutterEventSink
-  ) -> FlutterError? {
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
     return nil
   }
@@ -327,6 +330,7 @@ extension MLCLLMHandler: FlutterStreamHandler {
   }
 }
 
+#if canImport(MLCSwift)
 private enum MLCBridgeError: LocalizedError {
   case modelNotFound(String)
   case engineNotReady
@@ -341,7 +345,6 @@ private enum MLCBridgeError: LocalizedError {
     case .cancelled: return "CANCELLED"
     }
   }
-
   var errorDescription: String? {
     switch self {
     case .modelNotFound(let message): return message
@@ -351,5 +354,4 @@ private enum MLCBridgeError: LocalizedError {
     }
   }
 }
-
-#endif  // canImport(MLCSwift)
+#endif

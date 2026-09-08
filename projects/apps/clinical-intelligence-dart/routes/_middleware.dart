@@ -63,21 +63,18 @@ Handler middleware(Handler handler) {
           : HashEmbeddingService();
 
   // --- Crypto ---
+  // Keys MUST come from environment variables. No hardcoded keys.
   final aesGcmService = AesGcmService(
-    masterKeyB64: Platform.environment['AES_MASTER_KEY'] ?? _devMasterKey,
+    masterKeyB64: Platform.environment['AES_MASTER_KEY']
+        ?? (throw StateError('AES_MASTER_KEY env var required')),
   );
-
-  // --- Repositories (with encryption) ---
-  final transcriptRepository =
-      DriftTranscriptRepository(database, aesGcmService);
-  final summaryRepository = DriftSummaryRepository(database, aesGcmService);
-  final doctorNoteRepository =
-      DriftDoctorNoteRepository(database, aesGcmService);
 
   // --- Auth ---
   final jwtService = JwtService(
-    privateKeyPem: Platform.environment['JWT_PRIVATE_KEY'] ?? _devPrivateKey,
-    publicKeyPem: Platform.environment['JWT_PUBLIC_KEY'] ?? _devPublicKey,
+    privateKeyPem: Platform.environment['JWT_PRIVATE_KEY']
+        ?? (throw StateError('JWT_PRIVATE_KEY env var required')),
+    publicKeyPem: Platform.environment['JWT_PUBLIC_KEY']
+        ?? (throw StateError('JWT_PUBLIC_KEY env var required')),
   );
 
   // --- Audit ---
@@ -172,48 +169,4 @@ Middleware _corsMiddleware() {
   };
 }
 
-/// Development-only RSA keypair.
-/// In production, keys MUST come from environment variables.
-const _devPrivateKey = '''-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDBezQrknoUxPW4
-xF+qZHtYE5BeSBPZMYbzhiBktPscpZZeCZqMrwNIu7oFbDdFoOQAaiKAe6boWnch
-1EBL5u9Yr6PW/XVQD9RTsY02AyDpYTw2HJSFyRss6FA5Y7tm4Xb4A2l8aIiU0GVH
-ItsEJC5iEpMUVB/uJyir8z6Gj7vUSG5EgIyQPFf07ovB70jHk2B67OUTV0mbxpHv
-kcbNa3Z4o9OA8n0a8m7ss08aLR47t02RzCpSVj/hX01RvELFTwd9jNRLmWokqJHF
-GpL5UpgUMbYqhml0yPH6V3bHZRNRfrFBm51tADFkTrxSEOfVFoJOyrRfZ3Q2AK9h
-76VlhNp9AgMBAAECggEBAJLeRxfcNLeXWz9KMaRSah7NmwU2iXqRUfOBmQ1ZJFT2
-jVIM0DiCkWeguPBs2PgNzYVTC6WkN2qhYVVYnQYA4ybbDO+hrm971J1DZgHeFhmS
-KfaZc1Sq9+n63wrxXcwW0gwp6uT5JNRx7K83EjHulRb1Kph/000ghIsiNhBHAzl7
-/9dUsmUDVLuqzBKExNoCRZaEqmR2p9pYT9KD6F2U4ffV9vDgzkiVVQZeBPt8hzOk
-ndbeD9IDymB0guezcFDByAal3MIWMDhzMNwNOZHDj4T/iGcNfTReMlfUaeMOVpiP
-q4/oAcp4a5h/ClCuP+mNK12OFvrdJt5pSfcxrc7I7YECgYEA5JcoVfWdJDi2LnxD
-48l5Oh/mWINaT50vgfMM6PsJNNB/MW0wXj7Mi1CyVcozDoEnMtjnVtmrRotItiQw
-u4yY3GChGnOjOZZwv0CxynzZXhLnjkvl+Hi0MOJcmfKy2YWVpaktMLGiFsz2VN2/
-IhfnKF78etWA1o5izoMY9Qnz6DkCgYEA2K5UcAYZ7xf23kOA/seu6R1oJwmh+WR1
-S0DGrbB52QaktiG3IhWeqo2EjGqqiFk+cOi13Fex2NANeajkLqtU5/y31l94SaIv
-893lja8FekO9Jl/SNiWUuuM1qVqH0JP+RDk2koLKxoB72v4K1nmAA6gAghIk2icS
-B8/6n3oEHGUCgYAwjWqj12dpKiKH/RzuZPy6u8vRQRUNk/VjRJyZX7i03xQlC2wa
-mHwZmypFzozJp+ULh8abS+B1O2BWT5mKPHK7XErbs3QX5zxLYxJgT+Rbduh38OcH
-v5uGRo4kpMgYK6d9aFGQ5innbeFkZTUTqMAQcxxteqvC5rtV4cKLSXHlAQKBgBK6
-1v+r91fsiWFjEmZzmlH6QcOGGKM3JNBxc/sVkyLIaTp5JZxjpAh4HSoKGl2Y4UXf
-R8EZL31fVpral4bVNoyrErUMIZiz1VNOLgaWR3HvIw2LIN+fVgDlnQDbm3vTHxqE
-m4wElESeXJZseUFa1U77mbekm9zjnbJhLvfUE0DlAoGAS8V0oCRNkMPpxAvejK49
-8uDAHg9zoZyGarTdL9WD86aPbYwAF3WaeloVBehugOxrK0Wr5CP6PVA445MJwgMm
-2nEaPCuNTvO/y9ubAUFSeRqEMRHo+mxLppKmyGNp/hQZVyVrITCT2BDXnsq1GdD+
-hFVSurtGYXaHhwgtno+3ddw=
------END PRIVATE KEY-----''';
 
-const _devPublicKey = '''-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwXs0K5J6FMT1uMRfqmR7
-WBOQXkgT2TGG84YgZLT7HKWWXgmajK8DSLu6BWw3RaDkAGoigHum6Fp3IdRAS+bv
-WK+j1v11UA/UU7GNNgMg6WE8NhyUhckbLOhQOWO7ZuF2+ANpfGiIlNBlRyLbBCQu
-YhKTFFQf7icoq/M+ho+71EhuRICMkDxX9O6Lwe9Ix5NgeuzlE1dJm8aR75HGzWt2
-eKPTgPJ9GvJu7LNPGi0eO7dNkcwqUlY/4V9NUbxCxU8HfYzUS5lqJKiRxRqS+VKY
-FDG2KoZpdMjx+ld2x2UTUX6xQZudbQAxZE68UhDn1RaCTsq0X2d0NgCvYe+lZYTa
-fQIDAQAB
------END PUBLIC KEY-----''';
-
-/// Development-only AES master key (256-bit, base64url encoded).
-/// In production, key MUST come from environment variable.
-/// Generate with: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`
-const _devMasterKey = '7DOi+T/bVoL8yBQpYcLlXOqNb4MwmeOQ8J0hOR/xCjM=';

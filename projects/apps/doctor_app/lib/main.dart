@@ -467,26 +467,17 @@ Future<void> seedExampleConsultationIfEmpty(LocalDatabase db) async {
   const patientId = 'p-male-34';
   const doctorId = 'd-devansh';
 
-  const rawText = 'The patient is a 34-year-old male who presented with '
-      'complaints of intermittent fever for the last 10 days, associated '
-      'with generalized weakness, body aches, headache, and loss of '
-      'appetite. The patient reports that the fever is more prominent '
-      'during the evening hours and is occasionally accompanied by chills '
-      'and excessive sweating. He also complains of mild abdominal '
-      'discomfort, nausea, and a feeling of bloating after meals. Over '
-      'the past week, he has noticed increasing fatigue, making it '
-      'difficult to perform routine daily activities. The patient denies '
-      'any history of vomiting, diarrhea, chest pain, shortness of '
-      'breath, or recent travel outside the city. He reports inadequate '
-      'sleep due to persistent discomfort and has been self-medicating '
-      'with over-the-counter paracetamol, which provides only temporary '
-      'relief. There is no known history of diabetes, hypertension, '
-      'tuberculosis, or any major chronic illness. The patient states '
-      'that his symptoms have gradually worsened despite rest and '
-      'increased fluid intake. He is seeking medical evaluation to '
-      'determine the underlying cause of the fever and associated '
-      'symptoms and to receive appropriate treatment and further '
-      'diagnostic investigations if required.';
+  const rawText = '''चलो दोस्त, मैं आपकी कहानी सुनता हूँ। मैं हूँ डॉ. शर्मा। आपका नाम क्या है?
+
+मैं गोविंद कुमार हूँ। मैं 45 साल का हूँ। डॉ. साहब, मुझे पिछले कुछ हफ्तों से बहुत-बहुत दिक्कत हो रही है। मेरा पेट बहुत दर्द कर रहा है, खासकर भोजन के बाद। मुझे बार-बार उल्टी भी हो रही है, और मुझे बहुत भूख नहीं लगती।
+
+मैंने पिछले कुछ दिनों से जलन भी महसूस की है। मुझे बहुत थकान हो रही है, जबकि मैं बसा ही हूँ। मेरा शरीर गर्म लग रहा है और मुझे बाहर से पसीना भी आ रहा है।
+
+डॉ. साहब, मुझे डर लग रहा है कि यह कोई बुरी बात हो सकती है। मुझे पता है कि मेरे पिताजी को भी इसी तरह की समस्या थी। मैं बहुत चिंतित हूँ।
+
+मेरा दिनचर्या बिगड़ गया है। मैं सुबह को नहीं खा सकता, दोपहर को थोड़ा खा लेता हूँ, और शाम को नहीं। मेरा वजन पिछले महीने में बहुत कम हो गया है। मैं 8 किलो गिरा हूँ।
+
+मुझे बहुत-बहुत चिंता है। कृपया मुझे बहुत अच्छे से चेक करें और बताएँ कि क्या हो सकता है। मैं बहुत डरा हुआ हूँ।''';
 
   await repo.saveNote(DoctorNote(
     noteId: 'n-example-001',
