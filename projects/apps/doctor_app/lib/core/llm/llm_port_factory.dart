@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:doctor_app/core/config/environment.dart';
 import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 import 'package:doctor_app/core/llm/ios_native_llm_adapter.dart';
@@ -19,13 +18,9 @@ class LlmPortFactory {
   LlmPortFactory._();
 
   /// Create the hybrid LLM port for the current environment.
-  ///
-  /// [capabilityService] is used to detect simulator vs. physical device.
   static Future<HybridLlmAdapter> create(
     DeviceCapabilityService capabilityService,
   ) async {
-    final isSimulator = await capabilityService.isSimulator;
-
     // --- Build adapters ---
     final stubAdapter = StubLlmAdapter();
 

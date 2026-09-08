@@ -63,7 +63,7 @@ class ModelManagerPage extends StatelessWidget {
           const Text('On-device AI model is not installed.'),
           const SizedBox(height: 8),
           const Text(
-            'Download the SmolLM-360M model (~360MB) to enable offline AI '
+             'Download the Qwen 3 0.6B model (~360MB) to enable offline AI '
             'assistance. The model runs entirely on-device — no PHI leaves '
             'the device.',
             textAlign: TextAlign.center,

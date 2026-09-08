@@ -342,7 +342,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
         name: 'ModelManagerCubit',
       );
       emit(ModelManagerReady(
-        'Bundled SmolLM-360M (MLCSwift)',
+        'Bundled Qwen 3 0.6B (MLCSwift)',
         executionMode: 'local',
         modelInfo: modelInfo,
       ));
@@ -478,7 +478,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
         name: 'ModelManagerCubit',
       );
       emit(ModelManagerReady(
-        'Bundled SmolLM-360M (MLC Android)',
+        'Bundled Qwen 3 0.6B (MLC Android)',
         executionMode: 'local',
         modelInfo: modelInfo,
       ));
@@ -746,7 +746,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
 
     emit(const ModelManagerError(
       'No model download URL is configured for this build. '
-      'Bundle the SmolLM-360M model into the app, or launch with '
+      'Bundle the Qwen 3 0.6B model into the app, or launch with '
       '--dart-define=MODEL_DOWNLOAD_URL=... and MODEL_CHECKSUM_SHA256=...',
       canRetry: false,
     ));

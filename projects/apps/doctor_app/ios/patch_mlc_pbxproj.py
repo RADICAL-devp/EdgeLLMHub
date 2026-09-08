@@ -8,8 +8,8 @@ import shutil
 import sys
 
 PBX = "/Users/devanshparashar/dev-playground/projects/apps/doctor_app/ios/Runner.xcodeproj/project.pbxproj"
-MODEL_DIR = "mlc-llm/SmolLM-360M-Instruct-q4f16_1-MLC"
-MODEL_NAME = "SmolLM-360M-Instruct-q4f16_1-MLC"
+MODEL_DIR = "mlc-llm/Qwen3-0.6B-Q4_K_M-MLC"
+MODEL_NAME = "Qwen3-0.6B-Q4_K_M-MLC"
 MLC_SWIFT_DIR = "mlc-llm/ios/MLCSwift"
 
 # Stable 24-char hex IDs (uppercase, Xcode-style)

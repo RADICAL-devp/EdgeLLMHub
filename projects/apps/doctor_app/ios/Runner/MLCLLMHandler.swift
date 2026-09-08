@@ -1,32 +1,32 @@
 import Flutter
 import Foundation
-
-#if canImport(MLCSwift)
 import MLCSwift
-#endif
+import os
 
-/// Bridges Flutter to MLCSwift for on-device inference.
-/// When MLCSwift is not linked, provides a stub handler that
-/// registers the method channel so the Dart adapter reports
-/// unavailability gracefully instead of crashing.
+/// Bridges Flutter to MLCSwift for on-device MLC LLM inference.
+///
+/// Wraps the real `MLCEngine` (from the MLCSwift local Swift package) that is
+/// linked into the Runner target alongside the prebuilt MLC static libraries.
+/// Loads the bundled Qwen3 model and routes `generate`/`generateStream` through
+/// the engine, forwarding deltas on the EventChannel until `[DONE]`.
+@available(iOS 14.0.0, *)
 final class MLCLLMHandler: NSObject {
   private static let methodChannelName = "com.example.clinical/llm"
   private static let streamChannelName = "com.example.clinical/llm_stream"
   private static let doneSentinel = "[DONE]"
-  // Model directory name as produced by `mlc_llm package` with HuggingFace/Qwen/Qwen3-0.6B + Q4_K_M
   private static let modelBundleName = "Qwen3-0.6B-Q4_K_M-MLC"
   private static let modelLib = "llama_q4f16_1_d5ba06e61253098870aaa5dc3f1a2589"
   private static let maxContextTokens = 2048
 
+  private let logger = Logger(subsystem: "com.omoyari.greentech.doctorApp", category: "MLCLLMHandler")
+
   private let methodChannel: FlutterMethodChannel
   private let streamChannel: FlutterEventChannel
 
-  #if canImport(MLCSwift)
-  private let engine = MLCEngine()
-  #endif
-
   private var eventSink: FlutterEventSink?
+  private var engine: MLCEngine?
   private var isEngineReady = false
+  private var isEngineInitializing = false
   private var activeGenerationTask: Task<Void, Never>?
 
   init(messenger: FlutterBinaryMessenger) {
@@ -47,10 +47,7 @@ final class MLCLLMHandler: NSObject {
 
   deinit {
     activeGenerationTask?.cancel()
-    #if canImport(MLCSwift)
-    let engineCopy = engine
-    Task.detached { await engineCopy.unload() }
-    #endif
+    engine = nil
   }
 
   private var modelPath: String? {
@@ -58,13 +55,9 @@ final class MLCLLMHandler: NSObject {
       for: .documentDirectory,
       in: .userDomainMask
     ).first {
-      let downloaded = documentsDir
-        .appendingPathComponent(Self.modelBundleName)
+      let downloaded = documentsDir.appendingPathComponent(Self.modelBundleName)
       var isDir: ObjCBool = false
-      if FileManager.default.fileExists(
-        atPath: downloaded.path,
-        isDirectory: &isDir
-      ), isDir.boolValue {
+      if FileManager.default.fileExists(atPath: downloaded.path, isDirectory: &isDir), isDir.boolValue {
         return downloaded.path
       }
     }
@@ -76,126 +69,93 @@ final class MLCLLMHandler: NSObject {
       subdirectory: nil
     )?.first { url in
       var isDir: ObjCBool = false
-      return FileManager.default.fileExists(
-        atPath: url.path,
-        isDirectory: &isDir
-      ) && isDir.boolValue && url.lastPathComponent.contains(Self.modelLib)
+      return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+        && isDir.boolValue && url.lastPathComponent.contains(Self.modelBundleName)
     }
     return matchingDir?.path
   }
+
+  // MARK: - Method channel
 
   private func handleMethodCall(
     _ call: FlutterMethodCall,
     result: @escaping FlutterResult
   ) {
-    #if canImport(MLCSwift)
+    let modelAvailable = modelPath != nil
     switch call.method {
     case "isAvailable":
       result(isEngineReady)
-
-    case "getModelInfo":
-      result(modelInfo())
-
-    case "initialize":
-      Task {
-        do {
-          try await initializeEngine()
-          await MainActor.run { result(nil) }
-        } catch {
-          await MainActor.run { result(flutterError(from: error)) }
-        }
-      }
-
-    case "generate":
-      guard let prompt = promptArgument(from: call, result: result) else { return }
-      Task {
-        do {
-          let response = try await generateNonStreaming(prompt: prompt)
-          await MainActor.run { result(response) }
-        } catch {
-          await MainActor.run { result(flutterError(from: error)) }
-        }
-      }
-
-    case "generateStream":
-      guard let prompt = promptArgument(from: call, result: result) else { return }
-      activeGenerationTask?.cancel()
-      activeGenerationTask = Task { [weak self] in
-        guard let self else { return }
-        do {
-          try await self.generateStreaming(prompt: prompt)
-        } catch {
-          await MainActor.run {
-            self.eventSink?(self.flutterError(from: error))
-          }
-        }
-      }
-      result(nil)
-
-    case "warmUp":
-      Task {
-        do {
-          _ = try await generateNonStreaming(prompt: "Hello")
-          await MainActor.run { result("OK") }
-        } catch {
-          await MainActor.run { result(flutterError(from: error)) }
-        }
-      }
-
-    case "cancel":
-      activeGenerationTask?.cancel()
-      activeGenerationTask = nil
-      result(nil)
-
-    default:
-      result(FlutterMethodNotImplemented)
-    }
-    #else
-    // MLCSwift not linked — report engine as unavailable
-    switch call.method {
-    case "isAvailable":
-      result(false)
     case "getModelInfo":
       result([
         "modelId": Self.modelBundleName,
-        "modelPath": "",
-        "installed": false,
-        "ready": false,
+        "modelPath": modelPath ?? "",
+        "installed": modelAvailable,
+        "ready": isEngineReady,
         "contextWindowTokens": Self.maxContextTokens,
         "checksumSha256": "",
-        "runtime": "MLCSwift (unavailable)",
-        "processor": "CPU",
+        "runtime": "MLCSwift",
+        "processor": "CPU+GPU",
       ])
     case "initialize":
-      result(FlutterError(
-        code: "MLCSWIFT_NOT_LINKED",
-        message: "MLCSwift not linked. Add MLCSwift Swift Package to Xcode project.",
-        details: nil
-      ))
+      Task {
+        do {
+          try await initialize()
+          result(nil)
+        } catch {
+          result(FlutterError(
+            code: "INIT_FAILED",
+            message: "Failed to initialize MLC engine: \(error.localizedDescription)",
+            details: nil
+          ))
+        }
+      }
     case "generate":
-      result(FlutterError(
-        code: "MLCSWIFT_NOT_LINKED",
-        message: "MLCSwift not linked. Add MLCSwift Swift Package to Xcode project.",
-        details: nil
-      ))
+      Task {
+        do {
+          let text = try await runGeneration(for: call)
+          result(text)
+        } catch {
+          result(FlutterError(
+            code: "GENERATE_FAILED",
+            message: "MLC generation failed: \(error.localizedDescription)",
+            details: nil
+          ))
+        }
+      }
     case "generateStream":
-      result(FlutterError(
-        code: "MLCSWIFT_NOT_LINKED",
-        message: "MLCSwift not linked. Add MLCSwift Swift Package to Xcode project.",
-        details: nil
-      ))
+      guard let prompt = promptArgument(from: call, result: result) else { return }
+      Task {
+        do {
+          try await initialize()
+          startStreaming(prompt: prompt)
+          result(nil)
+        } catch {
+          result(FlutterError(
+            code: "STREAM_FAILED",
+            message: "MLC stream failed: \(error.localizedDescription)",
+            details: nil
+          ))
+        }
+      }
     case "warmUp":
-      result(FlutterError(
-        code: "MLCSWIFT_NOT_LINKED",
-        message: "MLCSwift not linked.",
-        details: nil
-      ))
+      Task {
+        do {
+          try await initialize()
+          result(nil)
+        } catch {
+          result(FlutterError(
+            code: "WARMUP_FAILED",
+            message: "MLC warm-up failed: \(error.localizedDescription)",
+            details: nil
+          ))
+        }
+      }
     case "cancel":
+      activeGenerationTask?.cancel()
       result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
-    #endif
   }
 
   private func promptArgument(
@@ -215,107 +175,136 @@ final class MLCLLMHandler: NSObject {
     return prompt
   }
 
-  #if canImport(MLCSwift)
-  private func initializeEngine() async throws {
-    guard !isEngineReady else { return }
-    guard let path = modelPath else {
-      throw MLCBridgeError.modelNotFound(
-        "Qwen 3 0.6B not installed. Download it from the Model Manager screen first."
+  // MARK: - Engine lifecycle
+
+  private func initialize() async throws {
+    if isEngineReady { return }
+    if isEngineInitializing {
+      while isEngineInitializing && !isEngineReady {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
+      if isEngineReady { return }
+    }
+    isEngineInitializing = true
+    defer { isEngineInitializing = false }
+
+    guard let modelPath = modelPath else {
+      throw NSError(
+        domain: "MLCLLMHandler",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Model \(Self.modelBundleName) not found in bundle or documents"]
       )
     }
-    await engine.reload(modelPath: path, modelLib: Self.modelLib)
+
+    guard modelPathHasBeam(modelPath) else {
+      throw NSError(
+        domain: "MLCLLMHandler",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "Model artifacts missing at \(modelPath)"]
+      )
+    }
+
+    let engine = MLCEngine()
+    self.engine = engine
+    await engine.reload(modelPath: modelPath, modelLib: Self.modelLib)
     isEngineReady = true
+    logger.info("MLC engine reloaded; model=\(modelPath, privacy: .public)")
   }
 
-  private func generateNonStreaming(prompt: String) async throws -> String {
-    var output = ""
-    try await streamCompletion(prompt: prompt) { token in
-      output.append(token)
+  private func modelPathHasBeam(_ path: String) -> Bool {
+    let url = URL(fileURLWithPath: path)
+    let entries = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+    let hasConfig = entries.contains { $0 == "mlc-chat-config.json" }
+    let hasParams = entries.contains { $0.contains(".params") || $0 == "params" }
+    return hasConfig && hasParams
+  }
+
+  private func ensureEngine() async throws -> MLCEngine {
+    if isEngineReady, let engine = engine {
+      return engine
     }
-    return output
-  }
-
-  private func generateStreaming(prompt: String) async throws {
-    guard let sink = eventSink else { throw MLCBridgeError.noEventSink }
-    try await streamCompletion(prompt: prompt) { token in
-      await MainActor.run { sink(token) }
+    try await initialize()
+    guard isEngineReady, let engine = engine else {
+      throw NSError(
+        domain: "MLCLLMHandler",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "MLC engine failed to initialize"]
+      )
     }
-    await MainActor.run { sink(Self.doneSentinel) }
+    return engine
   }
 
-  private func streamCompletion(
-    prompt: String,
-    onToken: @escaping (String) async -> Void
-  ) async throws {
-    guard isEngineReady else { throw MLCBridgeError.engineNotReady }
+  // MARK: - Generation
+
+  private func runGeneration(for call: FlutterMethodCall) async throws -> String {
+    guard let prompt = promptArgument(from: call, result: { _ in }) else {
+      throw NSError(
+        domain: "MLCLLMHandler",
+        code: 4,
+        userInfo: [NSLocalizedDescriptionKey: "Missing non-empty prompt"]
+      )
+    }
+    let engine = try await ensureEngine()
     let messages = [ChatCompletionMessage(role: .user, content: prompt)]
-    for await chunk in await engine.chat.completions.create(messages: messages) {
-      if Task.isCancelled { throw MLCBridgeError.cancelled }
-      guard let choice = chunk.choices.first,
-            let content = choice.delta.content,
-            case let .text(token) = content,
-            !token.isEmpty else { continue }
-      await onToken(token)
-    }
-  }
-
-  private func modelInfo() -> [String: Any] {
-    let path = modelPath
-    return [
-      "modelId": Self.modelBundleName,
-      "modelLib": Self.modelLib,
-      "modelPath": path ?? "",
-      "installed": path != nil,
-      "ready": isEngineReady,
-      "contextWindowTokens": Self.maxContextTokens,
-      "checksumSha256": bundleChecksum() ?? "",
-      "runtime": "MLCSwift",
-      "processor": deviceProcessor(),
-    ]
-  }
-
-  private func deviceProcessor() -> String {
-    if let metalDevice = MTLCreateSystemDefaultDevice() {
-      return "\(metalDevice.name) (Metal)"
-    }
-    return "CPU (\(hostCpuArchitecture()))"
-  }
-
-  private func hostCpuArchitecture() -> String {
-    var uts = utsname()
-    uname(&uts)
-    let raw = withUnsafePointer(to: &uts.machine) { pointer in
-      pointer.withMemoryRebound(to: CChar.self, capacity: 64) { cstr in
-        String(cString: cstr)
+    let stream = await engine.chat.completions.create(
+      messages: messages,
+      model: Self.modelBundleName,
+      max_tokens: Self.maxContextTokens,
+      temperature: 0.2
+    )
+    var buffer = ""
+    for await response in stream {
+      for choice in response.choices {
+        if let delta = choice.delta.content {
+          buffer += delta.asText()
+        }
       }
     }
-    return raw
+    return buffer
   }
 
-  private func bundleChecksum() -> String? {
-    if let documentsDir = FileManager.default.urls(
-      for: .documentDirectory, in: .userDomainMask
-    ).first {
-      let checksumFile = documentsDir.appendingPathComponent("checksums.sha256")
-      if let value = try? String(contentsOf: checksumFile, encoding: .utf8)
-        .trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
-        return value
+  private func startStreaming(prompt: String) {
+    activeGenerationTask?.cancel()
+    let task = Task { [weak self] in
+      guard let self else { return }
+      do {
+        let engine = try await self.ensureEngine()
+        let messages = [ChatCompletionMessage(role: .user, content: prompt)]
+        let stream = await engine.chat.completions.create(
+          messages: messages,
+          model: Self.modelBundleName,
+          max_tokens: Self.maxContextTokens,
+          temperature: 0.2
+        )
+        for await response in stream {
+          if Task.isCancelled { break }
+          for choice in response.choices {
+            if let content = choice.delta.content {
+              let delta = content.asText()
+              if !delta.isEmpty {
+                self.emit(delta)
+              }
+            }
+          }
+        }
+        self.emit(Self.doneSentinel)
+      } catch {
+        self.logger.error("Stream generation error: \(error.localizedDescription)")
+        self.emit(Self.doneSentinel)
       }
     }
-    guard let checksumPath = Bundle.main.path(forResource: "checksums", ofType: "sha256") else { return nil }
-    return try? String(contentsOfFile: checksumPath, encoding: .utf8)
-      .trimmingCharacters(in: .whitespacesAndNewlines)
+    activeGenerationTask = task
   }
 
-  private func flutterError(from error: Error) -> FlutterError {
-    if let bridgeError = error as? MLCBridgeError {
-      return FlutterError(code: bridgeError.code, message: bridgeError.localizedDescription, details: nil)
+  private func emit(_ event: String) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let sink = self.eventSink else { return }
+      sink(event)
     }
-    return FlutterError(code: "GENERATION_FAILED", message: error.localizedDescription, details: nil)
   }
-  #endif
 }
 
+@available(iOS 14.0.0, *)
 extension MLCLLMHandler: FlutterStreamHandler {
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
@@ -329,29 +318,3 @@ extension MLCLLMHandler: FlutterStreamHandler {
     return nil
   }
 }
-
-#if canImport(MLCSwift)
-private enum MLCBridgeError: LocalizedError {
-  case modelNotFound(String)
-  case engineNotReady
-  case noEventSink
-  case cancelled
-
-  var code: String {
-    switch self {
-    case .modelNotFound: return "MODEL_NOT_FOUND"
-    case .engineNotReady: return "ENGINE_NOT_READY"
-    case .noEventSink: return "STREAM_NOT_LISTENING"
-    case .cancelled: return "CANCELLED"
-    }
-  }
-  var errorDescription: String? {
-    switch self {
-    case .modelNotFound(let message): return message
-    case .engineNotReady: return "MLC engine is not initialized."
-    case .noEventSink: return "No active Flutter event stream is listening."
-    case .cancelled: return "Generation was cancelled."
-    }
-  }
-}
-#endif

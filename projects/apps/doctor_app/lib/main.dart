@@ -467,17 +467,17 @@ Future<void> seedExampleConsultationIfEmpty(LocalDatabase db) async {
   const patientId = 'p-male-34';
   const doctorId = 'd-devansh';
 
-  const rawText = '''चलो दोस्त, मैं आपकी कहानी सुनता हूँ। मैं हूँ डॉ. शर्मा। आपका नाम क्या है?
+  const rawText = '''Chalo dost, main aapki kahani sunta hoon. Main hoon Dr. Sharma. Aapka naam kya hai?
 
-मैं गोविंद कुमार हूँ। मैं 45 साल का हूँ। डॉ. साहब, मुझे पिछले कुछ हफ्तों से बहुत-बहुत दिक्कत हो रही है। मेरा पेट बहुत दर्द कर रहा है, खासकर भोजन के बाद। मुझे बार-बार उल्टी भी हो रही है, और मुझे बहुत भूख नहीं लगती।
+Main Govind Kumar hoon. Main 45 saal ka hoon. Doctor sahab, mujhe pichle kuch hafte se bahut-bahut dikkat ho rahi hai. Mera pet bahut dard kar raha hai, khaaskar bhojan ke baad. Mujhe baar-baar ulti bhi ho rahi hai, aur mujhe bahut bhookh nahi lagti.
 
-मैंने पिछले कुछ दिनों से जलन भी महसूस की है। मुझे बहुत थकान हो रही है, जबकि मैं बसा ही हूँ। मेरा शरीर गर्म लग रहा है और मुझे बाहर से पसीना भी आ रहा है।
+Maine pichle kuch dinon se jalan bhi mehsoos ki hai. Mujhe bahut thakan ho rahi hai, jabki main basa hi hoon. Mera shareer garm lag raha hai aur mujhe bahar se paseena bhi aa raha hai.
 
-डॉ. साहब, मुझे डर लग रहा है कि यह कोई बुरी बात हो सकती है। मुझे पता है कि मेरे पिताजी को भी इसी तरह की समस्या थी। मैं बहुत चिंतित हूँ।
+Doctor sahab, mujhe darr lag raha hai ki yeh koi buri baat ho sakti hai. Mujhe pata hai ki mere pitaji ko bhi isi tarah ki samasya thi. Main bahut chintit hoon.
 
-मेरा दिनचर्या बिगड़ गया है। मैं सुबह को नहीं खा सकता, दोपहर को थोड़ा खा लेता हूँ, और शाम को नहीं। मेरा वजन पिछले महीने में बहुत कम हो गया है। मैं 8 किलो गिरा हूँ।
+Mera dincharya bigad gaya hai. Main subah ko nahi kha sakta, dopahar ko thoda kha leta hoon, aur shaam ko nahi. Mera vajan pichle mahine mein bahut kam ho gaya hai. Main 8 kilo gira hoon.
 
-मुझे बहुत-बहुत चिंता है। कृपया मुझे बहुत अच्छे से चेक करें और बताएँ कि क्या हो सकता है। मैं बहुत डरा हुआ हूँ।''';
+Mujhe bahut-bahut chinta hai. Kripya mujhe bahut acche se check karein aur bataein ki kya ho sakta hai. Main bahut dara hua hoon.''';
 
   await repo.saveNote(DoctorNote(
     noteId: 'n-example-001',

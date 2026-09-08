@@ -1,0 +1,14 @@
+Doctor App Diagnostics Log
+Generated: 2026-08-15T08:15:05.028152Z
+----------------------------------------
+Environment: dev
+API base URL: http://127.0.0.1:8080
+Cloud LLM enabled (pref): true
+PHI consent granted: true
+Recommended execution mode: local
+Is simulator: false
+Supported model: SmolLM-360M-Instruct-q4f16_1-MLC
+
+Pending sync entries: 0
+Dead letter entries: 0
+

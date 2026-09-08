@@ -15,8 +15,7 @@ import UIKit
 
     // Register the MLC LLM MethodChannel handler against the plugin
     // registrar's messenger. This always registers the handler,
-    // even when MLCSwift is not linked — the handler will report
-    // engine unavailability and the Dart adapter falls back to stub.
+    // which will report engine unavailability and the Dart adapter falls back to stub.
     if let registrar = self.registrar(forPlugin: "MLCLLMHandler") {
       let messenger = registrar.messenger()
       mlcHandler = MLCLLMHandler(messenger: messenger)
