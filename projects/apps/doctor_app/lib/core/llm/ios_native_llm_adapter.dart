@@ -9,6 +9,7 @@ import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 import 'package:doctor_app/core/llm/native_llm_parsing.dart';
+import 'package:doctor_app/core/observability.dart';
 import '../utils/debounce.dart';
 import 'prompts/clinical_prompts.dart';
 
@@ -39,13 +40,28 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
   );
   static const _generationTimeout = Duration(seconds: 20);
 
+  final JsonLogger _log;
+
   /// Serializes concurrent [initialize] calls so the engine is loaded once.
   Future<void>? _initialization;
+
+  IosNativeLlmAdapter({JsonLogger? logger})
+      : _log = logger ?? JsonLogger(name: 'llm.ios_native');
+
+  /// Builds the method-channel arguments for a generation call, attaching
+  /// the current [TraceContext] id so Swift logs can be correlated.
+  Map<String, Object?> _channelArgs(String prompt) {
+    return {
+      'prompt': prompt,
+      if (TraceContext.current != null) 'traceId': TraceContext.current,
+    };
+  }
 
   @override
   Future<String> processText(String input, ProcessingMode mode) async {
     final prompt = buildPrompt(input, mode);
-    return _generate(prompt);
+    final rawResponse = await _generate(prompt);
+    return validateAndCleanResponse(rawResponse, mode);
   }
 
   @override
@@ -75,14 +91,17 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
   Future<String> generateExecutiveSummary(String transcriptText) async {
     final cleanText = ClinicalPrompts.sanitize(transcriptText);
     final prompt = '${ClinicalPrompts.executiveSummary}\n$cleanText';
-    return _generate(prompt);
+    final rawResponse = await _generate(prompt);
+    // Use cleanTranscript mode for validation (similar text generation pattern)
+    return validateAndCleanResponse(rawResponse, ProcessingMode.cleanTranscript);
   }
 
   @override
   Future<String> generateDoctorNote(String transcriptText) async {
     final cleanText = ClinicalPrompts.sanitize(transcriptText);
     final prompt = '${ClinicalPrompts.doctorNote}\n$cleanText';
-    return _generate(prompt);
+    final rawResponse = await _generate(prompt);
+    return validateAndCleanResponse(rawResponse, ProcessingMode.generateDoctorNote);
   }
 
   // ============ FIELD-LEVEL GENERATION ============
@@ -141,10 +160,15 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
     final prompt = _buildFieldPrompt(fieldName, cleanText, patientContext);
     final debouncer = Debouncer(delay: const Duration(milliseconds: 50));
     final controller = StreamController<String>();
+    final buffer = StringBuffer();
     StreamSubscription? subscription;
 
     try {
       await _ensureInitialized();
+      _log.info('method_channel_invoke', context: {
+        'method': 'generateStream',
+        'promptChars': prompt.length,
+      });
       subscription = _streamChannel.receiveBroadcastStream().listen(
         (event) {
           if (event is String) {
@@ -152,9 +176,10 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
               subscription?.cancel();
               controller.close();
             } else {
+              buffer.write(event);
               debouncer.run(() {
-                final buffer = StringBuffer()..write(event);
-                final current = parseFieldValue(buffer.toString(), fieldName);
+                var response = stripPromptEcho(buffer.toString(), prompt);
+                final current = parseFieldValue(response, fieldName);
                 if (current.isNotEmpty) {
                   controller.add(current);
                 }
@@ -174,15 +199,21 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
         onDone: () => controller.close(),
       );
 
-      await _methodChannel.invokeMethod<void>('generateStream', {'prompt': prompt});
+      await _methodChannel.invokeMethod<void>(
+        'generateStream',
+        _channelArgs(prompt),
+      );
       await for (final token in controller.stream) {
         yield token;
       }
     } catch (e) {
-      controller.addError(LlmException(
+      throw LlmException(
         'Failed to generate field stream: $e',
         provider: LlmProvider.mlc,
-      ));
+      );
+    } finally {
+      await subscription?.cancel();
+      if (!controller.isClosed) controller.close();
     }
   }
 
@@ -239,7 +270,15 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
             if (event == '[DONE]') {
               subscription?.cancel();
               if (!completer.isCompleted) {
-                completer.complete(buffer.toString());
+                var response = stripPromptEcho(buffer.toString(), prompt);
+                if (response.isEmpty) {
+                  completer.completeError(LlmException(
+                    'MLC LLM returned empty response',
+                    provider: LlmProvider.mlc,
+                  ));
+                } else {
+                  completer.complete(response);
+                }
               }
             } else {
               buffer.write(event);
@@ -259,17 +298,24 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
         onDone: () {
           // Stream closed without [DONE] — complete with what we have
           if (!completer.isCompleted) {
-            completer.complete(buffer.toString());
+            var response = stripPromptEcho(buffer.toString(), prompt);
+            completer.complete(response);
           }
         },
       );
 
       await _methodChannel
-          .invokeMethod<void>('generateStream', {'prompt': prompt})
+          .invokeMethod<void>('generateStream', _channelArgs(prompt))
           .timeout(_generationTimeout);
 
       return await completer.future.timeout(_generationTimeout);
     } on TimeoutException catch (e) {
+      _log.error('inference_timeout',
+          context: {
+            'method': 'generateStream',
+            'timeoutSeconds': _generationTimeout.inSeconds,
+          },
+          error: e);
       await subscription?.cancel();
       await _cancelNativeGeneration();
       throw LlmException(
@@ -279,12 +325,23 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
         provider: LlmProvider.mlc,
       );
     } on PlatformException catch (e) {
+      _log.error('method_channel_error',
+          context: {
+            'method': 'generateStream',
+            'code': e.code,
+          },
+          error: e);
       throw LlmException(
         'MLC LLM platform error: ${e.message}',
         cause: e,
         provider: LlmProvider.mlc,
       );
     } on MissingPluginException catch (e) {
+      _log.error('method_channel_missing_plugin',
+          context: {
+            'method': 'generateStream',
+          },
+          error: e);
       throw LlmInitializationException(
         'MLC LLM handler not registered. Ensure MLCLLMHandler is '
         'configured in AppDelegate.swift. Error: ${e.message}',
@@ -293,6 +350,11 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
       );
     } catch (e) {
       if (e is LlmException) rethrow;
+      _log.error('inference_failed',
+          context: {
+            'method': 'generateStream',
+          },
+          error: e);
       throw LlmException(
         'iOS native LLM inference failed: $e',
         cause: e,
@@ -317,8 +379,7 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
   /// Check if the MLC engine is initialized and ready.
   Future<bool> isAvailable() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<bool>('isAvailable');
+      final result = await _methodChannel.invokeMethod<bool>('isAvailable');
       return result == true;
     } catch (e) {
       return false;
@@ -327,11 +388,18 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
 
   /// Initialize the MLC engine on the native side.
   Future<void> initialize() async {
+    _log.info('initialize_started');
     try {
       await _methodChannel
           .invokeMethod<void>('initialize')
           .timeout(const Duration(seconds: 60));
+      _log.info('initialize_completed');
     } on TimeoutException catch (e) {
+      _log.error('initialize_timeout',
+          context: {
+            'timeoutSeconds': 60,
+          },
+          error: e);
       throw LlmInitializationException(
         'Timed out initializing MLC engine after '
         '${_generationTimeout.inSeconds}s.',
@@ -339,12 +407,14 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
         provider: LlmProvider.mlc,
       );
     } on PlatformException catch (e) {
+      _log.error('initialize_failed', context: {'code': e.code}, error: e);
       throw LlmInitializationException(
         'Failed to initialize MLC engine: ${e.message}',
         cause: e,
         provider: LlmProvider.mlc,
       );
     } on MissingPluginException catch (e) {
+      _log.error('initialize_missing_plugin', error: e);
       throw LlmInitializationException(
         'MLC LLM handler not registered: ${e.message}',
         cause: e,
@@ -360,7 +430,9 @@ class IosNativeLlmAdapter with NativeLlmParsing implements LlmPort {
 
   Future<void> _cancelNativeGeneration() async {
     try {
-      await _methodChannel.invokeMethod<void>('cancel');
+      await _methodChannel.invokeMethod<void>('cancel', {
+        if (TraceContext.current != null) 'traceId': TraceContext.current,
+      });
     } catch (_) {
       // Best effort. The caller will surface the original error.
     }

@@ -5,6 +5,7 @@ import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
+import 'package:doctor_app/core/observability.dart';
 
 class MockLlmPort extends Mock implements LlmPort {}
 
@@ -62,10 +63,12 @@ void main() {
           .thenAnswer((_) async => 'native result');
 
       final adapter = createAdapter();
-      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
+      final result =
+          await adapter.processText('test', ProcessingMode.vocabAssist);
 
       expect(result, 'native result');
-      verify(() => mockNative.processText('test', ProcessingMode.vocabAssist)).called(1);
+      verify(() => mockNative.processText('test', ProcessingMode.vocabAssist))
+          .called(1);
       verifyNever(() => mockStub.processText(any(), any()));
     });
 
@@ -90,12 +93,14 @@ void main() {
   });
 
   group('Tier 2: Stub fallback', () {
-    test('falls back to stub when native throws LlmInitializationException', () async {
+    test('falls back to stub when native throws LlmInitializationException',
+        () async {
       when(() => mockNative.processText(any(), any()))
           .thenThrow(const LlmInitializationException('not initialized'));
 
       final adapter = createAdapter();
-      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
+      final result =
+          await adapter.processText('test', ProcessingMode.vocabAssist);
 
       expect(result, '[STUB] result');
     });
@@ -105,17 +110,20 @@ void main() {
           .thenThrow(const LlmException('native died'));
 
       final adapter = createAdapter();
-      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
+      final result =
+          await adapter.processText('test', ProcessingMode.vocabAssist);
 
       expect(result, '[STUB] result');
     });
 
-    test('falls back to stub when native throws UnsupportedPlatformException', () async {
+    test('falls back to stub when native throws UnsupportedPlatformException',
+        () async {
       when(() => mockNative.processText(any(), any()))
           .thenThrow(const UnsupportedPlatformException('not supported'));
 
       final adapter = createAdapter();
-      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
+      final result =
+          await adapter.processText('test', ProcessingMode.vocabAssist);
 
       expect(result, '[STUB] result');
     });
@@ -125,14 +133,16 @@ void main() {
           .thenThrow(Exception('unexpected'));
 
       final adapter = createAdapter();
-      final result = await adapter.processText('test', ProcessingMode.vocabAssist);
+      final result =
+          await adapter.processText('test', ProcessingMode.vocabAssist);
 
       expect(result, '[STUB] result');
     });
   });
 
   group('Availability tracking', () {
-    test('marks native unavailable after UnsupportedPlatformException', () async {
+    test('marks native unavailable after UnsupportedPlatformException',
+        () async {
       when(() => mockNative.processText(any(), any()))
           .thenThrow(const UnsupportedPlatformException('not supported'));
 
@@ -144,7 +154,8 @@ void main() {
 
       // Second call — skips native entirely
       await adapter.processText('test2', ProcessingMode.vocabAssist);
-      verifyNever(() => mockNative.processText('test2', ProcessingMode.vocabAssist));
+      verifyNever(
+          () => mockNative.processText('test2', ProcessingMode.vocabAssist));
     });
 
     test('marks native unavailable after LlmInitializationException', () async {
@@ -157,7 +168,8 @@ void main() {
       verify(() => mockNative.processText(any(), any())).called(1);
 
       await adapter.processText('test2', ProcessingMode.vocabAssist);
-      verifyNever(() => mockNative.processText('test2', ProcessingMode.vocabAssist));
+      verifyNever(
+          () => mockNative.processText('test2', ProcessingMode.vocabAssist));
     });
 
     test('resetAvailability restores native tier', () async {
@@ -172,8 +184,33 @@ void main() {
       when(() => mockNative.processText(any(), any()))
           .thenAnswer((_) async => 'native recovered');
 
-      final result = await adapter.processText('test2', ProcessingMode.vocabAssist);
+      final result =
+          await adapter.processText('test2', ProcessingMode.vocabAssist);
       expect(result, 'native recovered');
+    });
+
+    test('fallback logs carry the active trace id', () async {
+      when(() => mockNative.processText(any(), any()))
+          .thenThrow(const LlmException('native died'));
+
+      final lines = <String>[];
+      final adapter = HybridLlmAdapter(
+        nativeAdapter: mockNative,
+        stubAdapter: mockStub,
+        logger: JsonLogger(name: 'test', sink: lines.add),
+      );
+
+      await TraceContext.trace('F00D1E', () async {
+        await adapter.processText('test', ProcessingMode.vocabAssist);
+      });
+
+      final fallbackLines =
+          lines.where((l) => l.contains('fallback_triggered')).toList();
+      expect(fallbackLines, isNotEmpty);
+      expect(fallbackLines.first, contains('"correlationId":"F00D1E"'));
+      expect(fallbackLines.first, contains('"from":"native"'));
+      expect(fallbackLines.first, contains('"to":"stub"'));
+      expect(fallbackLines.first, contains('"reason":"LlmException"'));
     });
 
     test('does not disable native for transient LlmException', () async {
@@ -187,7 +224,8 @@ void main() {
       // Second call should still try native (LlmException doesn't permanently disable)
       when(() => mockNative.processText(any(), any()))
           .thenAnswer((_) async => 'native recovered');
-      final result = await adapter.processText('test2', ProcessingMode.vocabAssist);
+      final result =
+          await adapter.processText('test2', ProcessingMode.vocabAssist);
       expect(result, 'native recovered');
     });
   });
@@ -243,7 +281,8 @@ void main() {
       verifyNever(() => mockStub.generateContextEnrichedSummary(any(), any()));
     });
 
-    test('generateContextEnrichedSummary falls back to stub when native fails', () async {
+    test('generateContextEnrichedSummary falls back to stub when native fails',
+        () async {
       when(() => mockNative.generateContextEnrichedSummary(any(), any()))
           .thenThrow(const LlmInitializationException('fail'));
 
@@ -254,7 +293,8 @@ void main() {
       expect(result.complaint, 'stub');
     });
 
-    test('generateStructuredSummary falls back to stub when native fails', () async {
+    test('generateStructuredSummary falls back to stub when native fails',
+        () async {
       when(() => mockNative.generateStructuredSummary(any()))
           .thenThrow(const LlmInitializationException('fail'));
 
@@ -264,7 +304,8 @@ void main() {
       expect(result.complaint, 'stub');
     });
 
-    test('generateExecutiveSummary falls back to stub when native fails', () async {
+    test('generateExecutiveSummary falls back to stub when native fails',
+        () async {
       when(() => mockNative.generateExecutiveSummary(any()))
           .thenThrow(const LlmException('native died'));
 

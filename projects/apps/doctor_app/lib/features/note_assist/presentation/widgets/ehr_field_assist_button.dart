@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/models/patient_context.dart';
+import 'package:doctor_app/core/observability.dart';
 import '../cubit/ehr_assist_cubit.dart';
 import '../cubit/ehr_assist_state.dart';
+
+final JsonLogger _log = JsonLogger(name: 'ui.ehr_assist');
 
 /// A button that triggers AI assistance for a specific EHR field.
 ///
@@ -34,7 +37,8 @@ class EhrFieldAssistButton extends StatelessWidget {
       builder: (context, state) {
         final isBusy = state is EhrAssistGenerating;
         final AiSuggestion? suggestion = _getSuggestion(state);
-        final hasError = state is EhrAssistError && state.fieldName == fieldName;
+        final hasError =
+            state is EhrAssistError && state.fieldName == fieldName;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,27 +57,43 @@ class EhrFieldAssistButton extends StatelessWidget {
                   avatar: Icon(
                     isBusy ? Icons.hourglass_empty : Icons.auto_awesome,
                     size: 16,
-                    color: isBusy ? Theme.of(context).colorScheme.onSurfaceVariant : null,
+                    color: isBusy
+                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                        : null,
                   ),
                   label: Text(isBusy ? 'Generating...' : '🤖 Assist'),
                   onPressed: isBusy
                       ? null
                       : () {
-                          if (useStreaming) {
-                            context.read<EhrAssistCubit>().suggestFieldStream(
-                                  fieldName: fieldName,
-                                  transcriptText: transcriptText,
-                                  patientContext: patientContext,
-                                  useContextEnrichment: useContextEnrichment,
-                                );
-                          } else {
-                            context.read<EhrAssistCubit>().suggestField(
-                                  fieldName: fieldName,
-                                  transcriptText: transcriptText,
-                                  patientContext: patientContext,
-                                  useContextEnrichment: useContextEnrichment,
-                                );
-                          }
+                          final traceId = newTraceId();
+                          _log.info(
+                            'ui_action',
+                            context: {
+                              'action': 'field_assist',
+                              'fieldName': fieldName,
+                              'inputChars': transcriptText.length,
+                              'streaming': useStreaming,
+                              'contextEnrichment': useContextEnrichment,
+                            },
+                            correlationId: traceId,
+                          );
+                          TraceContext.trace(traceId, () {
+                            if (useStreaming) {
+                              context.read<EhrAssistCubit>().suggestFieldStream(
+                                    fieldName: fieldName,
+                                    transcriptText: transcriptText,
+                                    patientContext: patientContext,
+                                    useContextEnrichment: useContextEnrichment,
+                                  );
+                            } else {
+                              context.read<EhrAssistCubit>().suggestField(
+                                    fieldName: fieldName,
+                                    transcriptText: transcriptText,
+                                    patientContext: patientContext,
+                                    useContextEnrichment: useContextEnrichment,
+                                  );
+                            }
+                          });
                         },
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -90,7 +110,8 @@ class EhrFieldAssistButton extends StatelessWidget {
                 suggestion: suggestion,
                 isGenerating: isBusy,
                 hasError: hasError,
-                errorMessage: hasError ? (state as EhrAssistError).message : null,
+                errorMessage:
+                    hasError ? (state as EhrAssistError).message : null,
                 onAccept: () {
                   onSuggestionAccepted(suggestion.suggestion);
                   context.read<EhrAssistCubit>().acceptSuggestion();
@@ -217,9 +238,12 @@ class _SuggestionCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            if (suggestion.contextUsed != null && suggestion.contextUsed!.isNotEmpty)
+            if (suggestion.contextUsed != null &&
+                suggestion.contextUsed!.isNotEmpty)
               _ContextUsedIndicator(contexts: suggestion.contextUsed!),
-            if (!isGenerating && suggestion.contextUsed != null && suggestion.contextUsed!.isNotEmpty)
+            if (!isGenerating &&
+                suggestion.contextUsed != null &&
+                suggestion.contextUsed!.isNotEmpty)
               const SizedBox(height: 8),
             SelectableText(
               suggestion.suggestion,

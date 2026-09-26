@@ -26,6 +26,12 @@ abstract class ModelManagerState extends Equatable {
 
 class ModelManagerInitial extends ModelManagerState {}
 
+/// The cubit is running the multi-second verification (getModelInfo,
+/// engine initialization, warm-up, sample inference). The page shows a
+/// spinner here so the user is not offered a Download button while the
+/// bundled model is being verified.
+class ModelManagerChecking extends ModelManagerState {}
+
 class ModelManagerDownloading extends ModelManagerState {
   final double progress; // 0.0 to 1.0
   final int downloadedBytes;
@@ -122,8 +128,14 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   static const _iosChannel = MethodChannel('com.example.clinical/llm');
   static const _androidChannel = MethodChannel('com.example.clinical/llm');
 
-  /// Timeout for model verification (sample inference).
-  static const _verificationTimeout = Duration(seconds: 20);
+  /// Timeout for model verification steps (init, warm-up, sample inference).
+  /// Increased from 20s — first inference on a bundled model can exceed 30s
+  /// on older A-series chips as the engine JIT-compiles the GPU backend.
+  ///
+  /// Instance getter (not a static) so tests can shorten it without waiting
+  /// 45 real seconds for the generate timeout to fire.
+  @visibleForTesting
+  Duration get verificationTimeout => const Duration(seconds: 45);
 
   ModelManagerCubit({
     required DeviceCapabilityService capabilityService,
@@ -131,6 +143,21 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   })  : _capabilityService = capabilityService,
         _downloader = downloader ?? DioModelDownloader(),
         super(ModelManagerInitial());
+
+  /// Emits [state] only while the cubit is still open.
+  ///
+  /// [checkModelExists] and [downloadModel] perform long async verifications
+  /// (MethodChannel round-trips to the native MLC engine, downloads, checksum
+  /// verification). If the owning page is disposed mid-flight — e.g. the user
+  /// backgrounds the app or hot-reloads — the cubit is closed and any
+  /// subsequent `emit` throws "Cannot emit new states after calling close",
+  /// surfacing as an uncaught async error. Guarding every emit keeps the
+  /// verification work cancellable-safe.
+  void _safeEmit(ModelManagerState state) {
+    if (!isClosed) {
+      emit(state);
+    }
+  }
 
   /// Check if the model is available and functional.
   ///
@@ -156,26 +183,29 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
           'canRunLocal=$canRunLocal)',
           name: 'ModelManagerCubit',
         );
-        emit(ModelManagerReady(
+        _safeEmit(ModelManagerReady(
           'Cloud/Stub Mode',
           executionMode: mode.name,
         ));
         return;
       }
 
-      // Physical device — check platform-specific model
+      // Physical device — check platform-specific model.
+      // Emit the checking state only now: the simulator/probe stage is fast,
+      // and cloud/stub mode reports ready directly below (no verification).
+      _safeEmit(ModelManagerChecking());
       if (isIosPlatform) {
         await _checkIosModel();
       } else if (isAndroidPlatform) {
         await _checkAndroidModel();
       } else {
-        emit(const ModelManagerError(
+        _safeEmit(const ModelManagerError(
           'Unsupported platform for local LLM inference.',
           canRetry: false,
         ));
       }
     } catch (e) {
-      emit(ModelManagerError('Failed to check model: $e'));
+      _safeEmit(ModelManagerError('Failed to check model: $e'));
     }
   }
 
@@ -228,10 +258,10 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       // Step 1: Get model info (installed status, path, checksum)
       final modelInfo = await _iosChannel
           .invokeMapMethod<String, Object?>('getModelInfo')
-          .timeout(_verificationTimeout);
+          .timeout(verificationTimeout);
 
       if (modelInfo == null) {
-        emit(const ModelManagerError(
+        _safeEmit(const ModelManagerError(
           'MLC LLM handler did not return model info.',
         ));
         return;
@@ -241,7 +271,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       if (!installed) {
         // Model is not installed — the first-run download flow owns the
         // not-installed state (the page shows the Download button there).
-        emit(ModelManagerInitial());
+        _safeEmit(ModelManagerInitial());
         return;
       }
 
@@ -265,10 +295,9 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
         // For now, log it for debugging
       }
 
-      // Step 3: Check if engine is ready
+      // Step 3: Check if engine is ready; if not, initialize it.
       final isAvailable = modelInfo['ready'] == true;
       if (isAvailable != true) {
-        // Engine not initialized yet — try to initialize
         developer.log(
           'MLC engine not initialized, initializing...',
           name: 'ModelManagerCubit',
@@ -276,9 +305,9 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
         try {
           await _iosChannel
               .invokeMethod<void>('initialize')
-              .timeout(_verificationTimeout);
+              .timeout(verificationTimeout);
         } on PlatformException catch (e) {
-          emit(ModelManagerError(
+          _safeEmit(ModelManagerError(
             'Failed to initialize MLC engine: ${e.message}',
           ));
           return;
@@ -293,7 +322,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       try {
         await _iosChannel
             .invokeMethod<String>('warmUp')
-            .timeout(_verificationTimeout);
+            .timeout(verificationTimeout);
       } on TimeoutException {
         developer.log(
           'Warm-up timed out (continuing anyway)',
@@ -316,53 +345,50 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
           .invokeMethod<String>('generate', {
             'prompt': 'Hello',
           })
-          .timeout(_verificationTimeout);
+          .timeout(verificationTimeout);
 
       if (verifyResult == null || verifyResult.isEmpty) {
-        emit(const ModelManagerError(
+        _safeEmit(const ModelManagerError(
           'MLC LLM engine responded but produced no output. '
           'The model may be corrupted.',
         ));
         return;
       }
 
-      // Step 6: Check if model upgrade is needed
-      final needsUpgrade = await _needsModelUpgrade(modelInfo);
-      if (needsUpgrade) {
-        developer.log(
-          'Model upgrade available — triggering download',
-          name: 'ModelManagerCubit',
-        );
-        await downloadModel();
-        return;
-      }
+      // Step 6: Re-fetch model info so the displayed state reflects the
+      // engine's true status AFTER initialization (the Step-1 map still has
+      // ready:false because the engine wasn't initialized yet at that point).
+      final freshModelInfo = await _iosChannel
+          .invokeMapMethod<String, Object?>('getModelInfo')
+          .timeout(verificationTimeout);
+      final finalModelInfo = freshModelInfo ?? modelInfo;
 
       developer.log(
         'MLC verification succeeded (${verifyResult.length} chars)',
         name: 'ModelManagerCubit',
       );
-      emit(ModelManagerReady(
+      _safeEmit(ModelManagerReady(
         'Bundled Qwen 3 0.6B (MLCSwift)',
         executionMode: 'local',
-        modelInfo: modelInfo,
+        modelInfo: finalModelInfo,
       ));
     } on TimeoutException {
-      emit(const ModelManagerError(
+      _safeEmit(const ModelManagerError(
         'MLC LLM verification timed out. The model may be too large '
         'for this device.',
       ));
     } on MissingPluginException {
-      emit(const ModelManagerError(
+      _safeEmit(const ModelManagerError(
         'MLC LLM handler is not registered. '
         'Ensure MLCLLMHandler is configured in AppDelegate.swift.',
         canRetry: false,
       ));
     } on PlatformException catch (e) {
-      emit(ModelManagerError(
+      _safeEmit(ModelManagerError(
         'MLC LLM platform error: ${e.message}',
       ));
     } catch (e) {
-      emit(ModelManagerError('Failed to verify MLC LLM: $e'));
+      _safeEmit(ModelManagerError('Failed to verify MLC LLM: $e'));
     }
   }
 
@@ -372,10 +398,10 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       // Step 1: Get model info (installed status, path, checksum)
       final modelInfo = await _androidChannel
           .invokeMapMethod<String, Object?>('getModelInfo')
-          .timeout(_verificationTimeout);
+          .timeout(verificationTimeout);
 
       if (modelInfo == null) {
-        emit(const ModelManagerError(
+        _safeEmit(const ModelManagerError(
           'MLC Android handler did not return model info.',
         ));
         return;
@@ -383,7 +409,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
 
       final installed = modelInfo['installed'] == true;
       if (!installed) {
-        emit(ModelManagerInitial());
+        _safeEmit(ModelManagerInitial());
         return;
       }
 
@@ -414,7 +440,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
               .invokeMethod<void>('initialize')
               .timeout(const Duration(seconds: 60));
         } on PlatformException catch (e) {
-          emit(ModelManagerError(
+          _safeEmit(ModelManagerError(
             'Failed to initialize MLC Android engine: ${e.message}',
           ));
           return;
@@ -429,7 +455,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       try {
         await _androidChannel
             .invokeMethod<String>('warmUp')
-            .timeout(_verificationTimeout);
+            .timeout(verificationTimeout);
       } on TimeoutException {
         developer.log(
           'Warm-up timed out (continuing anyway)',
@@ -452,53 +478,49 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
           .invokeMethod<String>('generate', {
             'prompt': 'Hello',
           })
-          .timeout(_verificationTimeout);
+          .timeout(verificationTimeout);
 
       if (verifyResult == null || verifyResult.isEmpty) {
-        emit(const ModelManagerError(
+        _safeEmit(const ModelManagerError(
           'MLC Android LLM engine responded but produced no output. '
           'The model may be corrupted.',
         ));
         return;
       }
 
-      // Step 6: Check if model upgrade is needed
-      final needsUpgrade = await _needsModelUpgrade(modelInfo);
-      if (needsUpgrade) {
-        developer.log(
-          'Model upgrade available — triggering download',
-          name: 'ModelManagerCubit',
-        );
-        await downloadModel();
-        return;
-      }
+      // Step 6: Re-fetch model info so the displayed state reflects the
+      // engine's true status AFTER initialization.
+      final freshModelInfo = await _androidChannel
+          .invokeMapMethod<String, Object?>('getModelInfo')
+          .timeout(verificationTimeout);
+      final finalModelInfo = freshModelInfo ?? modelInfo;
 
       developer.log(
         'MLC Android verification succeeded (${verifyResult.length} chars)',
         name: 'ModelManagerCubit',
       );
-      emit(ModelManagerReady(
+      _safeEmit(ModelManagerReady(
         'Bundled Qwen 3 0.6B (MLC Android)',
         executionMode: 'local',
-        modelInfo: modelInfo,
+        modelInfo: finalModelInfo,
       ));
     } on TimeoutException {
-      emit(const ModelManagerError(
+      _safeEmit(const ModelManagerError(
         'MLC Android LLM verification timed out. The model may be too large '
         'for this device.',
       ));
     } on MissingPluginException {
-      emit(const ModelManagerError(
+      _safeEmit(const ModelManagerError(
         'MLC Android LLM handler is not registered. '
         'Ensure MLCLLMHandler is configured in MainActivity.kt.',
         canRetry: false,
       ));
     } on PlatformException catch (e) {
-      emit(ModelManagerError(
+      _safeEmit(ModelManagerError(
         'MLC Android LLM platform error: ${e.message}',
       ));
     } catch (e) {
-      emit(ModelManagerError('Failed to verify MLC Android LLM: $e'));
+      _safeEmit(ModelManagerError('Failed to verify MLC Android LLM: $e'));
     }
   }
 
@@ -540,7 +562,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
           if (isClosed) return;
           final elapsed = stopwatch.elapsedMilliseconds / 1000.0;
           final speed = elapsed > 0 ? received / elapsed : 0.0;
-          emit(ModelManagerDownloading(
+          _safeEmit(ModelManagerDownloading(
             total == -1 ? 0.0 : received / total,
             downloadedBytes: received,
             totalBytes: total,
@@ -551,13 +573,13 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
 
       await _verifyChecksum(modelFile, expectedChecksum);
       final readyPath = await _prepareModelAt(modelFile, dir);
-      emit(ModelManagerReady(readyPath, executionMode: 'local'));
+      _safeEmit(ModelManagerReady(readyPath, executionMode: 'local'));
     } on DioException catch (e) {
       await _cleanupPartialFile(modelFile);
-      emit(ModelManagerError('Download failed: ${e.message}'));
+      _safeEmit(ModelManagerError('Download failed: ${e.message}'));
     } catch (e) {
       await _cleanupPartialFile(modelFile);
-      emit(ModelManagerError('Download failed: $e'));
+      _safeEmit(ModelManagerError('Download failed: $e'));
     }
   }
 
@@ -633,7 +655,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
     }
 
     final size = await file.length();
-    emit(ModelManagerDownloading(
+    _safeEmit(ModelManagerDownloading(
       1.0,
       downloadedBytes: size,
       totalBytes: size,
@@ -730,7 +752,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
     for (int i = 0; i <= 100; i += 10) {
       await Future.delayed(const Duration(milliseconds: 400));
       if (isClosed) return;
-      emit(ModelManagerDownloading(
+      _safeEmit(ModelManagerDownloading(
         i / 100.0,
         downloadedBytes: i * 1024 * 1024,
         totalBytes: 350 * 1024 * 1024,
@@ -744,7 +766,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       await modelFile.delete();
     }
 
-    emit(const ModelManagerError(
+    _safeEmit(const ModelManagerError(
       'No model download URL is configured for this build. '
       'Bundle the Qwen 3 0.6B model into the app, or launch with '
       '--dart-define=MODEL_DOWNLOAD_URL=... and MODEL_CHECKSUM_SHA256=...',

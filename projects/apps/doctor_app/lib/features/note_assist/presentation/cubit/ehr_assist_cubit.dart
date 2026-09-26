@@ -4,6 +4,7 @@ import 'package:bloc/bloc.dart';
 import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/models/patient_context.dart';
 import 'package:doctor_app/core/services/telemetry_service.dart';
+import 'package:doctor_app/core/observability.dart';
 import 'ehr_assist_state.dart';
 
 /// Cubit for field-level EHR AI assistance.
@@ -19,6 +20,7 @@ import 'ehr_assist_state.dart';
 class EhrAssistCubit extends Cubit<EhrAssistState> {
   final LlmPort _llmPort;
   final TelemetryService? _telemetry;
+  final JsonLogger _log;
 
   StreamSubscription<String>? _streamSubscription;
   String? _currentFieldName;
@@ -29,8 +31,10 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
   EhrAssistCubit({
     required LlmPort llmPort,
     TelemetryService? telemetry,
+    JsonLogger? logger,
   })  : _llmPort = llmPort,
         _telemetry = telemetry,
+        _log = logger ?? JsonLogger(name: 'cubit.ehr_assist'),
         super(EhrAssistInitial());
 
   /// Request an AI suggestion for a single EHR field with context enrichment.
@@ -57,6 +61,15 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
     _currentTranscriptText = transcriptText;
     _currentPatientContext = patientContext;
 
+    _log.info(
+      'request_received',
+      context: {
+        'fieldName': fieldName,
+        'inputChars': transcriptText.length,
+        'streaming': false,
+        'contextEnrichment': useContextEnrichment,
+      },
+    );
     emit(EhrAssistGenerating(fieldName: fieldName, suggestion: ''));
 
     try {
@@ -67,7 +80,8 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
       if (useContextEnrichment) {
         contextUsed = await _retrieveRelevantContext(transcriptText);
         if (contextUsed.isNotEmpty) {
-          enrichedTranscript = _buildEnrichedPrompt(transcriptText, contextUsed);
+          enrichedTranscript =
+              _buildEnrichedPrompt(transcriptText, contextUsed);
         }
       }
 
@@ -88,6 +102,15 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
 
       _currentContextUsed = contextUsed;
 
+      _log.info(
+        'generation_completed',
+        context: {
+          'fieldName': fieldName,
+          'resultChars': suggestion.length,
+          'confidence': confidence,
+          'contextUsed': contextUsed.length,
+        },
+      );
       if (!isClosed) {
         emit(EhrAssistSuggestionReady(
           suggestion: AiSuggestion(
@@ -99,6 +122,11 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
         ));
       }
     } catch (e) {
+      _log.warn(
+        'generation_error',
+        context: {'fieldName': fieldName, 'streaming': false},
+        error: e,
+      );
       if (!isClosed) {
         emit(EhrAssistError(fieldName: fieldName, message: e.toString()));
       }
@@ -123,6 +151,15 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
     _currentPatientContext = patientContext;
 
     final buffer = StringBuffer();
+    _log.info(
+      'request_received',
+      context: {
+        'fieldName': fieldName,
+        'inputChars': transcriptText.length,
+        'streaming': true,
+        'contextEnrichment': useContextEnrichment,
+      },
+    );
     emit(EhrAssistGenerating(fieldName: fieldName, suggestion: ''));
 
     try {
@@ -133,7 +170,8 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
       if (useContextEnrichment) {
         contextUsed = await _retrieveRelevantContext(transcriptText);
         if (contextUsed.isNotEmpty) {
-          enrichedTranscript = _buildEnrichedPrompt(transcriptText, contextUsed);
+          enrichedTranscript =
+              _buildEnrichedPrompt(transcriptText, contextUsed);
         }
       }
 
@@ -141,51 +179,65 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
 
       _streamSubscription = _llmPort
           .generateFieldStream(
-            fieldName,
-            enrichedTranscript,
-            patientContext: patientContext,
-          )
+        fieldName,
+        enrichedTranscript,
+        patientContext: patientContext,
+      )
           .listen(
-            (token) {
-              if (!isClosed) {
-                buffer.write(token);
-                emit(EhrAssistGenerating(
-                  fieldName: fieldName,
-                  suggestion: buffer.toString(),
-                ));
-              }
-            },
-            onDone: () async {
-              if (!isClosed) {
-                final finalSuggestion = buffer.toString();
-                final confidence = _calculateConfidence(
-                  finalSuggestion,
-                  fieldName,
-                  transcriptText,
-                  contextUsed,
-                );
+        (token) {
+          if (!isClosed) {
+            buffer.write(token);
+            emit(EhrAssistGenerating(
+              fieldName: fieldName,
+              suggestion: buffer.toString(),
+            ));
+          }
+        },
+        onDone: () async {
+          if (!isClosed) {
+            final finalSuggestion = buffer.toString();
+            final confidence = _calculateConfidence(
+              finalSuggestion,
+              fieldName,
+              transcriptText,
+              contextUsed,
+            );
 
-                emit(EhrAssistSuggestionReady(
-                  suggestion: AiSuggestion(
-                    fieldName: fieldName,
-                    suggestion: finalSuggestion,
-                    confidence: confidence,
-                    contextUsed: contextUsed.isNotEmpty ? contextUsed : null,
-                  ),
-                ));
-              }
-              _streamSubscription = null;
-            },
-            onError: (e) {
-              if (!isClosed) {
-                emit(EhrAssistError(
-                  fieldName: fieldName,
-                  message: e.toString(),
-                ));
-              }
-              _streamSubscription = null;
-            },
+            _log.info(
+              'generation_completed',
+              context: {
+                'fieldName': fieldName,
+                'resultChars': finalSuggestion.length,
+                'confidence': confidence,
+                'contextUsed': contextUsed.length,
+              },
+            );
+            emit(EhrAssistSuggestionReady(
+              suggestion: AiSuggestion(
+                fieldName: fieldName,
+                suggestion: finalSuggestion,
+                confidence: confidence,
+                contextUsed: contextUsed.isNotEmpty ? contextUsed : null,
+              ),
+            ));
+          }
+          _streamSubscription = null;
+        },
+        onError: (e) {
+          _log.warn(
+            'generation_error',
+            context: {'fieldName': fieldName, 'streaming': true},
+            error: e,
           );
+          if (!isClosed) {
+            emit(EhrAssistError(
+              fieldName: fieldName,
+              message: e.toString(),
+            ));
+          }
+          _streamSubscription = null;
+        },
+      );
     } catch (e) {
       if (!isClosed) {
         emit(EhrAssistError(fieldName: fieldName, message: e.toString()));
@@ -203,6 +255,14 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
     _streamSubscription?.cancel();
     _streamSubscription = null;
 
+    _log.info(
+      'request_received',
+      context: {
+        'fields': fieldNames,
+        'inputChars': transcriptText.length,
+        'streaming': false,
+      },
+    );
     emit(const EhrAssistGeneratingMultiple());
 
     try {
@@ -212,7 +272,8 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
       if (useContextEnrichment) {
         contextUsed = await _retrieveRelevantContext(transcriptText);
         if (contextUsed.isNotEmpty) {
-          enrichedTranscript = _buildEnrichedPrompt(transcriptText, contextUsed);
+          enrichedTranscript =
+              _buildEnrichedPrompt(transcriptText, contextUsed);
         }
       }
 
@@ -222,6 +283,10 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
         patientContext: patientContext,
       );
 
+      _log.info(
+        'generation_completed',
+        context: {'fields': fieldNames, 'fieldCount': results.length},
+      );
       if (!isClosed) {
         final suggestionsWithConfidence = <String, AiSuggestion>{};
         for (final entry in results.entries) {
@@ -243,6 +308,11 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
         ));
       }
     } catch (e) {
+      _log.warn(
+        'generation_error',
+        context: {'fields': fieldNames, 'streaming': false},
+        error: e,
+      );
       if (!isClosed) {
         emit(EhrAssistError(
           fieldName: fieldNames.join(', '),
@@ -345,8 +415,10 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
     buffer.writeln('PAST CONSULTATION CONTEXT (for style consistency only):');
     buffer.writeln('---');
     for (final ctx in context) {
-      buffer.writeln('Consultation ${ctx.consultationId} (${ctx.date}, ${ctx.patientName}):');
-      buffer.writeln('Similarity: ${(ctx.similarityScore * 100).toStringAsFixed(0)}%');
+      buffer.writeln(
+          'Consultation ${ctx.consultationId} (${ctx.date}, ${ctx.patientName}):');
+      buffer.writeln(
+          'Similarity: ${(ctx.similarityScore * 100).toStringAsFixed(0)}%');
       buffer.writeln(ctx.structuredSummary);
       buffer.writeln('---');
     }
@@ -385,10 +457,9 @@ class EhrAssistCubit extends Cubit<EhrAssistState> {
     if (contextUsed.isNotEmpty) {
       confidence += 0.1;
       // Higher similarity = more confidence
-      final avgSimilarity = contextUsed
-          .map((c) => c.similarityScore)
-          .reduce((a, b) => a + b) /
-          contextUsed.length;
+      final avgSimilarity =
+          contextUsed.map((c) => c.similarityScore).reduce((a, b) => a + b) /
+              contextUsed.length;
       confidence += avgSimilarity * 0.1;
     }
 

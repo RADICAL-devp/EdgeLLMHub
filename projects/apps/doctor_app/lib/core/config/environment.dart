@@ -148,11 +148,17 @@ class EnvironmentConfig {
     const explicit = String.fromEnvironment('MODEL_CHECKSUM_SHA256');
     if (explicit.isNotEmpty) return explicit;
 
-    return switch (environment) {
+    final checksum = switch (environment) {
       AppEnvironment.dev => '',
       AppEnvironment.staging => 'STAGING_QWEN3_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
       AppEnvironment.prod => 'PROD_QWEN3_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
     };
+
+    if (environment != AppEnvironment.dev && checksum.contains('PLACEHOLDER_REPLACE_IN_CI')) {
+      throw StateError('Invalid model checksum for $environment environment: placeholders must be replaced by CI/CD');
+    }
+
+    return checksum;
   }
 
   /// File name of the Qwen 3 0.6B on-device model artifact.

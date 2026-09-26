@@ -45,6 +45,10 @@ Handler middleware(Handler handler) {
       ? OllamaLlmAdapter(baseUrl: Platform.environment['OLLAMA_BASE_URL']!)
       : StubLlmAdapter();
 
+  if (llmPort is StubLlmAdapter) {
+    print('WARNING: OLLAMA_BASE_URL not set. Using StubLlmAdapter for LLM processing (no real AI inference).');
+  }
+
   // Wrap the port so every LLM call is timed at a single central point.
   final instrumentedLlmPort = InstrumentedLlmPort(llmPort, metricRegistry);
 

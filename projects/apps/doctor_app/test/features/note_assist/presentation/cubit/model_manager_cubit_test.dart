@@ -86,6 +86,11 @@ class _PlatformForcedCubit extends ModelManagerCubit {
 
   @override
   bool get isAndroidPlatform => android;
+
+  /// Shorten the real (45s) verification timeout so timeout-path tests
+  /// fail fast instead of sleeping 45 seconds.
+  @override
+  Duration get verificationTimeout => const Duration(milliseconds: 500);
 }
 
 const _llmChannel = MethodChannel('com.example.clinical/llm');
@@ -491,7 +496,7 @@ void main() {
       _mockChannel((call) async {
         if (call.method == 'getModelInfo') return _readyModelInfo();
         if (call.method == 'generate') {
-          await Future<void>.delayed(const Duration(seconds: 30));
+          await Future<void>.delayed(const Duration(seconds: 3));
           return 'late';
         }
         return null;

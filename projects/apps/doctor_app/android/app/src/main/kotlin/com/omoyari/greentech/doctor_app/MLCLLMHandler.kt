@@ -38,7 +38,7 @@ class MLCLLMHandler(
         const val STREAM_CHANNEL = "com.example.clinical/llm_stream"
         const val DONE_SENTINEL = "[DONE]"
  const val MODEL_BUNDLE_NAME = "Qwen3-0.6B-Q4_K_M-MLC"
- const val MODEL_LIB = "Qwen3-0.6B-Q4_K_M-MLC"
+ const val MODEL_LIB = "llama_q4f16_1_d5ba06e61253098870aaa5dc3f1a2589"
         const val MAX_CONTEXT_TOKENS = 2048
         private const val TAG = "MLCLLMHandler"
     }
@@ -107,7 +107,7 @@ class MLCLLMHandler(
             "warmUp" -> {
                 scope.launch {
                     try {
-                        _ = generateNonStreaming("Hello")
+                        generateNonStreaming("Hello")
                         result.success("OK")
                     } catch (e: Exception) {
                         Log.e(TAG, "Warm-up failed", e)

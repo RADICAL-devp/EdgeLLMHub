@@ -14,7 +14,7 @@ class BackgroundWorker : Thread {
     }
 }
 
-@available(iOS 14.0.0, *)
+@available(iOS 15.0, *)
 public class MLCEngine {
     struct RequestState {
         let request: ChatCompletionRequest

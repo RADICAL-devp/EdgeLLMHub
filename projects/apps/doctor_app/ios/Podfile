@@ -54,9 +54,12 @@ post_install do |installer|
   if File.exist?(generated_pkg)
     contents = File.read(generated_pkg)
     podfile_platform = '15.0'
-    # Raise ANY emitted platform below the project's minimum to podfile_platform
-    # (handles both the legacy hardcoded "13.0" and newer "14.0" values).
-    patched = contents.gsub(/\.iOS\("1[0-4]\.0"\)/, ".iOS(\"#{podfile_platform}\")")
+    # Raise ANY emitted iOS platform below the project's minimum to
+    # podfile_platform. Flutter 3.44 hardcodes 13.0 when regenerating the
+    # manifest on `flutter pub get`; without this, a direct Xcode build after
+    # pub get fails package resolution for plugins that require iOS >= 14
+    # (e.g. workmanager_apple, which needs 14.0).
+    patched = contents.gsub(/\.iOS\("[0-9]+\.[0-9]+"\)/, ".iOS(\"#{podfile_platform}\")")
     File.write(generated_pkg, patched) if patched != contents
   end
 end

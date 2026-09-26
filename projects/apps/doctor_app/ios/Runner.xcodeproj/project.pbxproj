@@ -57,9 +57,8 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7726695959387357C83C66D3 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
-		F2A1B3C4D5E600112233445A /* MLCSwift */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = MLCSwift; path = Runner/MLCSwift; sourceTree = "<group>"; };
-		8D3B64A42C01000100A6F351 /* MLCLLMHandler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MLCLLMHandler.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
+		8D3B64A42C01000100A6F351 /* MLCLLMHandler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MLCLLMHandler.swift; sourceTree = "<group>"; };
 		8DB19CF690CA889C63074928 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -71,13 +70,9 @@
 		9C5595A0BAD3A7B0DE98EFD1 /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
 		A83F89F358F9B8A370DCFBF9 /* libPods-Runner.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Runner.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E8FA4AF0365B3D8B795E1824 /* libPods-RunnerTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RunnerTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F2A1B3C4D5E6001122334458 /* Qwen3-0.6B-Q4_K_M-MLC */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Qwen3-0.6B-Q4_K_M-MLC"; path = "mlc-llm/Qwen3-0.6B-Q4_K_M-MLC"; sourceTree = "<group>"; };
 		FFC608C47E504F84D662CBAC /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-		F2A1B3C4D5E6001122334458 /* Qwen3-0.6B-Q4_K_M-MLC */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Qwen3-0.6B-Q4_K_M-MLC"; path = "mlc-llm/Qwen3-0.6B-Q4_K_M-MLC"; sourceTree = "<group>"; };
-/* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		13E4C3740FC1125D492D8D4B /* Frameworks */ = {
@@ -109,6 +104,14 @@
 			path = RunnerTests;
 			sourceTree = "<group>";
 		};
+		8522ABEE30670B1400758EEB /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				F2A1B3C4D5E6001122334458 /* Qwen3-0.6B-Q4_K_M-MLC */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		9740EEB11CF90186004384FC /* Flutter */ = {
 			isa = PBXGroup;
 			children = (
@@ -130,6 +133,7 @@
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				9FE47B4A1B5C96B177C09038 /* Pods */,
 				C8E8A3025C0637812C1D152D /* Frameworks */,
+				8522ABEE30670B1400758EEB /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -217,8 +221,6 @@
 			buildRules = (
 			);
 			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -465,7 +467,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -475,7 +477,6 @@
 			};
 			name = Profile;
 		};
-		/* Profile Runner target */
 		249021D4217E4FDB00AE95B9 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
@@ -486,6 +487,7 @@
 				DEVELOPMENT_TEAM = 2UXHXCB6TX;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -502,9 +504,10 @@
 					"-ltvm_runtime",
 					"-ltokenizers_cpp",
 					"-lsentencepiece",
-				"-ltokenizers_c",
-				"-ltvm_ffi_static",
-			);
+					"-ltokenizers_c",
+					"-ltvm_ffi_static",
+					"-ltvm_runtime_metal",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.omoyari.greentech.doctorApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -613,7 +616,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -666,7 +669,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -678,7 +681,6 @@
 			};
 			name = Release;
 		};
-		/* Debug Runner target */
 		97C147061CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
@@ -689,6 +691,7 @@
 				DEVELOPMENT_TEAM = 2UXHXCB6TX;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -705,9 +708,10 @@
 					"-ltvm_runtime",
 					"-ltokenizers_cpp",
 					"-lsentencepiece",
-				"-ltokenizers_c",
-				"-ltvm_ffi_static",
-			);
+					"-ltokenizers_c",
+					"-ltvm_ffi_static",
+					"-ltvm_runtime_metal",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.omoyari.greentech.doctorApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -717,7 +721,6 @@
 			};
 			name = Debug;
 		};
-		/* Release Runner target */
 		97C147071CF9000F007C117D /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
@@ -728,6 +731,7 @@
 				DEVELOPMENT_TEAM = 2UXHXCB6TX;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -744,9 +748,10 @@
 					"-ltvm_runtime",
 					"-ltokenizers_cpp",
 					"-lsentencepiece",
-				"-ltokenizers_c",
-				"-ltvm_ffi_static",
-			);
+					"-ltokenizers_c",
+					"-ltvm_ffi_static",
+					"-ltvm_runtime_metal",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.omoyari.greentech.doctorApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";

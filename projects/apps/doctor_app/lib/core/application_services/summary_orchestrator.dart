@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:doctor_app/core/ports/transcript_repository.dart';
 import 'package:doctor_app/core/ports/transcript_summary_repository.dart';
+import 'package:doctor_app/core/models/transcript_chunk_summary.dart';
 import 'package:shared_models/shared_models.dart';
 import 'doctor_note_generation_service.dart';
 import 'summary_generation_service.dart';
@@ -77,10 +78,21 @@ class SummaryOrchestrator {
     // 4. Chunk if needed
     final chunks = chunkingService.chunk(normalizedText);
 
-    // 5. Generate structured summary
-    // For single chunk, generate directly. For multiple, aggregate.
-    final structuredSummary = await summaryGenerationService.generate(
-      chunks.length == 1 ? chunks.first : normalizedText,
+    // 5. Generate each chunk within the model context window, then aggregate
+    // the structured fields deterministically. Never send a long transcript
+    // back to the model after chunking it.
+    final chunkSummaries = <TranscriptChunkSummary>[];
+    for (var index = 0; index < chunks.length; index++) {
+      final chunk = chunks[index];
+      final structuredSummary = await summaryGenerationService.generate(chunk);
+      chunkSummaries.add(TranscriptChunkSummary(
+        chunkIndex: index,
+        chunkText: chunk,
+        structuredSummary: structuredSummary,
+      ));
+    }
+    final structuredSummary = aggregationService.aggregate(
+      chunkSummaries,
     );
 
     // 6. Generate doctor note
@@ -116,8 +128,7 @@ class SummaryOrchestrator {
 
   /// Retrieve a previously generated summary.
   Future<TranscriptSummaryResponse?> getSummary(String consultationId) async {
-    final bundle =
-        await summaryRepository.findByConsultationId(consultationId);
+    final bundle = await summaryRepository.findByConsultationId(consultationId);
     if (bundle == null) return null;
 
     return TranscriptSummaryResponse(

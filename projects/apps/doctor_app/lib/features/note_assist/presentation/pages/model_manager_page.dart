@@ -35,7 +35,18 @@ class ModelManagerPage extends StatelessWidget {
         body: Center(
           child: BlocBuilder<ModelManagerCubit, ModelManagerState>(
             builder: (context, state) {
-              if (state is ModelManagerInitial) {
+              if (state is ModelManagerChecking) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Checking on-device AI model…'),
+                    ],
+                  ),
+                );
+              } else if (state is ModelManagerInitial) {
                 return _buildNotInstalled(context);
               } else if (state is ModelManagerDownloading) {
                 return _buildDownloading(context, state);

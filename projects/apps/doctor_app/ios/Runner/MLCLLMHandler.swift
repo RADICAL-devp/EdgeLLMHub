@@ -2,6 +2,7 @@ import Flutter
 import Foundation
 import MLCSwift
 import os
+import UIKit
 
 /// Bridges Flutter to MLCSwift for on-device MLC LLM inference.
 ///
@@ -9,7 +10,7 @@ import os
 /// linked into the Runner target alongside the prebuilt MLC static libraries.
 /// Loads the bundled Qwen3 model and routes `generate`/`generateStream` through
 /// the engine, forwarding deltas on the EventChannel until `[DONE]`.
-@available(iOS 14.0.0, *)
+@available(iOS 15.0, *)
 final class MLCLLMHandler: NSObject {
   private static let methodChannelName = "com.example.clinical/llm"
   private static let streamChannelName = "com.example.clinical/llm_stream"
@@ -17,8 +18,19 @@ final class MLCLLMHandler: NSObject {
   private static let modelBundleName = "Qwen3-0.6B-Q4_K_M-MLC"
   private static let modelLib = "llama_q4f16_1_d5ba06e61253098870aaa5dc3f1a2589"
   private static let maxContextTokens = 2048
+  private static let maxPromptCharacters = 4000
+  private static let maxGeneratedTokens = 512
+  /// Must stay in sync with `EnvironmentConfig.bundledModelVersion` in
+  /// `lib/core/config/environment.dart`; the ModelManager cubit treats a
+  /// missing `modelVersion` as "upgrade needed" and routes into the download
+  /// flow instead of reporting ready.
+  private static let modelBundleVersion = "1.2.0"
 
   private let logger = Logger(subsystem: "com.omoyari.greentech.doctorApp", category: "MLCLLMHandler")
+
+  /// Trace id for the currently active generation, propagated from Dart so
+  /// native logs can be correlated with the Flutter side.
+  private var currentTraceId: String?
 
   private let methodChannel: FlutterMethodChannel
   private let streamChannel: FlutterEventChannel
@@ -28,6 +40,15 @@ final class MLCLLMHandler: NSObject {
   private var isEngineReady = false
   private var isEngineInitializing = false
   private var activeGenerationTask: Task<Void, Never>?
+
+  /// Whether the app is in the active (foreground) state.
+  ///
+  /// iOS blocks Metal GPU command-buffer submission once the app resigns
+  /// active; the MLC/TVM runtime does not expect this and throws an uncaught
+  /// `tvm::ffi::Error` that terminates the process. We track the lifecycle so
+  /// GPU-bound work (init/reload/warm-up/generate) is never submitted from the
+  /// background and any in-flight generation is cancelled on transition.
+  private var isAppInForeground = true
 
   init(messenger: FlutterBinaryMessenger) {
     methodChannel = FlutterMethodChannel(
@@ -43,11 +64,67 @@ final class MLCLLMHandler: NSObject {
 
     methodChannel.setMethodCallHandler(handleMethodCall)
     streamChannel.setStreamHandler(self)
+
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(appDidResignActive),
+      name: UIApplication.willResignActiveNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(appDidEnterBackground),
+      name: UIApplication.didEnterBackgroundNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(appDidBecomeActive),
+      name: UIApplication.didBecomeActiveNotification,
+      object: nil
+    )
   }
 
   deinit {
     activeGenerationTask?.cancel()
+    NotificationCenter.default.removeObserver(self)
     engine = nil
+  }
+
+  @objc private func appDidResignActive() {
+    isAppInForeground = false
+    // Cancel any in-flight generation so the MLC/TVM runtime never submits
+    // Metal command buffers while the app is resigning active/backgrounded,
+    // which otherwise throws an uncaught tvm::ffi::Error that kills the app.
+    activeGenerationTask?.cancel()
+    self.logger.info("App resigning active — cancelled in-flight generation")
+  }
+
+  @objc private func appDidEnterBackground() {
+    isAppInForeground = false
+    activeGenerationTask?.cancel()
+  }
+
+  @objc private func appDidBecomeActive() {
+    isAppInForeground = true
+  }
+
+  /// Guards GPU-bound MLC operations: submitting Metal work from the
+  /// background is not permitted and crashes the app (IOGPUMetalError /
+  /// tvm::ffi::Error). Returns nil when it is safe to proceed, otherwise a
+  /// descriptive [NSError].
+  private func ensureForegroundForGPU() -> Error? {
+    guard isAppInForeground else {
+      return NSError(
+        domain: "MLCLLMHandler",
+        code: 5,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "App is in the background; MLC on-device inference cannot run. Bring the app to the foreground and try again."
+        ]
+      )
+    }
+    return nil
   }
 
   private var modelPath: String? {
@@ -91,6 +168,7 @@ final class MLCLLMHandler: NSObject {
         "modelPath": modelPath ?? "",
         "installed": modelAvailable,
         "ready": isEngineReady,
+        "modelVersion": Self.modelBundleVersion,
         "contextWindowTokens": Self.maxContextTokens,
         "checksumSha256": "",
         "runtime": "MLCSwift",
@@ -110,11 +188,16 @@ final class MLCLLMHandler: NSObject {
         }
       }
     case "generate":
-      Task {
+      let traceId = traceIdArgument(from: call)
+      currentTraceId = traceId
+      self.logger.info("Generation requested (trace=\(self.traceSuffix(traceId)))")
+      activeGenerationTask?.cancel()
+      let generateTask = Task {
         do {
-          let text = try await runGeneration(for: call)
+          let text = try await runGeneration(for: call, traceId: traceId)
           result(text)
         } catch {
+          self.logger.error("Generation failed (trace=\(self.traceSuffix(traceId))): \(error.localizedDescription)")
           result(FlutterError(
             code: "GENERATE_FAILED",
             message: "MLC generation failed: \(error.localizedDescription)",
@@ -122,12 +205,16 @@ final class MLCLLMHandler: NSObject {
           ))
         }
       }
+      activeGenerationTask = generateTask
     case "generateStream":
       guard let prompt = promptArgument(from: call, result: result) else { return }
+      let traceId = traceIdArgument(from: call)
+      currentTraceId = traceId
+      self.logger.info("Stream generation requested (trace=\(self.traceSuffix(traceId)))")
       Task {
         do {
           try await initialize()
-          startStreaming(prompt: prompt)
+          startStreaming(prompt: prompt, traceId: traceId)
           result(nil)
         } catch {
           result(FlutterError(
@@ -138,19 +225,35 @@ final class MLCLLMHandler: NSObject {
         }
       }
     case "warmUp":
-      Task {
+      activeGenerationTask?.cancel()
+      let warmUpTask = Task {
         do {
-          try await initialize()
+          if let foregroundError = ensureForegroundForGPU() {
+            throw foregroundError
+          }
+          let engine = try await ensureEngine()
+          // Run a short completion to warm up the GPU JIT pipeline and
+          // populate the KV-cache so the first real request is faster.
+          let messages = [ChatCompletionMessage(role: .user, content: "Hi")]
+          let stream = await engine.chat.completions.create(
+            messages: messages,
+            model: Self.modelBundleName,
+            max_tokens: 4,
+            temperature: 0.2
+          )
+          for await _ in stream { /* drain */ }
           result(nil)
         } catch {
-          result(FlutterError(
-            code: "WARMUP_FAILED",
-            message: "MLC warm-up failed: \(error.localizedDescription)",
-            details: nil
-          ))
+          // Warm-up failures are non-fatal — the model may still work.
+          self.logger.warning("Warm-up failed (non-fatal): \(error.localizedDescription)")
+          result(nil)
         }
       }
+      activeGenerationTask = warmUpTask
     case "cancel":
+      let traceId = traceIdArgument(from: call)
+      currentTraceId = traceId
+      self.logger.info("Cancelled active generation (trace=\(self.traceSuffix(traceId)))")
       activeGenerationTask?.cancel()
       result(nil)
     default:
@@ -172,7 +275,28 @@ final class MLCLLMHandler: NSObject {
       ))
       return nil
     }
+    guard prompt.count <= Self.maxPromptCharacters else {
+      result(FlutterError(
+        code: "PROMPT_TOO_LONG",
+        message: "Prompt exceeds the on-device model context budget. Split the transcript before generating.",
+        details: ["maxCharacters": Self.maxPromptCharacters]
+      ))
+      return nil
+    }
     return prompt
+  }
+
+  /// Reads the optional `traceId` argument passed from Dart so native log
+  /// lines can be correlated with the Flutter-side trace.
+  private func traceIdArgument(from call: FlutterMethodCall) -> String? {
+    guard let args = call.arguments as? [String: Any] else { return nil }
+    return args["traceId"] as? String
+  }
+
+  /// Renders a trace id for log interleaving, defaulting to `n/a` when the
+  /// caller did not supply one (e.g. engine warm-up).
+  private func traceSuffix(_ traceId: String?) -> String {
+    traceId ?? "n/a"
   }
 
   // MARK: - Engine lifecycle
@@ -185,8 +309,13 @@ final class MLCLLMHandler: NSObject {
       }
       if isEngineReady { return }
     }
+    if let foregroundError = ensureForegroundForGPU() {
+      throw foregroundError
+    }
     isEngineInitializing = true
     defer { isEngineInitializing = false }
+
+    self.logger.info("Model load started (trace=\(self.traceSuffix(self.currentTraceId)))")
 
     guard let modelPath = modelPath else {
       throw NSError(
@@ -208,14 +337,15 @@ final class MLCLLMHandler: NSObject {
     self.engine = engine
     await engine.reload(modelPath: modelPath, modelLib: Self.modelLib)
     isEngineReady = true
-    logger.info("MLC engine reloaded; model=\(modelPath, privacy: .public)")
+    self.logger.info("MLC engine reloaded; model=\(modelPath, privacy: .public) (trace=\(self.traceSuffix(self.currentTraceId)))")
   }
 
   private func modelPathHasBeam(_ path: String) -> Bool {
-    let url = URL(fileURLWithPath: path)
     let entries = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+    // mlc-chat-config.json is the authoritative marker of a packaged MLC model.
     let hasConfig = entries.contains { $0 == "mlc-chat-config.json" }
-    let hasParams = entries.contains { $0.contains(".params") || $0 == "params" }
+    // Weight shards are named "params_shard_*.bin" (no literal ".params").
+    let hasParams = entries.contains { $0.hasSuffix(".bin") || $0 == "params" }
     return hasConfig && hasParams
   }
 
@@ -236,7 +366,7 @@ final class MLCLLMHandler: NSObject {
 
   // MARK: - Generation
 
-  private func runGeneration(for call: FlutterMethodCall) async throws -> String {
+  private func runGeneration(for call: FlutterMethodCall, traceId: String?) async throws -> String {
     guard let prompt = promptArgument(from: call, result: { _ in }) else {
       throw NSError(
         domain: "MLCLLMHandler",
@@ -245,11 +375,15 @@ final class MLCLLMHandler: NSObject {
       )
     }
     let engine = try await ensureEngine()
+    self.logger.info("Generation started (trace=\(self.traceSuffix(traceId)))")
+    if let foregroundError = ensureForegroundForGPU() {
+      throw foregroundError
+    }
     let messages = [ChatCompletionMessage(role: .user, content: prompt)]
     let stream = await engine.chat.completions.create(
       messages: messages,
       model: Self.modelBundleName,
-      max_tokens: Self.maxContextTokens,
+      max_tokens: Self.maxGeneratedTokens,
       temperature: 0.2
     )
     var buffer = ""
@@ -260,20 +394,25 @@ final class MLCLLMHandler: NSObject {
         }
       }
     }
+    self.logger.info("Generation completed (trace=\(self.traceSuffix(traceId)), chars=\(buffer.count))")
     return buffer
   }
 
-  private func startStreaming(prompt: String) {
+  private func startStreaming(prompt: String, traceId: String?) {
     activeGenerationTask?.cancel()
     let task = Task { [weak self] in
       guard let self else { return }
       do {
         let engine = try await self.ensureEngine()
+        self.logger.info("Generation started (trace=\(self.traceSuffix(traceId)))")
+        if let foregroundError = self.ensureForegroundForGPU() {
+          throw foregroundError
+        }
         let messages = [ChatCompletionMessage(role: .user, content: prompt)]
         let stream = await engine.chat.completions.create(
           messages: messages,
           model: Self.modelBundleName,
-          max_tokens: Self.maxContextTokens,
+          max_tokens: Self.maxGeneratedTokens,
           temperature: 0.2
         )
         for await response in stream {
@@ -287,10 +426,14 @@ final class MLCLLMHandler: NSObject {
             }
           }
         }
+        self.logger.info("Generation stream completed (trace=\(self.traceSuffix(traceId)))")
         self.emit(Self.doneSentinel)
       } catch {
-        self.logger.error("Stream generation error: \(error.localizedDescription)")
-        self.emit(Self.doneSentinel)
+        self.logger.error("Stream generation error (trace=\(traceSuffix(traceId))): \(error.localizedDescription)")
+        self.emitError(
+          code: "GENERATION_FAILED",
+          message: "MLC generation failed: \(error.localizedDescription)"
+        )
       }
     }
     activeGenerationTask = task
@@ -302,9 +445,16 @@ final class MLCLLMHandler: NSObject {
       sink(event)
     }
   }
+
+  private func emitError(code: String, message: String) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let sink = self.eventSink else { return }
+      sink(FlutterError(code: code, message: message, details: nil))
+    }
+  }
 }
 
-@available(iOS 14.0.0, *)
+@available(iOS 15.0, *)
 extension MLCLLMHandler: FlutterStreamHandler {
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events

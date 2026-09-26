@@ -9,13 +9,14 @@ import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 import '../utils/debounce.dart';
 import 'prompts/clinical_prompts.dart';
+import 'native_llm_parsing.dart';
 
 /// Android native LLM adapter using MLC Android runtime via MethodChannel.
 ///
 /// Communicates with [MLCLLMHandler.kt] which wraps the real MLC Android engine.
 /// No platform branching — this class is only instantiated on Android
 /// by [LlmPortFactory].
-class SmolLLMAdapter implements LlmPort {
+class SmolLLMAdapter with NativeLlmParsing implements LlmPort {
   static const _codec = StandardMethodCodec();
   static const _methodChannel = MethodChannel(
     'com.example.clinical/llm',
@@ -33,7 +34,8 @@ class SmolLLMAdapter implements LlmPort {
   @override
   Future<String> processText(String input, ProcessingMode mode) async {
     final prompt = _buildPrompt(input, mode);
-    return _generate(prompt);
+    final rawResponse = await _generate(prompt);
+    return validateAndCleanResponse(rawResponse, mode);
   }
 
   @override
@@ -62,14 +64,16 @@ class SmolLLMAdapter implements LlmPort {
   Future<String> generateExecutiveSummary(String transcriptText) async {
     final cleanText = ClinicalPrompts.sanitize(transcriptText);
     final prompt = '${ClinicalPrompts.executiveSummary}\n$cleanText';
-    return _generate(prompt);
+    final rawResponse = await _generate(prompt);
+    return validateAndCleanResponse(rawResponse, ProcessingMode.cleanTranscript);
   }
 
   @override
   Future<String> generateDoctorNote(String transcriptText) async {
     final cleanText = ClinicalPrompts.sanitize(transcriptText);
     final prompt = '${ClinicalPrompts.doctorNote}\n$cleanText';
-    return _generate(prompt);
+    final rawResponse = await _generate(prompt);
+    return validateAndCleanResponse(rawResponse, ProcessingMode.generateDoctorNote);
   }
 
   // ============ FIELD-LEVEL GENERATION ============
@@ -128,6 +132,7 @@ class SmolLLMAdapter implements LlmPort {
     final prompt = _buildFieldPrompt(fieldName, cleanText, patientContext);
     final debouncer = Debouncer(delay: const Duration(milliseconds: 50));
     final controller = StreamController<String>();
+    final buffer = StringBuffer();
     StreamSubscription? subscription;
 
     try {
@@ -139,9 +144,10 @@ class SmolLLMAdapter implements LlmPort {
               subscription?.cancel();
               controller.close();
             } else {
+              buffer.write(event);
               debouncer.run(() {
-                final buffer = StringBuffer()..write(event);
-                final current = _parseFieldValue(buffer.toString(), fieldName);
+                var response = stripPromptEcho(buffer.toString(), prompt);
+                final current = _parseFieldValue(response, fieldName);
                 if (current.isNotEmpty) {
                   controller.add(current);
                 }
@@ -242,7 +248,8 @@ class SmolLLMAdapter implements LlmPort {
             if (event == '[DONE]') {
               subscription?.cancel();
               if (!completer.isCompleted) {
-                completer.complete(buffer.toString());
+                var response = stripPromptEcho(buffer.toString(), prompt);
+                completer.complete(response);
               }
             } else {
               buffer.write(event);
@@ -262,7 +269,8 @@ class SmolLLMAdapter implements LlmPort {
         onDone: () {
           // Stream closed without [DONE] — complete with what we have
           if (!completer.isCompleted) {
-            completer.complete(buffer.toString());
+            var response = stripPromptEcho(buffer.toString(), prompt);
+            completer.complete(response);
           }
         },
       );

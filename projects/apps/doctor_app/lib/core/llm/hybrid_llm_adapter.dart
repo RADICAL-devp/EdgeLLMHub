@@ -1,10 +1,9 @@
-import 'dart:developer' as developer;
-
 import 'package:doctor_app/core/ports/llm_port.dart';
 import 'package:doctor_app/core/models/patient_context.dart';
 import 'package:doctor_app/core/models/processing_mode.dart';
 import 'package:doctor_app/core/models/structured_summary.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
+import 'package:doctor_app/core/observability.dart';
 
 /// Two-tier hybrid LLM adapter: native → stub.
 ///
@@ -18,14 +17,17 @@ import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 class HybridLlmAdapter implements LlmPort {
   final LlmPort _nativeAdapter;
   final LlmPort _stubAdapter;
+  final JsonLogger _log;
 
   bool _nativeAvailable = true;
 
   HybridLlmAdapter({
     required LlmPort nativeAdapter,
     required LlmPort stubAdapter,
+    JsonLogger? logger,
   })  : _nativeAdapter = nativeAdapter,
-        _stubAdapter = stubAdapter;
+        _stubAdapter = stubAdapter,
+        _log = logger ?? JsonLogger(name: 'llm.hybrid');
 
   /// Reset availability flags (e.g., after engine restart).
   void resetAvailability() {
@@ -110,40 +112,79 @@ class HybridLlmAdapter implements LlmPort {
     String fieldName,
     String transcriptText, {
     PatientContext? patientContext,
-  }) {
-    // For streaming, we try native first, then fall back to stub
-    // Note: This is a simplified fallback - in production you might want
-    // more sophisticated stream fallback handling
+  }) async* {
     if (_nativeAvailable) {
+      _log.info('tier_selected', context: {
+        'method': 'generateFieldStream',
+        'tier': 'native',
+      });
+      var emittedOutput = false;
       try {
-        return _nativeAdapter.generateFieldStream(
+        await for (final chunk in _nativeAdapter.generateFieldStream(
           fieldName,
           transcriptText,
           patientContext: patientContext,
-        ).handleError((error) {
-          _log('generateFieldStream', 'Native stream failed: $error');
+        )) {
+          emittedOutput = true;
+          yield chunk;
+        }
+        return;
+      } catch (error, stackTrace) {
+        if (emittedOutput) {
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        if (error is UnsupportedPlatformException) {
+          _log.warn('fallback_triggered', context: {
+            'method': 'generateFieldStream',
+            'from': 'native',
+            'to': 'stub',
+            'reason': 'UnsupportedPlatformException',
+          });
           _nativeAvailable = false;
-          return _stubAdapter.generateFieldStream(
-            fieldName,
-            transcriptText,
-            patientContext: patientContext,
-          );
-        });
-      } on UnsupportedPlatformException {
-        _log('generateFieldStream', 'Native not supported on this platform');
-        _nativeAvailable = false;
-      } on LlmInitializationException catch (e) {
-        _log('generateFieldStream', 'Native LLM not initialized: $e');
-        _nativeAvailable = false;
-      } catch (e) {
-        _log('generateFieldStream', 'Native LLM unexpected error: $e');
-        _nativeAvailable = false;
+        } else if (error is LlmInitializationException) {
+          _log.warn('fallback_triggered',
+              context: {
+                'method': 'generateFieldStream',
+                'from': 'native',
+                'to': 'stub',
+                'reason': 'LlmInitializationException',
+              },
+              error: error);
+          _nativeAvailable = false;
+        } else if (error is LlmException) {
+          _log.warn('fallback_triggered',
+              context: {
+                'method': 'generateFieldStream',
+                'from': 'native',
+                'to': 'stub',
+                'reason': 'LlmException',
+              },
+              error: error);
+        } else {
+          _log.warn('fallback_triggered',
+              context: {
+                'method': 'generateFieldStream',
+                'from': 'native',
+                'to': 'stub',
+                'reason': 'UnexpectedError',
+              },
+              error: error);
+          _nativeAvailable = false;
+        }
       }
+    } else {
+      _log.warn('tier_skipped', context: {
+        'method': 'generateFieldStream',
+        'tier': 'native',
+        'reason': 'Unavailable',
+      });
     }
 
-    // --- Tier 2: Stub ---
-    _log('generateFieldStream', 'Falling back to offline stub');
-    return _stubAdapter.generateFieldStream(
+    _log.info('tier_selected', context: {
+      'method': 'generateFieldStream',
+      'tier': 'stub',
+    });
+    yield* _stubAdapter.generateFieldStream(
       fieldName,
       transcriptText,
       patientContext: patientContext,
@@ -182,34 +223,75 @@ class HybridLlmAdapter implements LlmPort {
   }) async {
     // --- Tier 1: Native (on-device) ---
     if (_nativeAvailable) {
+      _log.info('tier_selected', context: {
+        'method': methodName,
+        'tier': 'native',
+      });
       try {
         final result = await native();
         // Native succeeded — ensure it stays available
+        _log.info('tier_succeeded', context: {
+          'method': methodName,
+          'tier': 'native',
+        });
         return result;
       } on UnsupportedPlatformException {
-        _log(methodName, 'Native not supported on this platform');
+        _log.warn('fallback_triggered', context: {
+          'method': methodName,
+          'from': 'native',
+          'to': 'stub',
+          'reason': 'UnsupportedPlatformException',
+        });
         _nativeAvailable = false;
       } on LlmInitializationException catch (e) {
-        _log(methodName, 'Native LLM not initialized: $e');
+        _log.warn('fallback_triggered',
+            context: {
+              'method': methodName,
+              'from': 'native',
+              'to': 'stub',
+              'reason': 'LlmInitializationException',
+            },
+            error: e);
         _nativeAvailable = false;
       } on LlmException catch (e) {
-        _log(methodName, 'Native LLM failed: $e');
+        _log.warn('fallback_triggered',
+            context: {
+              'method': methodName,
+              'from': 'native',
+              'to': 'stub',
+              'reason': 'LlmException',
+            },
+            error: e);
         // Don't permanently disable for transient inference errors
       } catch (e) {
-        _log(methodName, 'Native LLM unexpected error: $e');
+        _log.warn('fallback_triggered',
+            context: {
+              'method': methodName,
+              'from': 'native',
+              'to': 'stub',
+              'reason': 'UnexpectedError',
+            },
+            error: e);
         _nativeAvailable = false;
       }
+    } else {
+      _log.warn('tier_skipped', context: {
+        'method': methodName,
+        'tier': 'native',
+        'reason': 'Unavailable',
+      });
     }
 
     // --- Tier 2: Stub (always available) ---
-    _log(methodName, 'Falling back to offline stub');
-    return stub();
-  }
-
-  void _log(String method, String message) {
-    developer.log(
-      '[$method] $message',
-      name: 'HybridLlmAdapter',
-    );
+    _log.info('tier_selected', context: {
+      'method': methodName,
+      'tier': 'stub',
+    });
+    final result = await stub();
+    _log.info('tier_succeeded', context: {
+      'method': methodName,
+      'tier': 'stub',
+    });
+    return result;
   }
 }

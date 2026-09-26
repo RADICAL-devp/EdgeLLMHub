@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import 'trace_context.dart';
+
 /// Log severity levels, ordered by increasing importance.
 enum LogLevel {
   debug(10, 'debug'),
@@ -74,7 +76,8 @@ class JsonLogger {
     Map<String, Object?>? context,
     String? correlationId,
   }) {
-    log(LogLevel.debug, message, context: context, correlationId: correlationId);
+    log(LogLevel.debug, message,
+        context: context, correlationId: correlationId);
   }
 
   /// Emits a [LogLevel.info] line.
@@ -125,7 +128,8 @@ class JsonLogger {
   /// Emits a single JSON log line when [level] is at or above [minLevel].
   ///
   /// The effective correlation id is the per-call [correlationId] when given,
-  /// otherwise the logger-level value set via [setCorrelationId]. Per-call
+  /// otherwise the logger-level value set via [setCorrelationId], otherwise
+  /// the trace id bound to the current [TraceContext] zone. Per-call
   /// [context] entries override ambient logger [context] entries of the same
   /// key.
   void log(
@@ -138,12 +142,14 @@ class JsonLogger {
   }) {
     if (level.priority < _minLevel.priority) return;
 
-    final effectiveCorrelationId = correlationId ?? _correlationId;
+    final effectiveCorrelationId =
+        correlationId ?? _correlationId ?? TraceContext.current;
     final record = <String, Object?>{
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'level': level.label,
       'logger': _name,
-      if (effectiveCorrelationId != null) 'correlationId': effectiveCorrelationId,
+      if (effectiveCorrelationId != null)
+        'correlationId': effectiveCorrelationId,
       'message': message,
       if (error != null) 'error': _stringify(error),
       if (stackTrace != null) 'stackTrace': stackTrace.toString(),

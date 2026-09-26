@@ -97,15 +97,23 @@ class SummaryOrchestrator {
     //    them as context for a context-enriched summary.
     final pastContext = await buildPastContext(normalizedText);
 
-    // 6. Generate structured summary
-    // For single chunk, generate directly. For multiple, aggregate.
-    final generationInput = chunks.length == 1 ? chunks.first : normalizedText;
-    final structuredSummary = pastContext.isEmpty
-        ? await summaryGenerationService.generate(generationInput)
-        : await llmPort.generateContextEnrichedSummary(
-            generationInput,
-            pastContext,
-          );
+    // 6. Generate structured summary for each chunk and aggregate
+    final chunkSummaries = <TranscriptChunkSummary>[];
+    for (var i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
+      final structuredSummary = pastContext.isEmpty
+          ? await summaryGenerationService.generate(chunk)
+          : await llmPort.generateContextEnrichedSummary(
+              chunk,
+              pastContext,
+            );
+      chunkSummaries.add(TranscriptChunkSummary(
+        chunkIndex: i,
+        chunkText: chunk,
+        structuredSummary: structuredSummary,
+      ));
+    }
+    final structuredSummary = aggregationService.aggregate(chunkSummaries);
 
     // 6b. Generate doctor note
     final doctorNote = await doctorNoteGenerationService.generate(
