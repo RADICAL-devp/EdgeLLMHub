@@ -16,7 +16,7 @@ final class MLCLLMHandler: NSObject {
   private static let streamChannelName = "com.example.clinical/llm_stream"
   private static let doneSentinel = "[DONE]"
   private static let modelBundleName = "Qwen3-0.6B-Q4_K_M-MLC"
-  private static let modelLib = "llama_q4f16_1_d5ba06e61253098870aaa5dc3f1a2589"
+  private static let modelLib = "qwen3_q4f16_1_4c1858acf61ad55f05d9911b9385e1bd"
   private static let maxContextTokens = 2048
   private static let maxPromptCharacters = 4000
   private static let maxGeneratedTokens = 512
@@ -158,7 +158,7 @@ final class MLCLLMHandler: NSObject {
     _ call: FlutterMethodCall,
     result: @escaping FlutterResult
   ) {
-    let modelAvailable = modelPath != nil
+    let modelAvailable = modelPath != nil && modelPathHasBeam(modelPath ?? "")
     switch call.method {
     case "isAvailable":
       result(isEngineReady)
@@ -341,12 +341,25 @@ final class MLCLLMHandler: NSObject {
   }
 
   private func modelPathHasBeam(_ path: String) -> Bool {
-    let entries = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+    let fm = FileManager.default
+    let entries = (try? fm.contentsOfDirectory(atPath: path)) ?? []
     // mlc-chat-config.json is the authoritative marker of a packaged MLC model.
-    let hasConfig = entries.contains { $0 == "mlc-chat-config.json" }
-    // Weight shards are named "params_shard_*.bin" (no literal ".params").
-    let hasParams = entries.contains { $0.hasSuffix(".bin") || $0 == "params" }
-    return hasConfig && hasParams
+    guard entries.contains("mlc-chat-config.json") else { return false }
+    // A partial download/extract (or mixed stale copy) passes the old
+    // "any .bin" check but aborts the engine in LoadParams with an uncaught
+    // tvm::ffi::Error (SIGABRT). Require EVERY shard listed in
+    // ndarray-cache.json so incomplete dirs fail here with a clean NSError.
+    let cacheURL = URL(fileURLWithPath: path).appendingPathComponent("ndarray-cache.json")
+    guard let data = try? Data(contentsOf: cacheURL),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let records = json["records"] as? [[String: Any]],
+          !records.isEmpty else { return false }
+    return records.allSatisfy { rec in
+      guard let dp = rec["dataPath"] as? String, !dp.isEmpty else { return false }
+      var isDir: ObjCBool = false
+      let full = URL(fileURLWithPath: path).appendingPathComponent(dp).path
+      return fm.fileExists(atPath: full, isDirectory: &isDir) && !isDir.boolValue
+    }
   }
 
   private func ensureEngine() async throws -> MLCEngine {

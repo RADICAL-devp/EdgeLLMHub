@@ -23,6 +23,7 @@ import org.mlc.llm.ContentDelta
 import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
+import org.json.JSONObject
 
 /**
  * Android native LLM handler using MLC Android runtime.
@@ -38,7 +39,7 @@ class MLCLLMHandler(
         const val STREAM_CHANNEL = "com.example.clinical/llm_stream"
         const val DONE_SENTINEL = "[DONE]"
  const val MODEL_BUNDLE_NAME = "Qwen3-0.6B-Q4_K_M-MLC"
- const val MODEL_LIB = "llama_q4f16_1_d5ba06e61253098870aaa5dc3f1a2589"
+  const val MODEL_LIB = "qwen3_q4f16_1_4c1858acf61ad55f05d9911b9385e1bd"
         const val MAX_CONTEXT_TOKENS = 2048
         private const val TAG = "MLCLLMHandler"
     }
@@ -142,10 +143,13 @@ class MLCLLMHandler(
         // Single source of truth: the Dart ModelManagerCubit downloads,
         // checksum-verifies and extracts the model into the app files dir
         // (= path_provider's getApplicationDocumentsDirectory on Android).
+        // A partial download/extract passes a bare exists() check but aborts
+        // the native engine in LoadParams with an unrecoverable error, so
+        // require the full shard set declared in ndarray-cache.json.
         val modelDir = File(context.filesDir, MODEL_BUNDLE_NAME)
-        if (!modelDir.exists()) {
+        if (!hasCompleteBundle(modelDir)) {
             throw IllegalStateException(
-                "Qwen 3 0.6B not found. Download it from the Model Manager screen first."
+                "Qwen 3 0.6B model is missing or incomplete. Download it from the Model Manager screen first."
             )
         }
 
@@ -200,13 +204,37 @@ class MLCLLMHandler(
             "modelId" to MODEL_BUNDLE_NAME,
             "modelLib" to MODEL_LIB,
             "modelPath" to modelDir.absolutePath,
-            "installed" to modelDir.exists(),
+            "installed" to hasCompleteBundle(modelDir),
             "ready" to isEngineReady,
             "contextWindowTokens" to MAX_CONTEXT_TOKENS,
             "checksumSha256" to checksum ?: "",
             "runtime" to "MLCAndroid",
             "processor" to deviceProcessor()
         )
+    }
+
+    /**
+     * True only when the model directory holds the complete MLC bundle:
+     * mlc-chat-config.json plus every shard declared in ndarray-cache.json.
+     * Incomplete dirs (interrupted download/extract, mixed stale copies)
+     * report not-installed so the UI routes to the download flow instead of
+     * crashing the native engine in LoadParams.
+     */
+    private fun hasCompleteBundle(dir: File): Boolean {
+        if (!dir.isDirectory) return false
+        if (!File(dir, "mlc-chat-config.json").exists()) return false
+        return try {
+            val cache = JSONObject(File(dir, "ndarray-cache.json").readText())
+            val records = cache.getJSONArray("records")
+            if (records.length() == 0) return false
+            (0 until records.length()).all { i ->
+                val dataPath = records.getJSONObject(i).optString("dataPath", "")
+                dataPath.isNotEmpty() && File(dir, dataPath).isFile
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Bundle completeness check failed", e)
+            false
+        }
     }
 
     /** Human-readable execution device: Vulkan-capable GPU name (if any),

@@ -26,23 +26,27 @@ void main() {
       expect(EnvironmentConfig.enableNetworkLogging, EnvironmentConfig.isDebug);
     });
 
-    test('model download configuration defaults to empty', () {
-      expect(EnvironmentConfig.modelDownloadUrl, isEmpty);
-      expect(EnvironmentConfig.modelChecksumSha256, isEmpty);
+    test('model download configuration defaults to hosted Qwen bundle', () {
+      // Xcode runs receive no --dart-define, so baked defaults must be real
+      // (verified HF Hub upload of the true Qwen3 MLC bundle).
+      expect(EnvironmentConfig.modelDownloadUrl,
+          'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip');
+      expect(EnvironmentConfig.modelChecksumSha256,
+          '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83');
       expect(
         EnvironmentConfig.modelFileName,
-        'smolLM-360M-Instruct-q4f16_1-MLC.zip',
+        'qwen3-0.6b-Q4_K_M.zip',
       );
       expect(
         EnvironmentConfig.modelBundleDirName,
-        'SmolLM-360M-Instruct-q4f16_1-MLC',
+        'Qwen3-0.6B-Q4_K_M-MLC',
       );
     });
 
-    test('supported model tier list contains the SmolLM MLC bundle', () {
+    test('supported model tier list contains the Qwen3 MLC bundle', () {
       expect(
         EnvironmentConfig.supportedModels,
-        contains('SmolLM-360M-Instruct-q4f16_1-MLC'),
+        contains('Qwen3-0.6B-Q4_K_M-MLC'),
       );
     });
   });

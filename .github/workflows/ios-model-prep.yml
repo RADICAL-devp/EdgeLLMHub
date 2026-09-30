@@ -15,12 +15,12 @@ permissions:
 env:
   IOS_DIR: projects/apps/doctor_app/ios
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
-  MODEL_BUNDLE_DIR: SmolLM-350M-Instruct-q4f16_1-MLC
-  MODEL_ARCHIVE: smolLM-350M-Instruct-q4f16_1-MLC.zip
+  MODEL_BUNDLE_DIR: Qwen3-0.6B-Q4_K_M-MLC
+  MODEL_ARCHIVE: qwen3-0.6b-Q4_K_M.zip
 
 jobs:
   compile:
-    name: Compile SmolLM-350M & Verify Checksums
+    name: Compile Qwen3-0.6B & Verify Checksums
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
       - name: Upload model artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: smollm-350m-instruct-q4f16_1-mlc
+          name: qwen3-0.6b-Q4_K_M-mlc
           path: projects/apps/doctor_app/ios/mlc-llm/**
           if-no-files-found: error
 

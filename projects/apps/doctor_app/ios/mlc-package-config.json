@@ -2,14 +2,14 @@
   "device": "iphone",
   "model_list": [
     {
-      "model": "HF://mlc-ai/Qwen3-0.6B-Q4_K_M-MLC",
+      "model": "HF://mlc-ai/Qwen3-0.6B-q4f16_1-MLC",
       "model_id": "Qwen3-0.6B-Q4_K_M-MLC",
       "estimated_vram_bytes": 200000000,
       "bundle_weight": true,
       "overrides": {
         "context_window_size": 2048,
         "prefill_chunk_size": 2048,
-        "model_type": "llama",
+        "model_type": "qwen3",
         "quantization": "q4f16_1"
       }
     }

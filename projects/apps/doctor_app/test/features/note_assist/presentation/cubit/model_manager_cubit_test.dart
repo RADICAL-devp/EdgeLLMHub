@@ -198,7 +198,10 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('model-test');
       final cubit = ModelManagerCubit(capabilityService: capabilityService);
 
-      final future = cubit.downloadModel(downloadDirectory: dir);
+      final future = cubit.downloadModel(
+        downloadUrl: '',
+        downloadDirectory: dir,
+      );
 
       while (cubit.state is! ModelManagerError) {
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -233,6 +236,7 @@ void main() {
 
       await cubit.downloadModel(
         downloadUrl: 'https://example.com/model.zip',
+        checksumSha256: '',
         downloadDirectory: dir,
       );
       await Future<void>.delayed(Duration.zero);

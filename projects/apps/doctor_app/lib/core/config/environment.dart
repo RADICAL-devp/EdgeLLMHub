@@ -126,39 +126,42 @@ class EnvironmentConfig {
     'Qwen3-0.6B-Q4_K_M-MLC',
   ];
 
-  /// URL the Qwen 3 0.6B model binary is downloaded from.
+  /// URL the Qwen 3 0.6B model archive is downloaded from.
   ///
   /// Override via `--dart-define=MODEL_DOWNLOAD_URL=...`.
-  /// In production, this should point to a signed GCP/AWS bucket URL.
+  /// Baked default is the public HuggingFace Hub upload of the verified
+  /// Qwen3-0.6B-q4f16_1 bundle (283M zip); Xcode runs don't receive
+  /// `--dart-define`, so the default must be real (no simulation on device).
   static String get modelDownloadUrl {
     const explicit = String.fromEnvironment('MODEL_DOWNLOAD_URL');
     if (explicit.isNotEmpty) return explicit;
 
     return switch (environment) {
-      AppEnvironment.dev => '',
-      AppEnvironment.staging => 'https://storage.googleapis.com/doctorapp-staging/models/qwen3-0.6b-Q4_K_M.zip',
-      AppEnvironment.prod => 'https://storage.googleapis.com/doctorapp-prod/models/qwen3-0.6b-Q4_K_M.zip',
+      AppEnvironment.dev =>
+        'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip',
+      AppEnvironment.staging =>
+        'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip',
+      AppEnvironment.prod =>
+        'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip',
     };
   }
 
-  /// Expected SHA-256 of the Qwen 3 0.6B model binary (hex), used to verify downloads.
+  /// Expected SHA-256 of the Qwen 3 0.6B model archive (hex), used to verify downloads.
   ///
   /// Override via `--dart-define=MODEL_CHECKSUM_SHA256=...`.
+  /// Baked default matches the hosted zip above (verified byte-identical).
   static String get modelChecksumSha256 {
     const explicit = String.fromEnvironment('MODEL_CHECKSUM_SHA256');
     if (explicit.isNotEmpty) return explicit;
 
-    final checksum = switch (environment) {
-      AppEnvironment.dev => '',
-      AppEnvironment.staging => 'STAGING_QWEN3_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
-      AppEnvironment.prod => 'PROD_QWEN3_CHECKSUM_PLACEHOLDER_REPLACE_IN_CI',
+    return switch (environment) {
+      AppEnvironment.dev =>
+        '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83',
+      AppEnvironment.staging =>
+        '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83',
+      AppEnvironment.prod =>
+        '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83',
     };
-
-    if (environment != AppEnvironment.dev && checksum.contains('PLACEHOLDER_REPLACE_IN_CI')) {
-      throw StateError('Invalid model checksum for $environment environment: placeholders must be replaced by CI/CD');
-    }
-
-    return checksum;
   }
 
   /// File name of the Qwen 3 0.6B on-device model artifact.
