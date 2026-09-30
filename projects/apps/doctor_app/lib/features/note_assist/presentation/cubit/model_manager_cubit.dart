@@ -1,16 +1,15 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
-import 'package:archive/archive.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:doctor_app/core/config/environment.dart';
+import 'package:doctor_app/core/llm/gemma_backend.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -26,10 +25,9 @@ abstract class ModelManagerState extends Equatable {
 
 class ModelManagerInitial extends ModelManagerState {}
 
-/// The cubit is running the multi-second verification (getModelInfo,
-/// engine initialization, warm-up, sample inference). The page shows a
-/// spinner here so the user is not offered a Download button while the
-/// bundled model is being verified.
+/// The cubit is running the multi-second verification (installed check,
+/// sample inference). The page shows a spinner here so the user is not
+/// offered a Download button while the installed model is being verified.
 class ModelManagerChecking extends ModelManagerState {}
 
 class ModelManagerDownloading extends ModelManagerState {
@@ -125,12 +123,12 @@ class DioModelDownloader implements ModelDownloader {
 class ModelManagerCubit extends Cubit<ModelManagerState> {
   final DeviceCapabilityService _capabilityService;
   final ModelDownloader _downloader;
-  static const _iosChannel = MethodChannel('com.example.clinical/llm');
-  static const _androidChannel = MethodChannel('com.example.clinical/llm');
+  final GemmaBackend _gemmaBackend;
+  final Connectivity _connectivity;
 
-  /// Timeout for model verification steps (init, warm-up, sample inference).
-  /// Increased from 20s — first inference on a bundled model can exceed 30s
-  /// on older A-series chips as the engine JIT-compiles the GPU backend.
+  /// Timeout for model verification steps (installed check, sample inference).
+  /// Increased from 20s — first inference on a freshly installed model can
+  /// exceed 30s on older chips as the engine warms up the GPU backend.
   ///
   /// Instance getter (not a static) so tests can shorten it without waiting
   /// 45 real seconds for the generate timeout to fire.
@@ -140,19 +138,23 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   ModelManagerCubit({
     required DeviceCapabilityService capabilityService,
     ModelDownloader? downloader,
+    GemmaBackend? gemmaBackend,
+    Connectivity? connectivity,
   })  : _capabilityService = capabilityService,
         _downloader = downloader ?? DioModelDownloader(),
+        _gemmaBackend = gemmaBackend ?? FlutterGemmaBackend(),
+        _connectivity = connectivity ?? Connectivity(),
         super(ModelManagerInitial());
 
   /// Emits [state] only while the cubit is still open.
   ///
   /// [checkModelExists] and [downloadModel] perform long async verifications
-  /// (MethodChannel round-trips to the native MLC engine, downloads, checksum
-  /// verification). If the owning page is disposed mid-flight — e.g. the user
-  /// backgrounds the app or hot-reloads — the cubit is closed and any
-  /// subsequent `emit` throws "Cannot emit new states after calling close",
-  /// surfacing as an uncaught async error. Guarding every emit keeps the
-  /// verification work cancellable-safe.
+  /// (flutter_gemma install checks, downloads, checksum verification). If the
+  /// owning page is disposed mid-flight — e.g. the user backgrounds the app
+  /// or hot-reloads — the cubit is closed and any subsequent `emit` throws
+  /// "Cannot emit new states after calling close", surfacing as an uncaught
+  /// async error. Guarding every emit keeps the verification work
+  /// cancellable-safe.
   void _safeEmit(ModelManagerState state) {
     if (!isClosed) {
       emit(state);
@@ -163,12 +165,9 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   ///
   /// Unlike the old implementation, this does NOT blindly emit
   /// [ModelManagerReady]. It performs real verification:
-  ///   1. Check if the MethodChannel/plugin responds
-  ///   2. Verify the model file/library is present (via getModelInfo)
-  ///   3. Verify checksum matches expected bundle
-  ///   4. Run a sample inference to confirm the model is loaded
-  ///   5. Warm-up inference to reduce first-request latency
-  ///   6. Check model version compatibility and trigger upgrade if needed
+  ///   1. Check the flutter_gemma store for the installed model file
+  ///   2. Run a sample inference to confirm the model is loaded
+  ///   3. Warm-up happens implicitly on first inference
   Future<void> checkModelExists() async {
     try {
       final isSimulator = await _capabilityService.isSimulator;
@@ -190,84 +189,23 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
         return;
       }
 
-      // Physical device — check platform-specific model.
+      // Physical device — verify the flutter_gemma model (cross-platform,
+      // no per-OS branches).
       // Emit the checking state only now: the simulator/probe stage is fast,
       // and cloud/stub mode reports ready directly below (no verification).
       _safeEmit(ModelManagerChecking());
-      if (isIosPlatform) {
-        await _checkIosModel();
-      } else if (isAndroidPlatform) {
-        await _checkAndroidModel();
-      } else {
-        _safeEmit(const ModelManagerError(
-          'Unsupported platform for local LLM inference.',
-          canRetry: false,
-        ));
-      }
+      await _checkGemmaModel();
     } catch (e) {
       _safeEmit(ModelManagerError('Failed to check model: $e'));
     }
   }
 
-  /// Check if model upgrade is needed by comparing versions.
-  ///
-  /// Returns true if the installed model version is older than the
-  /// bundled version or incompatible with the current app version.
-  Future<bool> _needsModelUpgrade(Map<String, Object?> modelInfo) async {
+  /// Verify the flutter_gemma model: installed in the plugin store plus a
+  /// live sample inference. Cross-platform — no per-OS branches.
+  Future<void> _checkGemmaModel() async {
     try {
-      final installedVersion = modelInfo['modelVersion'] as String?;
-      if (installedVersion == null || installedVersion.isEmpty) {
-        // No version info — assume upgrade needed
-        return true;
-      }
-
-      // Compare with bundled model version
-      final bundledVersion = EnvironmentConfig.bundledModelVersion.version;
-      return _compareVersions(installedVersion, bundledVersion) < 0;
-    } catch (e) {
-      developer.log(
-        'Version check failed, assuming upgrade needed: $e',
-        name: 'ModelManagerCubit',
-      );
-      return true;
-    }
-  }
-
-  /// Compare semantic versions (major.minor.patch).
-  int _compareVersions(String v1, String v2) {
-    final parts1 = v1.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-    final parts2 = v2.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-    for (int i = 0; i < 3; i++) {
-      if (parts1[i] != parts2[i]) {
-        return parts1[i].compareTo(parts2[i]);
-      }
-    }
-    return 0;
-  }
-
-  /// Platform gates, factored out so tests can simulate either platform.
-  @visibleForTesting
-  bool get isIosPlatform => Platform.isIOS;
-
-  @visibleForTesting
-  bool get isAndroidPlatform => Platform.isAndroid;
-
-  /// Check iOS MLC model availability with real verification.
-  Future<void> _checkIosModel() async {
-    try {
-      // Step 1: Get model info (installed status, path, checksum)
-      final modelInfo = await _iosChannel
-          .invokeMapMethod<String, Object?>('getModelInfo')
-          .timeout(verificationTimeout);
-
-      if (modelInfo == null) {
-        _safeEmit(const ModelManagerError(
-          'MLC LLM handler did not return model info.',
-        ));
-        return;
-      }
-
-      final installed = modelInfo['installed'] == true;
+      final installed = await _gemmaBackend
+          .isModelInstalled(EnvironmentConfig.modelFileName);
       if (!installed) {
         // Model is not installed — the first-run download flow owns the
         // not-installed state (the page shows the Download button there).
@@ -275,283 +213,91 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
         return;
       }
 
-      // Step 2: Verify checksum if available
-      final checksum = modelInfo['checksumSha256'] as String?;
-      if (checksum != null && checksum.isNotEmpty) {
-        // Security note (Workstream 8): an INSTALLED model's integrity is
-        // guaranteed at download time — _verifyChecksum() validates the
-        // archive's SHA-256 (constant-time) BEFORE extraction, and the
-        // corrupt archive is deleted on mismatch. The native side reports a
-        // checksum of the extracted BUNDLE binary (checksums.sha256), a
-        // different artifact than the archive, so it cannot be compared
-        // against EnvironmentConfig.modelChecksumSha256 (the archive pin)
-        // without false positives. It is logged for diagnostics instead;
-        // no second verification path is needed.
-        developer.log(
-          'Model checksum: $checksum',
-          name: 'ModelManagerCubit',
-        );
-        // In production, compare against expected checksum from build artifacts
-        // For now, log it for debugging
-      }
-
-      // Step 3: Check if engine is ready; if not, initialize it.
-      final isAvailable = modelInfo['ready'] == true;
-      if (isAvailable != true) {
-        developer.log(
-          'MLC engine not initialized, initializing...',
-          name: 'ModelManagerCubit',
-        );
-        try {
-          await _iosChannel
-              .invokeMethod<void>('initialize')
-              .timeout(verificationTimeout);
-        } on PlatformException catch (e) {
-          _safeEmit(ModelManagerError(
-            'Failed to initialize MLC engine: ${e.message}',
-          ));
-          return;
-        }
-      }
-
-      // Step 4: Warm-up inference to reduce first-request latency
-      developer.log(
-        'Running warm-up inference...',
-        name: 'ModelManagerCubit',
-      );
-      try {
-        await _iosChannel
-            .invokeMethod<String>('warmUp')
-            .timeout(verificationTimeout);
-      } on TimeoutException {
-        developer.log(
-          'Warm-up timed out (continuing anyway)',
-          name: 'ModelManagerCubit',
-        );
-      } on PlatformException catch (e) {
-        developer.log(
-          'Warm-up failed (continuing anyway): ${e.message}',
-          name: 'ModelManagerCubit',
-        );
-      }
-
-      // Step 5: Run a sample inference to verify the model actually works
+      // Run a sample inference to verify the model actually works.
       developer.log(
         'Running verification inference...',
         name: 'ModelManagerCubit',
       );
 
-      final verifyResult = await _iosChannel
-          .invokeMethod<String>('generate', {
-            'prompt': 'Hello',
-          })
-          .timeout(verificationTimeout);
-
-      if (verifyResult == null || verifyResult.isEmpty) {
-        _safeEmit(const ModelManagerError(
-          'MLC LLM engine responded but produced no output. '
-          'The model may be corrupted.',
-        ));
-        return;
-      }
-
-      // Step 6: Re-fetch model info so the displayed state reflects the
-      // engine's true status AFTER initialization (the Step-1 map still has
-      // ready:false because the engine wasn't initialized yet at that point).
-      final freshModelInfo = await _iosChannel
-          .invokeMapMethod<String, Object?>('getModelInfo')
-          .timeout(verificationTimeout);
-      final finalModelInfo = freshModelInfo ?? modelInfo;
-
-      developer.log(
-        'MLC verification succeeded (${verifyResult.length} chars)',
-        name: 'ModelManagerCubit',
-      );
-      _safeEmit(ModelManagerReady(
-        'Bundled Qwen 3 0.6B (MLCSwift)',
-        executionMode: 'local',
-        modelInfo: finalModelInfo,
-      ));
-    } on TimeoutException {
-      _safeEmit(const ModelManagerError(
-        'MLC LLM verification timed out. The model may be too large '
-        'for this device.',
-      ));
-    } on MissingPluginException {
-      _safeEmit(const ModelManagerError(
-        'MLC LLM handler is not registered. '
-        'Ensure MLCLLMHandler is configured in AppDelegate.swift.',
-        canRetry: false,
-      ));
-    } on PlatformException catch (e) {
-      _safeEmit(ModelManagerError(
-        'MLC LLM platform error: ${e.message}',
-      ));
-    } catch (e) {
-      _safeEmit(ModelManagerError('Failed to verify MLC LLM: $e'));
-    }
-  }
-
-  /// Check Android MLC model availability with real verification.
-  Future<void> _checkAndroidModel() async {
-    try {
-      // Step 1: Get model info (installed status, path, checksum)
-      final modelInfo = await _androidChannel
-          .invokeMapMethod<String, Object?>('getModelInfo')
-          .timeout(verificationTimeout);
-
-      if (modelInfo == null) {
-        _safeEmit(const ModelManagerError(
-          'MLC Android handler did not return model info.',
-        ));
-        return;
-      }
-
-      final installed = modelInfo['installed'] == true;
-      if (!installed) {
-        _safeEmit(ModelManagerInitial());
-        return;
-      }
-
-      // Step 2: Verify checksum if available
-      final checksum = modelInfo['checksumSha256'] as String?;
-      if (checksum != null && checksum.isNotEmpty) {
-        // Security note (Workstream 8): same as the iOS path — integrity is
-        // enforced at download time via _verifyChecksum() (constant-time,
-        // archive deleted on mismatch). The reported value is the extracted
-        // bundle checksum, a different artifact than the archive pin, so it
-        // is logged for diagnostics rather than compared.
-        developer.log(
-          'Model checksum: $checksum',
-          name: 'ModelManagerCubit',
-        );
-      }
-
-      // Step 3: Check if engine is ready
-      final isAvailable = modelInfo['ready'] == true;
-      if (isAvailable != true) {
-        // Engine not initialized yet — try to initialize
-        developer.log(
-          'MLC Android engine not initialized, initializing...',
-          name: 'ModelManagerCubit',
-        );
-        try {
-          await _androidChannel
-              .invokeMethod<void>('initialize')
-              .timeout(const Duration(seconds: 60));
-        } on PlatformException catch (e) {
-          _safeEmit(ModelManagerError(
-            'Failed to initialize MLC Android engine: ${e.message}',
-          ));
-          return;
-        }
-      }
-
-      // Step 4: Warm-up inference to reduce first-request latency
-      developer.log(
-        'Running warm-up inference...',
-        name: 'ModelManagerCubit',
-      );
+      GemmaGeneration verifyResult;
       try {
-        await _androidChannel
-            .invokeMethod<String>('warmUp')
+        verifyResult = await _gemmaBackend
+            .generate(prompt: 'Hello', maxOutputTokens: 8)
             .timeout(verificationTimeout);
       } on TimeoutException {
-        developer.log(
-          'Warm-up timed out (continuing anyway)',
-          name: 'ModelManagerCubit',
-        );
-      } on PlatformException catch (e) {
-        developer.log(
-          'Warm-up failed (continuing anyway): ${e.message}',
-          name: 'ModelManagerCubit',
-        );
-      }
-
-      // Step 5: Run a sample inference to verify the model actually works
-      developer.log(
-        'Running verification inference...',
-        name: 'ModelManagerCubit',
-      );
-
-      final verifyResult = await _androidChannel
-          .invokeMethod<String>('generate', {
-            'prompt': 'Hello',
-          })
-          .timeout(verificationTimeout);
-
-      if (verifyResult == null || verifyResult.isEmpty) {
         _safeEmit(const ModelManagerError(
-          'MLC Android LLM engine responded but produced no output. '
-          'The model may be corrupted.',
+          'flutter_gemma verification timed out. The model may be too large '
+          'for this device.',
         ));
         return;
       }
 
-      // Step 6: Re-fetch model info so the displayed state reflects the
-      // engine's true status AFTER initialization.
-      final freshModelInfo = await _androidChannel
-          .invokeMapMethod<String, Object?>('getModelInfo')
-          .timeout(verificationTimeout);
-      final finalModelInfo = freshModelInfo ?? modelInfo;
+      final text = verifyResult.text;
+      if (text.isEmpty) {
+        _safeEmit(const ModelManagerError(
+          'flutter_gemma engine responded but produced no output. '
+          'The model may be corrupted — try re-downloading it.',
+        ));
+        return;
+      }
 
       developer.log(
-        'MLC Android verification succeeded (${verifyResult.length} chars)',
+        'flutter_gemma verification succeeded (${text.length} chars)',
         name: 'ModelManagerCubit',
       );
-      _safeEmit(ModelManagerReady(
-        'Bundled Qwen 3 0.6B (MLC Android)',
+      _safeEmit(const ModelManagerReady(
+        'Qwen 3 0.6B (flutter_gemma)',
         executionMode: 'local',
-        modelInfo: finalModelInfo,
-      ));
-    } on TimeoutException {
-      _safeEmit(const ModelManagerError(
-        'MLC Android LLM verification timed out. The model may be too large '
-        'for this device.',
-      ));
-    } on MissingPluginException {
-      _safeEmit(const ModelManagerError(
-        'MLC Android LLM handler is not registered. '
-        'Ensure MLCLLMHandler is configured in MainActivity.kt.',
-        canRetry: false,
-      ));
-    } on PlatformException catch (e) {
-      _safeEmit(ModelManagerError(
-        'MLC Android LLM platform error: ${e.message}',
+        modelInfo: {
+          'modelId': 'Qwen3-0.6B-dynamic-wi4b32-afp32',
+          'runtime': 'flutter_gemma',
+        },
       ));
     } catch (e) {
-      _safeEmit(ModelManagerError('Failed to verify MLC Android LLM: $e'));
+      _safeEmit(ModelManagerError('Failed to verify flutter_gemma LLM: $e'));
     }
   }
 
   /// Download the model for the current platform.
   ///
-  /// Downloads the packaged model artifact ([EnvironmentConfig.modelFileName],
-  /// typically a `.zip` of the MLC-packaged model directory) with transfer-rate
-  /// tracking, verifies the SHA-256 checksum, then extracts it to
-  /// `{dir}/{modelBundleDirName}` so the platform handlers find it at the
-  /// well-known location. When the artifact is not an archive (legacy single
-  /// binary), it is kept as-is. [downloadUrl], [checksumSha256] and
-  /// [downloadDirectory] may be overridden (used by tests); they default to
-  /// [EnvironmentConfig] values and the platform documents directory.
+  /// Stages the single-file `.litertlm` artifact
+  /// ([EnvironmentConfig.modelFileName]) to a temp file with transfer-rate
+  /// tracking, verifies the SHA-256 checksum, then hands it to flutter_gemma
+  /// (`fromFile`), which moves it into its managed store. The temp copy is
+  /// always removed afterwards. [downloadUrl], [checksumSha256],
+  /// [requireWifi] and [downloadDirectory] may be overridden (used by
+  /// tests); they default to [EnvironmentConfig] values, Wi-Fi-only
+  /// downloads, and the platform temp directory.
   Future<void> downloadModel({
     String? downloadUrl,
     String? checksumSha256,
+    bool? requireWifi,
     Directory? downloadDirectory,
   }) async {
     final url = downloadUrl ?? EnvironmentConfig.modelDownloadUrl;
     final expectedChecksum =
         checksumSha256 ?? EnvironmentConfig.modelChecksumSha256;
-    final dir = downloadDirectory ?? await getApplicationDocumentsDirectory();
-    final modelFile = File('${dir.path}/${EnvironmentConfig.modelFileName}');
+    final stagingDir = downloadDirectory ?? await getTemporaryDirectory();
+    final modelFile = File('${stagingDir.path}/${EnvironmentConfig.modelFileName}');
 
     if (url.isEmpty) {
       await _simulateDownload(modelFile);
       return;
     }
 
+    if (requireWifi ?? true) {
+      final onWifi = await _isOnWifi();
+      if (!onWifi) {
+        _safeEmit(const ModelManagerError(
+          'Model download needs Wi-Fi (about 330MB). Connect to Wi-Fi '
+          'and try again.',
+        ));
+        return;
+      }
+    }
+
     // Check free disk space before download
-    await _checkDiskSpace(dir);
+    await _checkDiskSpace(stagingDir);
 
     try {
       final stopwatch = Stopwatch()..start();
@@ -572,8 +318,14 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       );
 
       await _verifyChecksum(modelFile, expectedChecksum);
-      final readyPath = await _prepareModelAt(modelFile, dir);
-      _safeEmit(ModelManagerReady(readyPath, executionMode: 'local'));
+      await _gemmaBackend.installFromFile(modelFile.path);
+      await _cleanupPartialFile(modelFile);
+      const readyLabel =
+          'Installed ${EnvironmentConfig.modelFileName} (flutter_gemma)';
+      _safeEmit(const ModelManagerReady(
+        readyLabel,
+        executionMode: 'local',
+      ));
     } on DioException catch (e) {
       await _cleanupPartialFile(modelFile);
       _safeEmit(ModelManagerError('Download failed: ${e.message}'));
@@ -583,55 +335,22 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
     }
   }
 
-  /// Turn the downloaded artifact into a usable model on disk.
-  ///
-  /// Archive artifacts (`.zip`) are extracted into `{dir}/{modelBundleDirName}`
-  /// (the well-known location the platform handlers load from) and the
-  /// archive itself is removed. Non-archive artifacts are used in place.
-  Future<String> _prepareModelAt(File artifact, Directory dir) async {
-    if (!artifact.path.toLowerCase().endsWith('.zip')) {
-      return artifact.path;
-    }
-    final targetDir = Directory(
-      '${dir.path}/${EnvironmentConfig.modelBundleDirName}',
-    );
-    await _extractArchive(artifact, targetDir);
-    if (await artifact.exists()) {
-      await artifact.delete();
-    }
-    return targetDir.path;
-  }
-
-  Future<void> _extractArchive(File zipFile, Directory targetDir) async {
-    if (targetDir.existsSync()) {
-      await targetDir.delete(recursive: true);
-    }
-    await targetDir.create(recursive: true);
-    final bytes = await zipFile.readAsBytes();
-    final archive = ZipDecoder().decodeBytes(bytes);
-    if (archive.files.isEmpty) {
-      throw Exception('Model archive contains no files.');
-    }
-    // MLC-packaged artifacts wrap the model directory, so entries are named
-    // `{modelBundleDirName}/...`. Strip that prefix — targetDir already IS
-    // the model directory.
-    const prefix = '${EnvironmentConfig.modelBundleDirName}/';
-    for (final entry in archive.files) {
-      final rel = entry.name.startsWith(prefix)
-          ? entry.name.substring(prefix.length)
-          : entry.name;
-      if (rel.isEmpty) continue;
-      final path = p.join(targetDir.path, rel);
-      if (entry.isFile) {
-        final file = File(path);
-        await file.create(recursive: true);
-        final content = entry.readBytes();
-        if (content != null) {
-          await file.writeAsBytes(content);
-        }
-      } else {
-        await Directory(path).create(recursive: true);
-      }
+  /// True when the device currently has unmetered (Wi-Fi/ethernet/VPN)
+  /// connectivity. Connectivity checks that throw (e.g. no platform plugin
+  /// in tests) are treated as Wi-Fi so explicit [requireWifi] callers, not
+  /// plugin availability, decide the policy.
+  Future<bool> _isOnWifi() async {
+    try {
+      final results = await _connectivity.checkConnectivity();
+      return results.contains(ConnectivityResult.wifi) ||
+          results.contains(ConnectivityResult.ethernet) ||
+          results.contains(ConnectivityResult.vpn);
+    } catch (e) {
+      developer.log(
+        'Connectivity check failed (assuming Wi-Fi): $e',
+        name: 'ModelManagerCubit',
+      );
+      return true;
     }
   }
 
@@ -710,11 +429,10 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
     ];
   }
 
-  /// Check if there's enough free disk space for model download + extraction.
+  /// Check if there's enough free disk space for the model download.
   Future<void> _checkDiskSpace(Directory dir) async {
     try {
-      // Use stat to get filesystem info
-      final stat = await dir.stat();
+      // Touch the filesystem; a failure here surfaces early.
       // Note: On iOS/Android, we can't easily get free space via Dart's stat.
       // This is a best-effort check; the actual download will fail if space is low.
       // For production, consider using a platform channel to get accurate free space.
@@ -741,9 +459,9 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
   /// Simulated download used when no signed download URL is configured.
   ///
   /// Animates progress so the UI can be exercised, but MUST NOT emit
-  /// [ModelManagerReady]: no real model artifact is produced, so the native
-  /// MLC engine would still report the model as not installed. Ends in an
-  /// honest error telling the developer how to supply the model instead.
+  /// [ModelManagerReady]: no real model artifact is produced, so flutter_gemma
+  /// would still report the model as not installed. Ends in an honest error
+  /// telling the developer how to supply the model instead.
   Future<void> _simulateDownload(File modelFile) async {
     developer.log(
       'MODEL_DOWNLOAD_URL not set — using simulated progress.',
@@ -755,8 +473,8 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
       _safeEmit(ModelManagerDownloading(
         i / 100.0,
         downloadedBytes: i * 1024 * 1024,
-        totalBytes: 350 * 1024 * 1024,
-        speedBytesPerSec: (350 * 1024 * 1024 / 100.0) / 0.4,
+        totalBytes: 330 * 1024 * 1024,
+        speedBytesPerSec: (330 * 1024 * 1024 / 100.0) / 0.4,
       ));
     }
 
@@ -768,7 +486,7 @@ class ModelManagerCubit extends Cubit<ModelManagerState> {
 
     _safeEmit(const ModelManagerError(
       'No model download URL is configured for this build. '
-      'Bundle the Qwen 3 0.6B model into the app, or launch with '
+      'Host the Qwen 3 0.6B .litertlm file, or launch with '
       '--dart-define=MODEL_DOWNLOAD_URL=... and MODEL_CHECKSUM_SHA256=...',
       canRetry: false,
     ));

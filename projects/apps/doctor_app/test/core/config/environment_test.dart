@@ -26,16 +26,16 @@ void main() {
       expect(EnvironmentConfig.enableNetworkLogging, EnvironmentConfig.isDebug);
     });
 
-    test('model download configuration defaults to hosted Qwen bundle', () {
+    test('model download configuration defaults to hosted Qwen litertlm', () {
       // Xcode runs receive no --dart-define, so baked defaults must be real
-      // (verified HF Hub upload of the true Qwen3 MLC bundle).
+      // (verified litert-community .litertlm download, post-install only).
       expect(EnvironmentConfig.modelDownloadUrl,
-          'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip');
+          'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm');
       expect(EnvironmentConfig.modelChecksumSha256,
-          '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83');
+          '03e7da1eb1108b50dffaa9bb52cc7bcbad2eb0c66ca990267f480c1e545d2856');
       expect(
         EnvironmentConfig.modelFileName,
-        'qwen3-0.6b-Q4_K_M.zip',
+        'Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm',
       );
       expect(
         EnvironmentConfig.modelBundleDirName,
@@ -43,10 +43,10 @@ void main() {
       );
     });
 
-    test('supported model tier list contains the Qwen3 MLC bundle', () {
+    test('supported model tier list contains the Qwen3 litertlm bundle', () {
       expect(
         EnvironmentConfig.supportedModels,
-        contains('Qwen3-0.6B-Q4_K_M-MLC'),
+        contains('Qwen3-0.6B-dynamic-wi4b32-afp32'),
       );
     });
   });

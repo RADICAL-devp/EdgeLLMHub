@@ -74,9 +74,10 @@ class ModelManagerPage extends StatelessWidget {
           const Text('On-device AI model is not installed.'),
           const SizedBox(height: 8),
           const Text(
-             'Download the Qwen 3 0.6B model (~360MB) to enable offline AI '
-            'assistance. The model runs entirely on-device — no PHI leaves '
-            'the device.',
+            'Download the Qwen 3 0.6B model (~330MB) to enable offline AI '
+            'assistance. Download starts only here — never with the app '
+            'download — and needs Wi-Fi. The model runs entirely on-device '
+            '— no PHI leaves the device.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey),
           ),

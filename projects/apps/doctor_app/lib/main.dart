@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -95,6 +97,12 @@ Future<void> setupDependencies() async {
   final getIt = GetIt.instance;
 
   // ── 1. Platform services ──────────────────────────────────────────
+  // flutter_gemma engine registration must happen before any adapter or
+  // ModelManager use. LiteRT-LM (.litertlm) is the only engine we ship;
+  // core registers none by itself.
+  await FlutterGemma.initialize(
+    inferenceEngines: const [LiteRtLmEngine()],
+  );
   final capabilityService = DeviceCapabilityService();
   getIt.registerSingleton<DeviceCapabilityService>(capabilityService);
 

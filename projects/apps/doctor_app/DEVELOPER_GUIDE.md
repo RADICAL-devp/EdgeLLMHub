@@ -47,8 +47,8 @@
 **Key Files:**
 - `llm_port.dart` — Interface for all LLM operations
 - `hybrid_llm_adapter.dart` — 2-tier fallback: Native → Stub
-- `ios_native_llm_adapter.dart` — iOS MethodChannel bridge
-- `smol_llm_adapter.dart` — Android MethodChannel bridge
+- `flutter_gemma_llm_adapter.dart` — cross-platform flutter_gemma adapter
+- `gemma_backend.dart` — injectable seam over flutter_gemma statics
 - `llm_port_factory.dart` — DI factory selecting platform adapter
 - `prompts/clinical_prompts.dart` — Medical prompt templates
 - `native_llm_parsing.dart` — Response parsing utilities

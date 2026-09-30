@@ -1,33 +1,15 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:archive/archive.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:doctor_app/core/config/environment.dart';
+import 'package:doctor_app/core/llm/gemma_backend.dart';
 import 'package:doctor_app/core/services/device_capability_service.dart';
 import 'package:doctor_app/features/note_assist/presentation/cubit/model_manager_cubit.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:mocktail/mocktail.dart';
 
 const _modelFileName = EnvironmentConfig.modelFileName;
-
-/// Builds a real zip archive of the MLC-packaged model directory so the
-/// cubit's extraction path has valid input.
-List<int> _packedModelZip() {
-  final archive = Archive()
-    ..addFile(ArchiveFile(
-      '${EnvironmentConfig.modelBundleDirName}/params.txt',
-      5,
-      utf8.encode('hello'),
-    ))
-    ..addFile(ArchiveFile(
-      '${EnvironmentConfig.modelBundleDirName}/lib/libmodel.so',
-      3,
-      utf8.encode('lib'),
-    ));
-  return ZipEncoder().encodeBytes(archive);
-}
 
 /// Fake downloader that drives progress callbacks and writes bytes to the
 /// destination so checksum verification has real content to read.
@@ -68,51 +50,86 @@ class _FakeDownloader implements ModelDownloader {
 
 class _MockCapabilityService extends Mock implements DeviceCapabilityService {}
 
-/// Cubit whose platform gates are forced so the iOS/Android verification
-/// flows (which are otherwise unreachable on a macOS test host) can be
-/// exercised end-to-end through the mocked MethodChannel.
-class _PlatformForcedCubit extends ModelManagerCubit {
-  _PlatformForcedCubit({
-    required super.capabilityService,
-    this.ios = false,
-    this.android = false,
+class _MockConnectivity extends Mock implements Connectivity {}
+
+/// Fake gemma backend: install state + verification result are scripted,
+/// installed file bytes are captured for assertions.
+class _FakeGemmaBackend implements GemmaBackend {
+  _FakeGemmaBackend({
+    this.installed = false,
+    this.verifyText = 'Hello, patient.',
+    this.verifyError,
+    this.installError,
   });
 
-  final bool ios;
-  final bool android;
+  bool installed;
+  String verifyText;
+  Object? verifyError;
+  Object? installError;
+
+  List<int>? installedFileContent;
+  String? installedFilePath;
+  int installCalls = 0;
 
   @override
-  bool get isIosPlatform => ios;
+  Future<void> initialize() async {}
 
   @override
-  bool get isAndroidPlatform => android;
+  Future<bool> isModelInstalled(String fileName) async => installed;
 
-  /// Shorten the real (45s) verification timeout so timeout-path tests
-  /// fail fast instead of sleeping 45 seconds.
+  @override
+  Future<void> installFromNetwork(
+    String url, {
+    required void Function(int progressPercent) onProgress,
+  }) async {
+    throw UnimplementedError('cubit uses Dio + installFromFile');
+  }
+
+  @override
+  Future<void> installFromFile(String path) async {
+    installCalls++;
+    if (installError != null) throw installError!;
+    installedFilePath = path;
+    installedFileContent = await File(path).readAsBytes();
+    installed = true;
+  }
+
+  @override
+  Future<GemmaGeneration> generate({
+    String? systemInstruction,
+    required String prompt,
+    int? maxOutputTokens,
+    bool enableThinking = false,
+    void Function(String thinkingChunk)? onThinking,
+  }) async {
+    if (verifyError != null) throw verifyError!;
+    return GemmaGeneration(text: verifyText);
+  }
+
+  @override
+  Stream<String> generateStream({
+    String? systemInstruction,
+    required String prompt,
+    int? maxOutputTokens,
+    bool enableThinking = false,
+    void Function(String thinkingChunk)? onThinking,
+  }) async* {}
+
+  @override
+  Future<void> close() async {}
+}
+
+/// Cubit with shortened verification timeout so timeout-path tests fail
+/// fast instead of sleeping 45 seconds.
+class _TestCubit extends ModelManagerCubit {
+  _TestCubit({
+    required super.capabilityService,
+    super.gemmaBackend,
+  });
+
   @override
   Duration get verificationTimeout => const Duration(milliseconds: 500);
 }
-
-const _llmChannel = MethodChannel('com.example.clinical/llm');
-
-void _mockChannel(Future<Object?> Function(MethodCall) handler) {
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(_llmChannel, handler);
-  addTearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(_llmChannel, null);
-  });
-}
-
-Map<String, Object?> _readyModelInfo() => {
-      'installed': true,
-      'ready': true,
-      'checksumSha256': 'abc123',
-      'path': '/models/smol',
-      // Without a modelVersion the cubit assumes an upgrade is needed and
-      // routes into downloadModel() instead of reporting ready.
-      'modelVersion': EnvironmentConfig.bundledModelVersion.version,
-    };
 
 /// Capability service answering like a physical, local-LLM-capable device.
 DeviceCapabilityService _localCapability() {
@@ -122,6 +139,13 @@ DeviceCapabilityService _localCapability() {
   when(() => cap.getRecommendedExecutionMode())
       .thenAnswer((_) async => ExecutionMode.local);
   return cap;
+}
+
+Connectivity _wifiConnectivity() {
+  final connectivity = _MockConnectivity();
+  when(() => connectivity.checkConnectivity())
+      .thenAnswer((_) async => [ConnectivityResult.wifi]);
+  return connectivity;
 }
 
 /// Downloader that throws a plain (non-Dio) exception.
@@ -162,20 +186,17 @@ void main() {
       await cubit.close();
     });
 
-    test('emits unsupported-platform error on desktop hosts', () async {
-      final cap = _MockCapabilityService();
-      when(() => cap.isSimulator).thenAnswer((_) async => false);
-      when(() => cap.canRunLocalLlm()).thenAnswer((_) async => true);
-      when(() => cap.getRecommendedExecutionMode())
-          .thenAnswer((_) async => ExecutionMode.local);
-      final cubit = ModelManagerCubit(capabilityService: cap);
+    test('reports not-installed on a fresh device', () async {
+      // No platform branches exist anymore — a physical host with no
+      // installed model routes straight to the download UI.
+      final cubit = _TestCubit(
+        capabilityService: _localCapability(),
+        gemmaBackend: _FakeGemmaBackend(installed: false),
+      );
 
-      // Test hosts run on macOS → neither iOS nor Android branch applies.
       await cubit.checkModelExists();
 
-      expect(cubit.state, isA<ModelManagerError>());
-      expect((cubit.state as ModelManagerError).message,
-          contains('Unsupported platform'));
+      expect(cubit.state, isA<ModelManagerInitial>());
       await cubit.close();
     });
 
@@ -186,7 +207,6 @@ void main() {
 
       await cubit.checkModelExists();
 
-      expect(cubit.state, isA<ModelManagerError>());
       expect((cubit.state as ModelManagerError).message,
           contains('Failed to check model'));
       await cubit.close();
@@ -219,15 +239,37 @@ void main() {
     });
   });
 
-  group('ModelManagerCubit.downloadModel (real path)', () {
-    test('streams progress then extracts and reaches ready without checksum',
-        () async {
-      final zip = _packedModelZip();
+  group('ModelManagerCubit.downloadModel (Wi-Fi gate)', () {
+    test('blocks mobile-only connections with a Wi-Fi error', () async {
       final dir = await Directory.systemTemp.createTemp('model-test');
-      final downloader = _FakeDownloader(bytes: zip.length, content: zip);
+      final connectivity = _MockConnectivity();
+      when(() => connectivity.checkConnectivity())
+          .thenAnswer((_) async => [ConnectivityResult.mobile]);
       final cubit = ModelManagerCubit(
         capabilityService: capabilityService,
-        downloader: downloader,
+        connectivity: connectivity,
+      );
+
+      await cubit.downloadModel(
+        downloadUrl: 'https://example.com/model.litertlm',
+        downloadDirectory: dir,
+      );
+
+      expect((cubit.state as ModelManagerError).message, contains('Wi-Fi'));
+      await cubit.close();
+    });
+  });
+
+  group('ModelManagerCubit.downloadModel (real path)', () {
+    test('streams progress then installs and reaches ready', () async {
+      final content = List<int>.generate(2048, (i) => i % 251);
+      final dir = await Directory.systemTemp.createTemp('model-test');
+      final backend = _FakeGemmaBackend();
+      final cubit = ModelManagerCubit(
+        capabilityService: capabilityService,
+        downloader: _FakeDownloader(bytes: content.length, content: content),
+        gemmaBackend: backend,
+        connectivity: _wifiConnectivity(),
       );
       final progressStates = <ModelManagerDownloading>[];
       cubit.stream.listen((state) {
@@ -235,8 +277,9 @@ void main() {
       });
 
       await cubit.downloadModel(
-        downloadUrl: 'https://example.com/model.zip',
-        checksumSha256: '',
+        downloadUrl: 'https://example.com/model.litertlm',
+        checksumSha256: sha256.convert(content).toString(),
+        requireWifi: false,
         downloadDirectory: dir,
       );
       await Future<void>.delayed(Duration.zero);
@@ -244,42 +287,38 @@ void main() {
       expect(cubit.state, isA<ModelManagerReady>());
       expect(progressStates, isNotEmpty);
       expect(progressStates.any((s) => s.progress == 1.0), isTrue);
-      expect(progressStates.last.speedBytesPerSec, greaterThan(0));
+      expect(progressStates.last.downloadedBytes, content.length);
+      expect(backend.installCalls, 1);
+      expect(backend.installedFileContent, content);
       expect(File('${dir.path}/$_modelFileName').existsSync(), isFalse,
-          reason: 'the downloaded archive must be removed after extraction');
-      expect(
-        File('${dir.path}/${EnvironmentConfig.modelBundleDirName}/params.txt')
-            .readAsStringSync(),
-        'hello',
-      );
-      expect(
-        File('${dir.path}/${EnvironmentConfig.modelBundleDirName}/lib/libmodel.so')
-            .existsSync(),
-        isTrue,
-      );
+          reason: 'the staged download must be removed after install');
       final ready = cubit.state as ModelManagerReady;
-      expect(ready.modelPath, contains(EnvironmentConfig.modelBundleDirName));
+      expect(ready.modelPath, contains('flutter_gemma'));
       await cubit.close();
     });
 
     test('verifies checksum and reports ready on match', () async {
-      final zip = _packedModelZip();
+      final content = List<int>.generate(512, (i) => i % 251);
       final dir = await Directory.systemTemp.createTemp('model-test');
+      final backend = _FakeGemmaBackend();
       final cubit = ModelManagerCubit(
         capabilityService: capabilityService,
-        downloader: _FakeDownloader(bytes: zip.length, content: zip),
+        downloader: _FakeDownloader(bytes: content.length, content: content),
+        gemmaBackend: backend,
+        connectivity: _wifiConnectivity(),
       );
 
       await cubit.downloadModel(
-        downloadUrl: 'https://example.com/model.zip',
-        checksumSha256: sha256.convert(zip).toString(),
+        downloadUrl: 'https://example.com/model.litertlm',
+        checksumSha256: sha256.convert(content).toString(),
+        requireWifi: false,
         downloadDirectory: dir,
       );
 
       final state = cubit.state;
       expect(state, isA<ModelManagerReady>());
       expect((state as ModelManagerReady).modelPath,
-          contains(EnvironmentConfig.modelBundleDirName));
+          contains('flutter_gemma'));
       await cubit.close();
     });
 
@@ -287,14 +326,18 @@ void main() {
         () async {
       final dir = await Directory.systemTemp.createTemp('model-test');
       final file = File('${dir.path}/$_modelFileName');
+      final backend = _FakeGemmaBackend();
       final cubit = ModelManagerCubit(
         capabilityService: capabilityService,
         downloader: _FakeDownloader(bytes: 4096),
+        gemmaBackend: backend,
+        connectivity: _wifiConnectivity(),
       );
 
       await cubit.downloadModel(
-        downloadUrl: 'https://example.com/model.zip',
+        downloadUrl: 'https://example.com/model.litertlm',
         checksumSha256: '0' * 64,
+        requireWifi: false,
         downloadDirectory: dir,
       );
 
@@ -303,18 +346,26 @@ void main() {
       expect((state as ModelManagerError).message, contains('Checksum mismatch'));
       expect(file.existsSync(), isFalse,
           reason: 'corrupt download must be deleted');
+      expect(backend.installCalls, 0);
       await cubit.close();
     });
 
-    test('emits error when the downloaded archive is corrupt', () async {
+    test('emits error when the install step fails', () async {
+      final content = List<int>.generate(512, (i) => i % 251);
       final dir = await Directory.systemTemp.createTemp('model-test');
+      final backend =
+          _FakeGemmaBackend(installError: Exception('store full'));
       final cubit = ModelManagerCubit(
         capabilityService: capabilityService,
-        downloader: _FakeDownloader(bytes: 4096),
+        downloader: _FakeDownloader(bytes: content.length, content: content),
+        gemmaBackend: backend,
+        connectivity: _wifiConnectivity(),
       );
 
       await cubit.downloadModel(
-        downloadUrl: 'https://example.com/model.zip',
+        downloadUrl: 'https://example.com/model.litertlm',
+        checksumSha256: sha256.convert(content).toString(),
+        requireWifi: false,
         downloadDirectory: dir,
       );
 
@@ -331,10 +382,13 @@ void main() {
       final cubit = ModelManagerCubit(
         capabilityService: capabilityService,
         downloader: _FakeDownloader(failWith: 'connection reset'),
+        gemmaBackend: _FakeGemmaBackend(),
+        connectivity: _wifiConnectivity(),
       );
 
       await cubit.downloadModel(
-        downloadUrl: 'https://example.com/model.bin',
+        downloadUrl: 'https://example.com/model.litertlm',
+        requireWifi: false,
         downloadDirectory: dir,
       );
 
@@ -354,10 +408,13 @@ void main() {
       final cubit = ModelManagerCubit(
         capabilityService: capabilityService,
         downloader: _FailingDownloader(),
+        gemmaBackend: _FakeGemmaBackend(),
+        connectivity: _wifiConnectivity(),
       );
 
       await cubit.downloadModel(
         downloadUrl: 'https://example.com/model.bin',
+        requireWifi: false,
         downloadDirectory: dir,
       );
 
@@ -370,54 +427,27 @@ void main() {
     });
   });
 
-  group('ModelManagerCubit.checkModelExists (iOS flow)', () {
-    test('verifies, warms up, runs sample inference, and reports ready',
-        () async {
-      _mockChannel((call) async {
-        switch (call.method) {
-          case 'getModelInfo':
-            return _readyModelInfo();
-          case 'initialize':
-            return null;
-          case 'warmUp':
-            return 'ok';
-          case 'generate':
-            return 'Hello, patient.';
-        }
-        return null;
-      });
-      final cubit = _PlatformForcedCubit(
+  group('ModelManagerCubit.checkModelExists (flutter_gemma flow)', () {
+    test('verifies sample inference and reports ready', () async {
+      final cubit = _TestCubit(
         capabilityService: _localCapability(),
-        ios: true,
+        gemmaBackend: _FakeGemmaBackend(installed: true),
       );
 
       await cubit.checkModelExists();
 
       expect(cubit.state, isA<ModelManagerReady>());
       expect((cubit.state as ModelManagerReady).executionMode, 'local');
-      expect((cubit.state as ModelManagerReady).modelInfo, _readyModelInfo());
+      expect((cubit.state as ModelManagerReady).modelPath,
+          contains('flutter_gemma'));
       await cubit.close();
     });
 
-    test('emits error when model info is missing', () async {
-      _mockChannel((call) async => null);
-      final cubit = _PlatformForcedCubit(
+    test('routes to the download UI when the model is not installed',
+        () async {
+      final cubit = _TestCubit(
         capabilityService: _localCapability(),
-        ios: true,
-      );
-
-      await cubit.checkModelExists();
-
-      expect((cubit.state as ModelManagerError).message,
-          contains('did not return model info'));
-      await cubit.close();
-    });
-
-    test('routes to the download UI when the model is not bundled', () async {
-      _mockChannel((call) async => {'installed': false});
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        ios: true,
+        gemmaBackend: _FakeGemmaBackend(installed: false),
       );
 
       await cubit.checkModelExists();
@@ -426,34 +456,11 @@ void main() {
       await cubit.close();
     });
 
-    test('emits error when engine initialization fails', () async {
-      _mockChannel((call) async {
-        if (call.method == 'getModelInfo') {
-          return {'installed': true, 'ready': false};
-        }
-        throw PlatformException(code: 'init', message: 'metal unavailable');
-      });
-      final cubit = _PlatformForcedCubit(
+    test('reports corruption when verification produces no output',
+        () async {
+      final cubit = _TestCubit(
         capabilityService: _localCapability(),
-        ios: true,
-      );
-
-      await cubit.checkModelExists();
-
-      expect((cubit.state as ModelManagerError).message,
-          contains('Failed to initialize'));
-      await cubit.close();
-    });
-
-    test('reports corruption when verification produces no output', () async {
-      _mockChannel((call) async {
-        if (call.method == 'getModelInfo') return _readyModelInfo();
-        if (call.method == 'generate') return '';
-        return null;
-      });
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        ios: true,
+        gemmaBackend: _FakeGemmaBackend(installed: true, verifyText: ''),
       );
 
       await cubit.checkModelExists();
@@ -463,51 +470,27 @@ void main() {
       await cubit.close();
     });
 
-    test('emits not-registered error on MissingPluginException', () async {
-      _mockChannel((call) async {
-        throw MissingPluginException('no handler');
-      });
-      final cubit = _PlatformForcedCubit(
+    test('emits error when verification throws', () async {
+      final cubit = _TestCubit(
         capabilityService: _localCapability(),
-        ios: true,
+        gemmaBackend: _FakeGemmaBackend(
+          installed: true,
+          verifyError: Exception('engine gone'),
+        ),
       );
 
       await cubit.checkModelExists();
 
       expect((cubit.state as ModelManagerError).message,
-          contains('not registered'));
-      await cubit.close();
-    });
-
-    test('emits platform error from the channel', () async {
-      _mockChannel((call) async {
-        if (call.method == 'getModelInfo') return _readyModelInfo();
-        throw PlatformException(code: 'gen', message: 'gpu oom');
-      });
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        ios: true,
-      );
-
-      await cubit.checkModelExists();
-
-      expect((cubit.state as ModelManagerError).message,
-          contains('gpu oom'));
+          contains('Failed to verify flutter_gemma'));
       await cubit.close();
     });
 
     test('emits timeout error when verification is too slow', () async {
-      _mockChannel((call) async {
-        if (call.method == 'getModelInfo') return _readyModelInfo();
-        if (call.method == 'generate') {
-          await Future<void>.delayed(const Duration(seconds: 3));
-          return 'late';
-        }
-        return null;
-      });
-      final cubit = _PlatformForcedCubit(
+      final backend = _FakeGemmaBackend(installed: true);
+      final cubit = _TestCubit(
         capabilityService: _localCapability(),
-        ios: true,
+        gemmaBackend: _SlowGemmaBackend(backend),
       );
 
       await cubit.checkModelExists();
@@ -516,115 +499,59 @@ void main() {
           contains('timed out'));
       await cubit.close();
     });
-
-    test('emits generic error for malformed channel payloads', () async {
-      _mockChannel((call) async {
-        return {'installed': true, 'ready': true, 'checksumSha256': 123};
-      });
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        ios: true,
-      );
-
-      await cubit.checkModelExists();
-
-      expect((cubit.state as ModelManagerError).message,
-          contains('Failed to verify MLC LLM'));
-      await cubit.close();
-    });
   });
+}
 
-  group('ModelManagerCubit.checkModelExists (Android flow)', () {
-    test('verifies and reports ready on a physical device', () async {
-      _mockChannel((call) async {
-        switch (call.method) {
-          case 'getModelInfo':
-            return _readyModelInfo();
-          case 'initialize':
-            return null;
-          case 'warmUp':
-            return 'ok';
-          case 'generate':
-            return 'Hello, patient.';
-        }
-        return null;
-      });
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        android: true,
-      );
+/// Backend wrapper that delays verification past the cubit's short test
+/// timeout.
+class _SlowGemmaBackend implements GemmaBackend {
+  _SlowGemmaBackend(this._inner);
 
-      await cubit.checkModelExists();
+  final _FakeGemmaBackend _inner;
 
-      expect(cubit.state, isA<ModelManagerReady>());
-      expect((cubit.state as ModelManagerReady).modelPath,
-          contains('MLC Android'));
-      await cubit.close();
-    });
+  @override
+  Future<void> initialize() => _inner.initialize();
 
-    test('routes to the download UI when the model is not in assets',
-        () async {
-      _mockChannel((call) async => {'installed': false});
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        android: true,
-      );
+  @override
+  Future<bool> isModelInstalled(String fileName) =>
+      _inner.isModelInstalled(fileName);
 
-      await cubit.checkModelExists();
+  @override
+  Future<void> installFromNetwork(
+    String url, {
+    required void Function(int progressPercent) onProgress,
+  }) =>
+      _inner.installFromNetwork(url, onProgress: onProgress);
 
-      expect(cubit.state, isA<ModelManagerInitial>());
-      await cubit.close();
-    });
+  @override
+  Future<void> installFromFile(String path) => _inner.installFromFile(path);
 
-    test('emits error when Android engine initialization fails', () async {
-      _mockChannel((call) async {
-        if (call.method == 'getModelInfo') {
-          return {'installed': true, 'ready': false};
-        }
-        throw PlatformException(code: 'init', message: 'vulkan missing');
-      });
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        android: true,
-      );
+  @override
+  Future<GemmaGeneration> generate({
+    String? systemInstruction,
+    required String prompt,
+    int? maxOutputTokens,
+    bool enableThinking = false,
+    void Function(String thinkingChunk)? onThinking,
+  }) async {
+    await Future<void>.delayed(const Duration(seconds: 3));
+    return _inner.generate(
+      systemInstruction: systemInstruction,
+      prompt: prompt,
+      maxOutputTokens: maxOutputTokens,
+    );
+  }
 
-      await cubit.checkModelExists();
+  @override
+  Stream<String> generateStream({
+    String? systemInstruction,
+    required String prompt,
+    int? maxOutputTokens,
+    bool enableThinking = false,
+    void Function(String thinkingChunk)? onThinking,
+  }) =>
+      _inner.generateStream(prompt: prompt);
 
-      expect((cubit.state as ModelManagerError).message,
-          contains('Failed to initialize'));
-      await cubit.close();
-    });
-
-    test('emits not-registered error on Android', () async {
-      _mockChannel((call) async {
-        throw MissingPluginException('no handler');
-      });
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        android: true,
-      );
-
-      await cubit.checkModelExists();
-
-      expect((cubit.state as ModelManagerError).message,
-          contains('not registered'));
-      await cubit.close();
-    });
-
-    test('emits generic error for malformed Android payloads', () async {
-      _mockChannel((call) async {
-        return {'installed': true, 'ready': true, 'checksumSha256': 123};
-      });
-      final cubit = _PlatformForcedCubit(
-        capabilityService: _localCapability(),
-        android: true,
-      );
-
-      await cubit.checkModelExists();
-
-      expect((cubit.state as ModelManagerError).message,
-          contains('Failed to verify MLC Android'));
-      await cubit.close();
-    });
-  });
+  @override
+  Future<void> close() => _inner.close();
 }

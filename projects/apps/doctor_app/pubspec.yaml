@@ -42,6 +42,8 @@ dependencies:
     sdk: flutter
   share_plus: ^13.3.0
   flutter_secure_storage: ^11.0.0
+  flutter_gemma: ^1.11.3
+  flutter_gemma_litertlm: ^1.8.5
 
 dev_dependencies:
   flutter_test:

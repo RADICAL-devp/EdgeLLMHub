@@ -11,6 +11,13 @@ class Debouncer {
     _timer = Timer(delay, action);
   }
 
+  /// Run [action] immediately, dropping any pending debounced call.
+  /// Used to flush the latest value when a stream ends.
+  void flush(void Function() action) {
+    _timer?.cancel();
+    action();
+  }
+
   void dispose() {
     _timer?.cancel();
   }

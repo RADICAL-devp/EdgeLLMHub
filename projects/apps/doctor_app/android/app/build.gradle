@@ -24,10 +24,20 @@ android {
         applicationId = "com.omoyari.greentech.doctor_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // flutter_gemma litertlm (libLiteRtLm.so) requires API 30+ Bionic
+        // syscalls — below 30 the engine can't load and inference falls back
+        // to the labeled stub tier. Revert to flutter.minSdkVersion only if
+        // pre-Android-11 devices must install the app (LLM becomes stub-only).
+        minSdk = 30
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // flutter_gemma litertlm ships arm64-v8a only; without this filter
+        // the Play Store offers broken native libs to x86/armeabi devices.
+        ndk {
+            abiFilters "arm64-v8a"
+        }
     }
 
     buildTypes {
@@ -44,6 +54,8 @@ flutter {
 }
 
 dependencies {
-    // MLC LLM Android runtime for on-device inference
-    implementation("org.mlc:llm-android:0.20.0")
+    // DORMANT (flutter_gemma migration): MLC LLM Android runtime is no longer
+    // the inference engine. Kept as a comment for rollback; flutter_gemma
+    // ships its own native runtime via pub. Re-enable only with MLCLLMHandler.
+    // implementation("org.mlc:llm-android:0.20.0")
 }

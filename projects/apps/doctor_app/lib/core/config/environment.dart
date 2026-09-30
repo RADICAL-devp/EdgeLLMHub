@@ -115,61 +115,66 @@ class EnvironmentConfig {
 
   /// Current model version embedded in the app bundle.
   static ModelVersion get bundledModelVersion => ModelVersion(
-        version: '1.2.0',
+        version: '2.0.0',
         minimumCompatibleVersion: '1.0.0',
-        releaseDate: DateTime.utc(2026, 9, 8),
-        changelog: 'Qwen 3 0.6B medical LLM with specialty prompts, download UI, and clinical validation',
+        releaseDate: DateTime.utc(2026, 9, 30),
+        changelog: 'Qwen 3 0.6B via flutter_gemma litertlm with Wi-Fi-gated download UI and clinical validation',
       );
 
   /// Supported model tiers for on-device inference.
   static const List<String> supportedModels = [
-    'Qwen3-0.6B-Q4_K_M-MLC',
+    'Qwen3-0.6B-dynamic-wi4b32-afp32',
   ];
 
-  /// URL the Qwen 3 0.6B model archive is downloaded from.
+  /// URL the Qwen 3 0.6B model file is downloaded from.
   ///
   /// Override via `--dart-define=MODEL_DOWNLOAD_URL=...`.
-  /// Baked default is the public HuggingFace Hub upload of the verified
-  /// Qwen3-0.6B-q4f16_1 bundle (283M zip); Xcode runs don't receive
-  /// `--dart-define`, so the default must be real (no simulation on device).
+  /// Baked default is the public litert-community `.litertlm` build
+  /// (329M); Xcode runs don't receive `--dart-define`, so the default
+  /// must be real (no simulation on device). Post-install only — the
+  /// model is never bundled with the store download.
   static String get modelDownloadUrl {
     const explicit = String.fromEnvironment('MODEL_DOWNLOAD_URL');
     if (explicit.isNotEmpty) return explicit;
 
     return switch (environment) {
       AppEnvironment.dev =>
-        'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip',
+        'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm',
       AppEnvironment.staging =>
-        'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip',
+        'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm',
       AppEnvironment.prod =>
-        'https://huggingface.co/Devanshparashar02/doctorapp-qwen3-0.6b-mlc/resolve/main/qwen3-0.6b-Q4_K_M.zip',
+        'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm',
     };
   }
 
-  /// Expected SHA-256 of the Qwen 3 0.6B model archive (hex), used to verify downloads.
+  /// Expected SHA-256 of the Qwen 3 0.6B model file (hex), used to verify downloads.
   ///
   /// Override via `--dart-define=MODEL_CHECKSUM_SHA256=...`.
-  /// Baked default matches the hosted zip above (verified byte-identical).
+  /// Baked default matches the hosted `.litertlm` above (verified byte-identical).
   static String get modelChecksumSha256 {
     const explicit = String.fromEnvironment('MODEL_CHECKSUM_SHA256');
     if (explicit.isNotEmpty) return explicit;
 
     return switch (environment) {
       AppEnvironment.dev =>
-        '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83',
+        '03e7da1eb1108b50dffaa9bb52cc7bcbad2eb0c66ca990267f480c1e545d2856',
       AppEnvironment.staging =>
-        '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83',
+        '03e7da1eb1108b50dffaa9bb52cc7bcbad2eb0c66ca990267f480c1e545d2856',
       AppEnvironment.prod =>
-        '447145d7dbb9ee2fc9047e3cfa64ef4a324397e8208580c7348e5c4002ed8c83',
+        '03e7da1eb1108b50dffaa9bb52cc7bcbad2eb0c66ca990267f480c1e545d2856',
     };
   }
 
   /// File name of the Qwen 3 0.6B on-device model artifact.
-  static const String modelFileName = 'qwen3-0.6b-Q4_K_M.zip';
+  static const String modelFileName =
+      'Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm';
 
-  /// Directory name the downloaded Qwen 3 model archive is extracted into.
+  /// Legacy MLC bundle directory name. Unused by the flutter_gemma flow
+  /// (single `.litertlm` file, no extraction); kept so older call sites
+  /// referencing it keep compiling during the migration.
   static const String modelBundleDirName = 'Qwen3-0.6B-Q4_K_M-MLC';
 
-  /// Minimum free disk space required for model download + extraction (bytes).
-  static const int minFreeDiskSpaceBytes = 500 * 1024 * 1024; // 500 MB (was 2GB for SmolLM)
+  /// Minimum free disk space required for the model download (bytes).
+  /// 329M file + headroom for the temp copy during SHA verification.
+  static const int minFreeDiskSpaceBytes = 800 * 1024 * 1024;
 }
