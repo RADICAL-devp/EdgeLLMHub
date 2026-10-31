@@ -6,6 +6,7 @@ import 'package:doctor_app/core/data/note_repository.dart';
 import 'package:doctor_app/core/exceptions/app_exceptions.dart';
 import 'package:doctor_app/core/models/clinical_note.dart';
 import 'package:drift/native.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_models/shared_models.dart';
 
@@ -69,6 +70,14 @@ void main() {
         keyAlias: 'test_phi_key',
       );
       expect(await anotherService.decryptString(cipher), 'sensitive note');
+      expect(
+        storage.lastReadAppleOptions?.accessibility,
+        KeychainAccessibility.first_unlock_this_device,
+      );
+      expect(
+        storage.lastWriteAppleOptions?.accessibility,
+        KeychainAccessibility.first_unlock_this_device,
+      );
     });
 
     test('detects tampered ciphertext', () async {

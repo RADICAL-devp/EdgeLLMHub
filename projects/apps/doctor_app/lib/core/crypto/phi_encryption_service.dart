@@ -18,6 +18,14 @@ class PhiEncryptionService {
   final String _keyAlias;
   Future<encrypt.Key>? _keyFuture;
 
+  // The same options must be used for every Keychain operation. In
+  // particular, a first-unlock item must not be queried later as an
+  // unlocked-only item, otherwise iOS can report it as missing and a new key
+  // would make the existing encrypted notes unreadable.
+  static const IOSOptions _iosKeyOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+  );
+
   /// Get or create the encryption key.
   Future<encrypt.Key> _getOrCreateKey() async {
     // A note save encrypts several fields and two editors can briefly overlap
@@ -35,7 +43,10 @@ class PhiEncryptionService {
   }
 
   Future<encrypt.Key> _loadOrCreateKey() async {
-    String? keyBase64 = await _secureStorage.read(key: _keyAlias);
+    String? keyBase64 = await _secureStorage.read(
+      key: _keyAlias,
+      iOptions: _iosKeyOptions,
+    );
     if (keyBase64 != null) {
       return encrypt.Key.fromBase64(keyBase64);
     }
@@ -46,9 +57,7 @@ class PhiEncryptionService {
       key: _keyAlias,
       value: key.base64,
       aOptions: const AndroidOptions(),
-      iOptions: const IOSOptions(
-        accessibility: KeychainAccessibility.first_unlock_this_device,
-      ),
+      iOptions: _iosKeyOptions,
     );
     return key;
   }
