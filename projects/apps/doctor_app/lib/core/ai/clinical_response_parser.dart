@@ -66,13 +66,22 @@ class ClinicalResponseParser {
             (text.startsWith('“') && text.endsWith('”')))) {
       text = text.substring(1, text.length - 1).trim();
     }
-    if (text.isEmpty) {
+    if (text.isEmpty || _isCleanupPlaceholder(text)) {
       throw const LlmParseException(
-        'The model returned an empty transcript. The original text was kept.',
+        'The model did not return a cleaned transcript. The original text was '
+        'kept.',
       );
     }
     return text;
   }
+
+  /// A language model can answer a cleanup request with a JSON-style null or
+  /// a refusal placeholder. These are never valid replacements for PHI text.
+  static bool _isCleanupPlaceholder(String text) => RegExp(
+    r'^\s*(?:null|none(?:\s+of\s+(?:the\s+)?above)?|n/?a|not applicable|'
+    r'no transcript(?:\s+available)?)\s*[.!…]*\s*$',
+    caseSensitive: false,
+  ).hasMatch(text);
 
   static String _stripFences(String text) {
     return text

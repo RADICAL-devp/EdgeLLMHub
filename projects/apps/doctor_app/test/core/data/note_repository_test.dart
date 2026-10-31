@@ -87,6 +87,19 @@ void main() {
       expect(await encryption.encryptString(''), '');
       expect(await encryption.decryptString(''), '');
     });
+
+    test('uses one key for concurrent first encryptions', () async {
+      final ciphertexts = await Future.wait(
+        List.generate(12, (index) => encryption.encryptString('note $index')),
+      );
+
+      final plaintexts = await Future.wait(
+        ciphertexts.map(encryption.decryptString),
+      );
+
+      expect(plaintexts, List.generate(12, (index) => 'note $index'));
+      expect(storage.values, contains('test_phi_key'));
+    });
   });
 
   group('NoteRepository', () {

@@ -16,9 +16,25 @@ class PhiEncryptionService {
 
   final FlutterSecureStorage _secureStorage;
   final String _keyAlias;
+  Future<encrypt.Key>? _keyFuture;
 
   /// Get or create the encryption key.
   Future<encrypt.Key> _getOrCreateKey() async {
+    // A note save encrypts several fields and two editors can briefly overlap
+    // during route changes. Keychain reads and writes are asynchronous, so
+    // without this single-flight guard concurrent first writes could generate
+    // different keys. That would leave ciphertext which the final stored key
+    // cannot decrypt.
+    final pending = _keyFuture ??= _loadOrCreateKey();
+    try {
+      return await pending;
+    } catch (_) {
+      if (identical(_keyFuture, pending)) _keyFuture = null;
+      rethrow;
+    }
+  }
+
+  Future<encrypt.Key> _loadOrCreateKey() async {
     String? keyBase64 = await _secureStorage.read(key: _keyAlias);
     if (keyBase64 != null) {
       return encrypt.Key.fromBase64(keyBase64);

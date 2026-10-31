@@ -129,5 +129,14 @@ Please review.
         throwsA(isA<LlmParseException>()),
       );
     });
+
+    test('rejects null-like cleanup placeholders', () {
+      for (final response in ['null', 'None of the above', 'N/A']) {
+        expect(
+          () => parser.parseCleanedTranscript(response),
+          throwsA(isA<LlmParseException>()),
+        );
+      }
+    });
   });
 }
