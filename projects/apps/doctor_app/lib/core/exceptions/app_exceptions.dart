@@ -1,13 +1,9 @@
-/// Unified exception hierarchy for the Doctor App.
+/// Unified exception hierarchy for the app.
 ///
-/// All domain-specific exceptions extend [AppException] so callers can
-/// catch broadly (AppException) or narrowly (LlmException, etc.).
-///
-/// This is the SINGLE SOURCE OF TRUTH for exception types — no other
-/// file should define competing exception classes.
+/// All domain-specific exceptions extend [AppException]. No other file should
+/// define competing exception classes.
 library;
 
-/// Base exception for all app-level errors.
 class AppException implements Exception {
   final String message;
   final Object? cause;
@@ -19,63 +15,49 @@ class AppException implements Exception {
 }
 
 // ---------------------------------------------------------------------------
-// LLM Exceptions
+// Model / inference exceptions
 // ---------------------------------------------------------------------------
 
-/// Thrown when LLM inference fails (on-device or cloud).
+/// Base type for on-device AI failures.
 class LlmException extends AppException {
-  final LlmProvider? provider;
-
-  const LlmException(
-    super.message, {
-    super.cause,
-    this.provider,
-  });
+  const LlmException(super.message, {super.cause});
 }
 
-/// Thrown when LLM model initialization or loading fails.
+/// The model could not be loaded or initialized.
 class LlmInitializationException extends LlmException {
-  const LlmInitializationException(
-    super.message, {
-    super.cause,
-    super.provider,
-  });
+  const LlmInitializationException(super.message, {super.cause});
 }
 
-/// Thrown when LLM inference produces an unparseable or invalid response.
+/// The model returned text that could not be parsed into a note.
 class LlmParseException extends LlmException {
-  const LlmParseException(
-    super.message, {
-    super.cause,
-    super.provider,
-  });
+  const LlmParseException(super.message, {super.cause});
 }
 
-/// The LLM provider that generated an error.
-enum LlmProvider {
-  /// On-device MLC LLM (iOS)
-  mlc,
+/// No model is installed/active yet.
+class ModelNotReadyException extends LlmException {
+  const ModelNotReadyException([
+    super.message = 'The on-device AI model is not installed yet.',
+  ]);
+}
 
-  /// On-device Google AI Edge / flutter_gemma (Android)
-  gemma,
+/// A model download or install failed.
+class ModelInstallException extends AppException {
+  const ModelInstallException(super.message, {super.cause});
+}
 
-  /// Cloud backend (Dart Frog + Ollama)
-  cloud,
-
-  /// Offline stub
-  stub,
+/// The user cancelled a model download.
+class DownloadCancelledException extends AppException {
+  const DownloadCancelledException([
+    super.message = 'Model download cancelled.',
+  ]);
 }
 
 // ---------------------------------------------------------------------------
-// Network Exceptions
+// Network exceptions (only used by the parked Agora integration)
 // ---------------------------------------------------------------------------
 
-/// Thrown on HTTP/network failures.
 class NetworkException extends AppException {
-  /// HTTP status code, if available.
   final int? statusCode;
-
-  /// Whether this failure is transient and may succeed on retry.
   final bool isTransient;
 
   const NetworkException(
@@ -86,93 +68,77 @@ class NetworkException extends AppException {
   });
 }
 
-/// Thrown when the circuit breaker is open and calls are being rejected.
-class CircuitBreakerOpenException extends NetworkException {
-  const CircuitBreakerOpenException({
-    super.cause,
-  }) : super(
-          'Circuit breaker is open — too many consecutive failures',
-          isTransient: true,
-        );
-}
-
 // ---------------------------------------------------------------------------
-// Speech Exceptions
+// Speech / transcription exceptions
 // ---------------------------------------------------------------------------
 
-/// Thrown when speech-to-text fails or is unavailable.
 class SpeechException extends AppException {
   const SpeechException(super.message, {super.cause});
 }
 
-/// Thrown when STT is not available on the current device/simulator.
 class SpeechUnavailableException extends SpeechException {
-  const SpeechUnavailableException({
-    String message =
+  const SpeechUnavailableException([
+    super.message =
         'Speech recognition is not available on this device or simulator.',
-    super.cause,
-  }) : super(message);
+  ]);
+}
+
+class TranscriptionException extends SpeechException {
+  const TranscriptionException(super.message, {super.cause});
+}
+
+class NoSpeechDetectedException extends TranscriptionException {
+  const NoSpeechDetectedException([
+    super.message = 'No speech was detected in the recording.',
+  ]);
+}
+
+class MicrophonePermissionException extends SpeechException {
+  const MicrophonePermissionException([
+    super.message =
+        'Microphone access is required to record a consultation. Enable it in '
+        'the system settings and try again.',
+  ]);
 }
 
 // ---------------------------------------------------------------------------
-// Database Exceptions
+// Storage exceptions
 // ---------------------------------------------------------------------------
 
-/// Thrown on database read/write failures.
 class DatabaseException extends AppException {
   const DatabaseException(super.message, {super.cause});
 }
 
-/// Thrown when a database migration fails.
-class DatabaseMigrationException extends DatabaseException {
-  final int fromVersion;
-  final int toVersion;
-
-  const DatabaseMigrationException({
-    required this.fromVersion,
-    required this.toVersion,
-    super.cause,
-  }) : super('Database migration failed from v$fromVersion to v$toVersion');
+class EncryptionException extends AppException {
+  const EncryptionException(super.message, {super.cause});
 }
 
 // ---------------------------------------------------------------------------
-// Validation Exceptions
+// Validation / platform exceptions
 // ---------------------------------------------------------------------------
 
-/// Thrown when input validation fails (length, charset, prompt injection).
 class ValidationException extends AppException {
-  final ValidationFailureReason reason;
-
-  const ValidationException(
-    super.message, {
-    super.cause,
-    required this.reason,
-  });
+  const ValidationException(super.message, {super.cause});
 }
 
-/// Why validation failed.
-enum ValidationFailureReason {
-  tooLong,
-  invalidCharacters,
-  emptyInput,
-  promptInjection,
-}
-
-// ---------------------------------------------------------------------------
-// Platform Exceptions
-// ---------------------------------------------------------------------------
-
-/// Thrown when the current platform does not support an operation.
 class UnsupportedPlatformException extends AppException {
   const UnsupportedPlatformException(super.message, {super.cause});
 }
 
-// ---------------------------------------------------------------------------
-// Compliance Exceptions
-// ---------------------------------------------------------------------------
+/// The user asked for a Wi-Fi-only download while not on Wi-Fi.
+class WifiRequiredException extends AppException {
+  const WifiRequiredException([
+    super.message =
+        'Model downloads are set to Wi-Fi only. Connect to Wi-Fi or allow '
+        'mobile data for this download.',
+  ]);
+}
 
-/// Thrown when an operation is blocked by compliance policy (e.g., PHI
-/// cannot leave the device without legal sign-off).
-class ComplianceException extends AppException {
-  const ComplianceException(super.message, {super.cause});
+/// There is no network connection for a first-launch model download.
+class NoNetworkException extends AppException {
+  const NoNetworkException([
+    super.message =
+        'An internet connection is required once to download the on-device '
+        'models.',
+  ]);
 }
