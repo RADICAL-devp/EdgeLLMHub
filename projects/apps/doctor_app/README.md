@@ -1,16 +1,30 @@
 # doctor_app
 
-A new Flutter project.
+Private, offline-first Flutter app for on-device clinical documentation.
 
-## Getting Started
+The app captures short clinical encounters, transcribes them with an
+on-device speech model, drafts structured clinical notes with an on-device LLM,
+and stores encrypted notes locally.
 
-This project is a starting point for a Flutter application.
+## What it does
 
-A few resources to get you started if this is your first Flutter project:
+- On-device speech-to-text for English and Hindi.
+- On-device note structuring and optional transcript cleanup.
+- Six structured clinical sections.
+- Draft and finalized notes.
+- Local encrypted storage and search.
+- On-device model management and privacy settings.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## What it intentionally does not do
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- No cloud STT, cloud LLM fallback, or remote backend.
+- No note sync, background queue, or conflict-resolution UI.
+- No vector database, embeddings, or medical knowledge base.
+- No account, authentication, or analytics containing clinical content.
+
+## AI scope
+
+Generated notes are drafts. A qualified clinician must review and correct every
+section. The model can omit, mishear, or invent details.
+
+This app does not make medical-device or regulatory certification claims.

@@ -1,526 +1,63 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_edge_ai/flutter_edge_ai.dart';
+import 'package:flutter_edge_ai_litertlm/flutter_edge_ai_litertlm.dart';
+import 'package:flutter_edge_ai_speech/flutter_edge_ai_speech.dart';
 import 'package:get_it/get_it.dart';
-import 'package:go_router/go_router.dart';
-import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import 'dart:ui';
 
-import 'core/config/environment.dart';
-import 'core/services/speech_service.dart';
-import 'core/services/database_service.dart';
-import 'core/services/sync_queue_service.dart';
-import 'core/services/device_capability_service.dart';
-import 'core/services/speech_service_factory.dart';
-import 'core/llm/llm_port_factory.dart';
-import 'core/llm/hybrid_llm_adapter.dart';
-import 'core/ports/llm_port.dart';
-import 'core/ports/transcript_repository.dart';
-import 'core/ports/transcript_summary_repository.dart';
-import 'core/repositories/drift_transcript_repository.dart';
-import 'core/repositories/drift_summary_repository.dart';
-import 'core/network/retry_interceptor.dart';
-import 'core/network/circuit_breaker.dart';
-import 'core/network/auth_interceptor.dart';
-import 'core/network/certificate_pinner.dart';
-import 'core/auth/auth_token_service.dart';
-import 'core/auth/token_storage.dart';
-import 'core/validation/input_validator.dart';
+import 'app.dart';
+import 'core/ai/ai_service.dart';
+import 'core/ai/edge_ai_service.dart';
 import 'core/crypto/phi_encryption_service.dart';
-import 'core/observability/metrics_collector.dart';
+import 'core/data/app_database.dart';
+import 'core/data/note_repository.dart';
+import 'core/services/audio_capture_service.dart';
+import 'core/services/model_manager_service.dart';
+import 'core/services/settings_service.dart';
+import 'core/services/transcription_service.dart';
 
-import 'core/application_services/transcript_chunking_service.dart';
-import 'core/application_services/transcript_normalization_service.dart';
-import 'core/application_services/transcript_cleanup_service.dart';
-import 'core/application_services/doctor_note_generation_service.dart';
-import 'core/application_services/transcript_summary_aggregation_service.dart';
-import 'core/application_services/summary_generation_service.dart';
-import 'core/application_services/summary_orchestrator.dart';
-import 'core/application_services/clinical_processing_orchestrator.dart';
-import 'core/application_services/validation_service.dart';
-import 'core/application_services/terminology_assistance_service.dart';
-
-import 'features/note_assist/data/local/local_database.dart';
-import 'features/note_assist/data/local/note_local_repository.dart';
-import 'features/note_assist/domain/models/doctor_note.dart';
-import 'features/note_assist/data/remote/note_remote_datasource.dart';
-import 'features/note_assist/data/repositories/note_sync_repository.dart';
-import 'features/note_assist/data/services/on_device_llm_service.dart';
-import 'features/note_assist/data/services/agora_rtt_service.dart';
-import 'features/note_assist/domain/services/diagnostics_exporter.dart';
-import 'features/note_assist/domain/services/note_assist_service.dart';
-import 'features/note_assist/presentation/cubit/note_editor_cubit.dart';
-import 'features/note_assist/presentation/cubit/ai_assist_cubit.dart';
-import 'features/note_assist/presentation/pages/consultation_detail_page.dart';
-import 'features/note_assist/presentation/pages/consultation_list_page.dart';
-import 'features/note_assist/presentation/pages/model_manager_page.dart';
-import 'features/note_assist/presentation/pages/settings_page.dart';
-
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Surface ALL uncaught errors with full stack traces to the console —
-  // the default dart_vm_initializer logger truncates them, hiding the
-  // real startup failure behind a white screen.
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    debugPrint('═══ UNCAUGHT FLUTTER ERROR (full stack) ═══');
-    debugPrint(details.toString());
-    debugPrint('═══ END ERROR ═══');
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('═══ UNCAUGHT ASYNC ERROR ═══');
-    debugPrint('$error\n$stack');
-    debugPrint('═══ END ERROR ═══');
-    return true;
-  };
-  await setupDependencies();
-  runApp(const DoctorApp());
-}
 
-/// Canonical dependency injection graph.
-///
-/// Registration order follows dependency flow:
-///   1. Platform services (DeviceCapabilityService)
-///   2. Database
-///   3. Network (Dio + interceptors)
-///   4. Speech service
-///   5. LLM port (hybrid adapter)
-///   6. Repositories
-///   7. Application services
-///   8. Orchestrators
-Future<void> setupDependencies() async {
+  // Native inference and download logs are disabled so no clinical text can
+  // reach the console.
+  FlutterEdgeAi.logLevel = EdgeAiLogLevel.none;
+
+  final settings = SettingsService();
+  await settings.init();
+
+  String? startupError;
+  try {
+    await FlutterEdgeAi.initialize(
+      inferenceEngines: const [LiteRtLmEngine()],
+      sttBackends: const [LiteRtSttBackend()],
+    );
+  } catch (error) {
+    // The app still opens to a safe explanation instead of a blank screen.
+    // Details are only shown in debug builds by DoctorApp.
+    startupError = error.toString();
+  }
+
+  // A previous session may have been interrupted mid-recording. Audio is
+  // temporary, so delete any orphaned recording before the UI can start.
+  await AudioCaptureService.deleteStaleTemporaryFiles();
+
+  final database = AppDatabase();
+  final encryption = PhiEncryptionService();
+  final repository = NoteRepository(database, encryption);
+  final models = ModelManagerService(settings: settings);
+  final audio = AudioCaptureService();
+  final transcription = WhisperTranscriptionService();
+  final ai = EdgeAiService();
+
   final getIt = GetIt.instance;
+  getIt.registerSingleton<SettingsService>(settings);
+  getIt.registerSingleton<AppDatabase>(database);
+  getIt.registerSingleton<PhiEncryptionService>(encryption);
+  getIt.registerSingleton<NoteRepository>(repository);
+  getIt.registerSingleton<ModelManagerService>(models);
+  getIt.registerSingleton<AudioCaptureService>(audio);
+  getIt.registerSingleton<TranscriptionService>(transcription);
+  getIt.registerSingleton<AIService>(ai);
 
-  // ── 1. Platform services ──────────────────────────────────────────
-  final capabilityService = DeviceCapabilityService();
-  getIt.registerSingleton<DeviceCapabilityService>(capabilityService);
-
-  // ── 1b. Observability ──────────────────────────────────────────────
-  getIt.registerSingleton<MetricsCollector>(MetricsCollector.instance);
-
-  // ── 2. Database ───────────────────────────────────────────────────
-  // One-time import of notes from the legacy unencrypted DB (pre-SQLCipher
-  // builds). Runs before the encrypted connection opens for the first time.
-  await importLegacyDatabase();
-
-  final db = LocalDatabase();
-  getIt.registerSingleton<LocalDatabase>(db);
-
-  // Seed an example consultation on first launch so the local list has
-  // content to demonstrate the note-assist workflow.
-  await seedExampleConsultationIfEmpty(db);
-
-  final dbService = DatabaseService(db);
-  getIt.registerSingleton<DatabaseService>(dbService);
-
-  // ── 3. Network (Dio + interceptors) ───────────────────────────────
-  final circuitBreaker = CircuitBreaker();
-  getIt.registerSingleton<CircuitBreaker>(circuitBreaker);
-
-  final dio = Dio(BaseOptions(
-    baseUrl: EnvironmentConfig.apiBaseUrl,
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 60),
-    sendTimeout: const Duration(seconds: 30),
-  ));
-
-  // SHA-256 certificate pinning — active once BACKEND_CERT_PIN is defined
-  // at build time (see core/network/certificate_pinner.dart).
-  CertificatePinner().applyTo(dio);
-
-  // Add interceptors in order: auth → retry → logging (debug only)
-  // Auth tokens persist via Keychain/Keystore (flutter_secure_storage), never
-  // SharedPreferences — see core/auth/token_storage.dart.
-  final authTokenService = AuthTokenService(dio, storage: SecureTokenStorage());
-  getIt.registerLazySingleton<AuthTokenService>(() => authTokenService);
-  dio.interceptors.add(AuthInterceptor(dio, authTokenService));
-  dio.interceptors.add(RetryInterceptor(dio));
-  if (EnvironmentConfig.enableNetworkLogging) {
-    dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
-    ));
-  }
-
-  getIt.registerSingleton<Dio>(dio);
-
-  // ── 4. Input validation ───────────────────────────────────────────
-  getIt.registerSingleton<InputValidator>(const InputValidator());
-
-  // ── 5. Speech service ─────────────────────────────────────────────
-  final speechService = await SpeechServiceFactory.create(
-    capabilityService,
-    dio: dio,
-  );
-  getIt.registerSingleton<SpeechService>(speechService);
-
-  // ── 6. LLM port (hybrid adapter) ─────────────────────────────────
-  final llmPort = await LlmPortFactory.create(capabilityService);
-  getIt.registerSingleton<LlmPort>(llmPort);
-  getIt.registerSingleton<HybridLlmAdapter>(llmPort);
-
-  // ── 7. Repositories ───────────────────────────────────────────────
-  getIt.registerLazySingleton<NoteLocalRepository>(
-      () => NoteLocalRepository(db));
-
-  getIt.registerLazySingleton<NoteRemoteDatasource>(
-      () => NoteRemoteDatasource(getIt<Dio>()));
-
-  getIt.registerLazySingleton<NoteSyncRepository>(() => NoteSyncRepository(
-      getIt<NoteLocalRepository>(), getIt<NoteRemoteDatasource>()));
-
-  final syncQueue = SyncQueueService(
-    syncRepository: getIt<NoteSyncRepository>(),
-    database: db,
-  );
-  await syncQueue.initialize();
-  getIt.registerSingleton<SyncQueueService>(syncQueue);
-
-  // ── 6b. Diagnostics export ──────────────────────────────────────────
-  getIt.registerSingleton<DiagnosticsExporter>(DiagnosticsExporter());
-
-  // ── 6c. PHI Encryption Service ──────────────────────────────────────
-  getIt.registerSingleton<PhiEncryptionService>(PhiEncryptionService());
-
-  // ── 6d. Agora RTT Service ───────────────────────────────────────────
-  final agoraConfig = AgoraRttConfig.fromEnvironment();
-  if (agoraConfig != null) {
-    getIt.registerSingleton<AgoraRttService>(
-      AgoraRttService(config: agoraConfig, dio: getIt<Dio>()),
-    );
-  }
-
-  getIt.registerLazySingleton<TranscriptRepository>(
-      () => DriftTranscriptRepository(getIt<LocalDatabase>()));
-  getIt.registerLazySingleton<TranscriptSummaryRepository>(
-      () => DriftSummaryRepository(getIt<LocalDatabase>()));
-
-  // ── 8. AI / NoteAssist service ────────────────────────────────────
-  getIt.registerLazySingleton<NoteAssistService>(
-      () => OnDeviceLlmService(getIt<LlmPort>()));
-
-  // ── 9. Application services ───────────────────────────────────────
-  getIt.registerLazySingleton<TranscriptChunkingService>(
-      () => TranscriptChunkingService());
-  getIt.registerLazySingleton<TranscriptNormalizationService>(
-      () => TranscriptNormalizationService());
-  getIt.registerLazySingleton<ValidationService>(() => ValidationService());
-
-  getIt.registerLazySingleton<TranscriptCleanupService>(
-    () => TranscriptCleanupService(
-      llmPort: getIt<LlmPort>(),
-      normalizationService: getIt<TranscriptNormalizationService>(),
-    ),
-  );
-  getIt.registerLazySingleton<TerminologyAssistanceService>(
-    () => TerminologyAssistanceService(
-      llmPort: getIt<LlmPort>(),
-      normalizationService: getIt<TranscriptNormalizationService>(),
-    ),
-  );
-  getIt.registerLazySingleton<SummaryGenerationService>(
-    () => SummaryGenerationService(llmPort: getIt<LlmPort>()),
-  );
-  getIt.registerLazySingleton<DoctorNoteGenerationService>(
-    () => DoctorNoteGenerationService(llmPort: getIt<LlmPort>()),
-  );
-  getIt.registerLazySingleton<TranscriptSummaryAggregationService>(
-    () => TranscriptSummaryAggregationService(),
-  );
-  getIt.registerLazySingleton<SummaryOrchestrator>(() => SummaryOrchestrator(
-        validationService: getIt<ValidationService>(),
-        normalizationService: getIt<TranscriptNormalizationService>(),
-        chunkingService: getIt<TranscriptChunkingService>(),
-        summaryGenerationService: getIt<SummaryGenerationService>(),
-        doctorNoteGenerationService: getIt<DoctorNoteGenerationService>(),
-        aggregationService: getIt<TranscriptSummaryAggregationService>(),
-        transcriptRepository: getIt<TranscriptRepository>(),
-        summaryRepository: getIt<TranscriptSummaryRepository>(),
-      ));
-  getIt.registerLazySingleton<ClinicalProcessingOrchestrator>(
-      () => ClinicalProcessingOrchestrator(
-            validationService: getIt<ValidationService>(),
-            terminologyAssistanceService:
-                getIt<TerminologyAssistanceService>(),
-            transcriptCleanupService: getIt<TranscriptCleanupService>(),
-          ));
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Router
-// ═══════════════════════════════════════════════════════════════════════════
-
-final GoRouter _router = GoRouter(
-  navigatorKey: _rootNavigatorKey,
-  initialLocation: '/consultations',
-  routes: [
-    GoRoute(
-      path: '/consultations',
-      builder: (context, state) => const ConsultationListPage(),
-    ),
-    GoRoute(
-      path: '/settings',
-      builder: (context, state) => const SettingsPage(),
-    ),
-    GoRoute(
-      path: '/model_manager',
-      builder: (context, state) => const ModelManagerPage(),
-    ),
-    GoRoute(
-      path: '/consultation/:consultationId/patient/:patientId/doctor/:doctorId',
-      builder: (context, state) {
-        return MultiBlocProvider(
-          providers: [
-            BlocProvider(
-              create: (context) => NoteEditorCubit(
-                localRepository: GetIt.I<NoteLocalRepository>(),
-                syncRepository: GetIt.I<NoteSyncRepository>(),
-                syncQueueService: GetIt.I<SyncQueueService>(),
-              ),
-            ),
-            BlocProvider(
-              create: (context) => AiAssistCubit(
-                assistService: GetIt.I<NoteAssistService>(),
-              ),
-            ),
-          ],
-          child: ConsultationDetailPage(
-            consultationId: state.pathParameters['consultationId']!,
-            patientId: state.pathParameters['patientId']!,
-            doctorId: state.pathParameters['doctorId']!,
-          ),
-        );
-      },
-    ),
-  ],
-);
-
-// ═══════════════════════════════════════════════════════════════════════════
-// App Widget
-// ═══════════════════════════════════════════════════════════════════════════
-
-class DoctorApp extends StatefulWidget {
-  const DoctorApp({super.key});
-
-  @override
-  State<DoctorApp> createState() => _DoctorAppState();
-}
-
-class _DoctorAppState extends State<DoctorApp> {
-  @override
-  void initState() {
-    super.initState();
-    // Show AI risk disclaimer on first launch
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showAiDisclaimerIfNeeded();
-    });
-  }
-
-  Future<void> _showAiDisclaimerIfNeeded() async {
-    final prefs = await SharedPreferences.getInstance();
-    final hasAcknowledged = prefs.getBool('ai_disclaimer_acknowledged') ?? false;
-
-    // Dialog must be shown with a context UNDER MaterialApp —
-    // DoctorApp's own context is above it and has no Navigator.
-    final navContext = _rootNavigatorKey.currentContext;
-    if (!hasAcknowledged && navContext != null && navContext.mounted) {
-      await showDialog<void>(
-        context: navContext,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.smart_toy, size: 48, color: Colors.blue),
-          title: const Text('AI-Assisted Clinical Notes'),
-          content: const SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'This application uses AI to assist with clinical documentation. '
-                  'Please be aware of the following:',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                SizedBox(height: 16),
-                _DisclaimerPoint(
-                  icon: Icons.edit_note,
-                  text: 'AI-generated notes are drafts and must be reviewed '
-                      'by a qualified healthcare professional before use.',
-                ),
-                SizedBox(height: 8),
-                _DisclaimerPoint(
-                  icon: Icons.security,
-                  text: 'Patient data is processed on-device by default. '
-                      'No protected health information (PHI) leaves your device '
-                      'unless explicitly configured.',
-                ),
-                SizedBox(height: 8),
-                _DisclaimerPoint(
-                  icon: Icons.warning_amber,
-                  text: 'AI may produce inaccurate or incomplete information. '
-                      'Always verify clinical details independently.',
-                ),
-                SizedBox(height: 8),
-                _DisclaimerPoint(
-                  icon: Icons.gavel,
-                  text: 'Use of this tool does not replace professional medical '
-                      'judgment. The clinician remains fully responsible for '
-                      'all clinical decisions.',
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () async {
-                await prefs.setBool('ai_disclaimer_acknowledged', true);
-                if (context.mounted) Navigator.of(context).pop();
-              },
-              child: const Text('I Understand'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Doctor Note App',
-      // Dynamic type: scale all text with the system text scale so large
-      // accessibility sizes work across the app (no fixed-font overflow).
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: MediaQuery.of(context).textScaler.clamp(
-                minScaleFactor: 0.9,
-                maxScaleFactor: 2.2,
-              ),
-        ),
-        child: child!,
-      ),
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      localizationsDelegates: const [
-        FlutterQuillLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('en'),
-        Locale('es'),
-      ],
-      routerConfig: _router,
-    );
-  }
-}
-
-/// Root navigator key — lets dialogs be shown from contexts ABOVE the
-/// MaterialApp (e.g. DoctorApp's own State).
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
-
-/// A single point in the AI disclaimer dialog.
-class _DisclaimerPoint extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _DisclaimerPoint({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: Colors.blue.shade700),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Seeds a demo consultation into the local database on first launch.
-///
-/// Runs when the notes table is empty, or when the seeded demo note
-/// (`n-example-001`) is absent — real patient notes are never touched.
-Future<void> seedExampleConsultationIfEmpty(LocalDatabase db) async {
-  final repo = NoteLocalRepository(db);
-  final existing = await repo.getAllNotes();
-  if (existing.any((n) => n.noteId != 'n-example-001')) return;
-  if (existing.any((n) => n.noteId == 'n-example-001' &&
-      n.rawText.startsWith('The patient is a 34-year-old male'))) {
-    return;
-  }
-
-  final now = DateTime.now();
-  const consultationId = 'c-example-001';
-  const patientId = 'p-male-34';
-  const doctorId = 'd-devansh';
-
-  const rawText = '''Chalo dost, main aapki kahani sunta hoon. Main hoon Dr. Sharma. Aapka naam kya hai?
-
-Main Govind Kumar hoon. Main 45 saal ka hoon. Doctor sahab, mujhe pichle kuch hafte se bahut-bahut dikkat ho rahi hai. Mera pet bahut dard kar raha hai, khaaskar bhojan ke baad. Mujhe baar-baar ulti bhi ho rahi hai, aur mujhe bahut bhookh nahi lagti.
-
-Maine pichle kuch dinon se jalan bhi mehsoos ki hai. Mujhe bahut thakan ho rahi hai, jabki main basa hi hoon. Mera shareer garm lag raha hai aur mujhe bahar se paseena bhi aa raha hai.
-
-Doctor sahab, mujhe darr lag raha hai ki yeh koi buri baat ho sakti hai. Mujhe pata hai ki mere pitaji ko bhi isi tarah ki samasya thi. Main bahut chintit hoon.
-
-Mera dincharya bigad gaya hai. Main subah ko nahi kha sakta, dopahar ko thoda kha leta hoon, aur shaam ko nahi. Mera vajan pichle mahine mein bahut kam ho gaya hai. Main 8 kilo gira hoon.
-
-Mujhe bahut-bahut chinta hai. Kripya mujhe bahut acche se check karein aur bataein ki kya ho sakta hai. Main bahut dara hua hoon.''';
-
-  await repo.saveNote(DoctorNote(
-    noteId: 'n-example-001',
-    consultationId: consultationId,
-    patientId: patientId,
-    doctorId: doctorId,
-    rawText: rawText,
-    richTextDelta: jsonEncode([
-      {'insert': rawText},
-    ]),
-    status: NoteStatus.aiSuggested,
-    extractedFields: const ExtractedFields(
-      symptoms: [
-        'Intermittent fever (10 days)',
-        'Generalized weakness',
-        'Body aches',
-        'Headache',
-        'Loss of appetite',
-        'Abdominal discomfort',
-        'Nausea',
-        'Bloating after meals',
-      ],
-      duration: 'Last 10 days',
-      medications: ['Paracetamol (OTC)'],
-      allergies: [],
-      testsRecommended: [
-        'Complete blood count',
-        'Malaria smear / serology',
-        'Blood cultures',
-        'Widal test',
-      ],
-      followUpActions: [
-        'Re-evaluate after diagnostic results',
-        'Advise adequate hydration and rest',
-      ],
-      provisionalDiagnosis: 'Fever of unknown origin — rule out '
-          'enteric fever / malaria',
-    ),
-    patientRecap:
-        '34-year-old male with 10 days of intermittent evening fever, '
-        'weakness, and body aches; deny vomiting, diarrhea, or travel; '
-        'pending diagnostic workup.',
-    createdAt: now.subtract(const Duration(hours: 2)),
-    updatedAt: now.subtract(const Duration(minutes: 30)),
-  ));
+  runApp(DoctorApp(settings: settings, startupError: startupError));
 }
