@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/data/note_repository.dart';
@@ -13,15 +13,15 @@ import '../../core/ui/responsive.dart';
 import '../../core/utils/formatters.dart';
 import '../notes/widgets/error_banner.dart';
 import '../notes/widgets/note_card.dart';
-import 'dashboard_cubit.dart';
+import 'dashboard_controller.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => DashboardCubit(
+    return SignalProvider<DashboardController>(
+      create: () => DashboardController(
         repository: GetIt.I<NoteRepository>(),
         models: GetIt.I<ModelManagerService>(),
       )..load(),
@@ -35,8 +35,13 @@ class _DashboardScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<DashboardCubit, DashboardState>(
-      builder: (context, state) {
+    return SignalBuilder(
+      builder: (context) {
+        final controller = SignalProvider.of<DashboardController>(
+          context,
+          listen: false,
+        )!;
+        final state = controller.value;
         return AppShell(
           title: 'Home',
           currentIndex: 0,
@@ -49,7 +54,7 @@ class _DashboardScaffold extends StatelessWidget {
           ],
           child: DashboardView(
             state: state,
-            onRefresh: () => context.read<DashboardCubit>().load(),
+            onRefresh: () => controller.load(),
             onNewNote: () => context.go(AppRoutes.newNote),
             onSearch: () => context.go(AppRoutes.search),
             onSeeAllNotes: () => context.go(AppRoutes.notes),

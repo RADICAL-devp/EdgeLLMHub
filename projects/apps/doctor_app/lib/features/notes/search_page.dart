@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/data/note_repository.dart';
 import '../../core/ui/app_routes.dart';
 import '../../core/ui/app_shell.dart';
 import '../../core/ui/responsive.dart';
 import '../../core/utils/formatters.dart';
-import 'cubits/notes_cubit.dart';
-import 'cubits/notes_state.dart';
+import 'controllers/notes_controller.dart';
+import 'controllers/notes_state.dart';
 import 'widgets/error_banner.dart';
 import 'widgets/note_card.dart';
 
@@ -18,9 +18,9 @@ class SearchPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) =>
-          SearchCubit(repository: GetIt.I<NoteRepository>())
+    return SignalProvider<NoteSearchController>(
+      create: () =>
+          NoteSearchController(repository: GetIt.I<NoteRepository>())
             ..search(immediate: true),
       child: const _SearchScaffold(),
     );
@@ -32,20 +32,24 @@ class _SearchScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<SearchCubit, SearchState>(
-      builder: (context, state) {
-        final cubit = context.read<SearchCubit>();
+    return SignalBuilder(
+      builder: (context) {
+        final controller = SignalProvider.of<NoteSearchController>(
+          context,
+          listen: false,
+        )!;
+        final state = controller.value;
         return AppShell(
           title: 'Search',
           currentIndex: 2,
           child: SearchView(
             state: state,
-            onQueryChanged: cubit.setQuery,
-            onDatesChanged: cubit.setDates,
-            onClearDates: cubit.clearDates,
-            onClearAll: cubit.clearAll,
+            onQueryChanged: controller.setQuery,
+            onDatesChanged: controller.setDates,
+            onClearDates: controller.clearDates,
+            onClearAll: controller.clearAll,
             onOpenNote: (id) => context.go(AppRoutes.note(id)),
-            onRefresh: () => cubit.search(immediate: true),
+            onRefresh: () => controller.search(immediate: true),
           ),
         );
       },

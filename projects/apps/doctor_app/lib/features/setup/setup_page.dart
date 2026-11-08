@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/config/model_config.dart';
@@ -10,15 +10,15 @@ import '../../core/services/settings_service.dart';
 import '../../core/ui/app_routes.dart';
 import '../../core/ui/responsive.dart';
 import '../notes/widgets/error_banner.dart';
-import 'setup_cubit.dart';
+import 'setup_controller.dart';
 
 class SetupPage extends StatelessWidget {
   const SetupPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => SetupCubit(
+    return SignalProvider<SetupController>(
+      create: () => SetupController(
         models: GetIt.I<ModelManagerService>(),
         settings: GetIt.I<SettingsService>(),
       )..load(),
@@ -74,10 +74,10 @@ class _SetupViewState extends State<_SetupView> {
     }
   }
 
-  Future<void> _useCellular(SetupCubit cubit) async {
+  Future<void> _useCellular(SetupController controller) async {
     setState(() => _wifiOnly = false);
     await _settings.setWifiOnlyDownloads(false);
-    if (mounted) await cubit.install(allowCellular: true);
+    if (mounted) await controller.install(allowCellular: true);
   }
 
   Future<void> _finish() async {
@@ -88,9 +88,13 @@ class _SetupViewState extends State<_SetupView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return BlocBuilder<SetupCubit, SetupState>(
-      builder: (context, state) {
-        final cubit = context.read<SetupCubit>();
+    return SignalBuilder(
+      builder: (context) {
+        final controller = SignalProvider.of<SetupController>(
+          context,
+          listen: false,
+        )!;
+        final state = controller.value;
         final llmReady = state.status?.llmReady ?? false;
         final sttReady = state.status?.sttReady ?? false;
         final complete = state.isComplete;
@@ -172,18 +176,20 @@ class _SetupViewState extends State<_SetupView> {
                       ),
                       const SizedBox(height: 12),
                       OutlinedButton(
-                        onPressed: cubit.cancel,
+                        onPressed: controller.cancel,
                         child: const Text('Cancel download'),
                       ),
                     ] else if (state.error != null) ...[
                       ErrorBanner(
                         message: state.error!,
-                        onRetry: state.needsWifi ? null : () => cubit.install(),
+                        onRetry: state.needsWifi
+                            ? null
+                            : () => controller.install(),
                       ),
                       if (state.needsWifi) ...[
                         const SizedBox(height: 10),
                         FilledButton.tonalIcon(
-                          onPressed: () => _useCellular(cubit),
+                          onPressed: () => _useCellular(controller),
                           icon: const Icon(Icons.cell_tower),
                           label: const Text('Download over mobile data'),
                         ),
@@ -194,7 +200,7 @@ class _SetupViewState extends State<_SetupView> {
                       FilledButton.icon(
                         onPressed: state.isChecking
                             ? null
-                            : () => cubit.install(),
+                            : () => controller.install(),
                         icon: const Icon(Icons.download_outlined),
                         label: Text(
                           state.error == null ? 'Download models' : 'Try again',

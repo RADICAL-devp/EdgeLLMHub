@@ -5,8 +5,8 @@ import 'package:doctor_app/core/data/app_database.dart';
 import 'package:doctor_app/core/data/note_repository.dart';
 import 'package:doctor_app/core/models/clinical_note.dart';
 import 'package:doctor_app/core/utils/debouncer.dart';
-import 'package:doctor_app/features/notes/cubits/note_editor_cubit.dart';
-import 'package:doctor_app/features/notes/cubits/note_editor_state.dart';
+import 'package:doctor_app/features/notes/controllers/note_editor_controller.dart';
+import 'package:doctor_app/features/notes/controllers/note_editor_state.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -30,7 +30,7 @@ void main() {
     );
   });
 
-  group('NoteEditorCubit with a real encrypted repository', () {
+  group('NoteEditorController with a real encrypted repository', () {
     late AppDatabase db;
     late NoteRepository repository;
 
@@ -50,69 +50,69 @@ void main() {
     });
 
     test('creates a note, debounces edits, and saves them to disk', () async {
-      final cubit = NoteEditorCubit(
+      final controller = NoteEditorController(
         repository: repository,
         debouncer: Debouncer(const Duration(milliseconds: 10)),
       );
-      addTearDown(cubit.close);
+      addTearDown(controller.close);
 
-      final note = await cubit.create(
+      final note = await controller.create(
         title: 'Initial title',
         patientName: 'Asha Rao',
         languageCode: 'en',
       );
       expect(note, isNotNull);
-      expect(cubit.state, isA<NoteEditorLoaded>());
+      expect(controller.value, isA<NoteEditorLoaded>());
 
-      cubit.updateTitle('Updated title');
-      cubit.updateTranscript('Patient has chest pain.');
-      expect((cubit.state as NoteEditorLoaded).hasUnsavedChanges, isTrue);
+      controller.updateTitle('Updated title');
+      controller.updateTranscript('Patient has chest pain.');
+      expect((controller.value as NoteEditorLoaded).hasUnsavedChanges, isTrue);
 
       await Future<void>.delayed(const Duration(milliseconds: 40));
-      await cubit.saveNow();
+      await controller.saveNow();
 
       final saved = await repository.getById(note!.id);
       expect(saved, isNotNull);
       expect(saved!.title, 'Updated title');
       expect(saved.transcript, 'Patient has chest pain.');
-      expect((cubit.state as NoteEditorLoaded).hasUnsavedChanges, isFalse);
+      expect((controller.value as NoteEditorLoaded).hasUnsavedChanges, isFalse);
     });
 
     test(
       'close flushes an unsaved edit before tearing the editor down',
       () async {
-        final cubit = NoteEditorCubit(
+        final controller = NoteEditorController(
           repository: repository,
           debouncer: Debouncer(const Duration(hours: 1)),
         );
-        final note = await cubit.create(
+        final note = await controller.create(
           title: 'Auto save',
           patientName: 'Asha',
           languageCode: 'en',
         );
-        cubit.updateTitle('Saved on close');
+        controller.updateTitle('Saved on close');
 
-        await cubit.close();
+        await controller.close();
 
         expect((await repository.getById(note!.id))!.title, 'Saved on close');
       },
     );
 
     test('finalizes and reopens a note', () async {
-      final cubit = NoteEditorCubit(
+      final controller = NoteEditorController(
         repository: repository,
         debouncer: Debouncer(const Duration(hours: 1)),
       );
-      addTearDown(cubit.close);
-      final note = await cubit.create(
+      addTearDown(controller.close);
+      final note = await controller.create(
         title: 'Review',
         patientName: 'Asha',
         languageCode: 'en',
       );
 
-      await cubit.finalizeNote();
+      await controller.finalizeNote();
       expect(
-        (cubit.state as NoteEditorLoaded).note.status,
+        (controller.value as NoteEditorLoaded).note.status,
         NoteStatus.finalized,
       );
       expect(
@@ -120,53 +120,56 @@ void main() {
         NoteStatus.finalized,
       );
 
-      await cubit.reopenNote();
-      expect((cubit.state as NoteEditorLoaded).note.status, NoteStatus.draft);
+      await controller.reopenNote();
+      expect(
+        (controller.value as NoteEditorLoaded).note.status,
+        NoteStatus.draft,
+      );
       expect((await repository.getById(note.id))!.status, NoteStatus.draft);
     });
 
     test(
       'delete removes the note and does not resurrect it on close',
       () async {
-        final cubit = NoteEditorCubit(
+        final controller = NoteEditorController(
           repository: repository,
           debouncer: Debouncer(const Duration(hours: 1)),
         );
-        final note = await cubit.create(
+        final note = await controller.create(
           title: 'Delete me',
           patientName: 'Asha',
           languageCode: 'en',
         );
-        cubit.updateTitle('Unsaved change');
+        controller.updateTitle('Unsaved change');
 
-        expect(await cubit.deleteNote(), isTrue);
+        expect(await controller.deleteNote(), isTrue);
         expect(await repository.getById(note!.id), isNull);
 
         // close() normally flushes unsaved edits. After a delete it must not
         // recreate the row.
-        await cubit.close();
+        await controller.close();
         expect(await repository.getById(note.id), isNull);
       },
     );
 
     test('holds structured sections and cleaned transcripts', () async {
-      final cubit = NoteEditorCubit(
+      final controller = NoteEditorController(
         repository: repository,
         debouncer: Debouncer(const Duration(hours: 1)),
       );
-      addTearDown(cubit.close);
-      final note = await cubit.create(
+      addTearDown(controller.close);
+      final note = await controller.create(
         title: 'Sections',
         patientName: 'Asha',
         languageCode: 'hi',
       );
 
-      cubit.updateSections(
+      controller.updateSections(
         StructuredNoteSections(chiefComplaint: 'Khansi', assessment: 'Sardi'),
       );
-      cubit.updateCleanedTranscript('Saaf transcript');
-      cubit.setThinkingModeUsed(true);
-      await cubit.saveNow();
+      controller.updateCleanedTranscript('Saaf transcript');
+      controller.setThinkingModeUsed(true);
+      await controller.saveNow();
 
       final saved = await repository.getById(note!.id);
       expect(saved!.sections.chiefComplaint, 'Khansi');
@@ -176,7 +179,7 @@ void main() {
     });
   });
 
-  group('NoteEditorCubit save and delete races', () {
+  group('NoteEditorController save and delete races', () {
     test(
       'a late save cannot recreate a note while delete is in flight',
       () async {
@@ -202,20 +205,20 @@ void main() {
           operations.add('delete');
         });
 
-        final cubit = NoteEditorCubit(
+        final controller = NoteEditorController(
           repository: repository,
           debouncer: Debouncer(const Duration(hours: 1)),
         );
-        await cubit.load(note.id);
-        cubit.updateTitle('Edited');
-        final save = cubit.saveNow();
+        await controller.load(note.id);
+        controller.updateTitle('Edited');
+        final save = controller.saveNow();
         await saveStarted.future;
 
-        final deleteFuture = cubit.deleteNote();
+        final deleteFuture = controller.deleteNote();
         releaseSave.complete();
         expect(await deleteFuture, isTrue);
         await save;
-        await cubit.close();
+        await controller.close();
 
         expect(operations, ['save-start', 'save-end', 'delete']);
       },
@@ -233,16 +236,16 @@ void main() {
       when(() => repository.getById(note.id)).thenAnswer((_) async => note);
       when(() => repository.save(any())).thenThrow(Exception('disk full'));
 
-      final cubit = NoteEditorCubit(
+      final controller = NoteEditorController(
         repository: repository,
         debouncer: Debouncer(const Duration(hours: 1)),
       );
-      await cubit.load(note.id);
-      cubit.updateTitle('Edited but unsaved');
+      await controller.load(note.id);
+      controller.updateTitle('Edited but unsaved');
 
-      await cubit.saveNow();
+      await controller.saveNow();
 
-      final state = cubit.state as NoteEditorLoaded;
+      final state = controller.value as NoteEditorLoaded;
       expect(state.note.title, 'Edited but unsaved');
       expect(state.hasUnsavedChanges, isTrue);
       expect(state.isSaving, isFalse);

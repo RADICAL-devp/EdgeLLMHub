@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/config/model_config.dart';
@@ -14,15 +14,15 @@ import '../../core/ui/privacy_dialog.dart';
 import '../../core/ui/responsive.dart';
 import '../../core/utils/formatters.dart';
 import '../notes/widgets/error_banner.dart';
-import 'settings_cubit.dart';
+import 'settings_controller.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => SettingsCubit(
+    return SignalProvider<SettingsController>(
+      create: () => SettingsController(
         settings: GetIt.I<SettingsService>(),
         models: GetIt.I<ModelManagerService>(),
         repository: GetIt.I<NoteRepository>(),
@@ -37,12 +37,18 @@ class _SettingsScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<SettingsCubit, SettingsState>(
-      builder: (context, state) => AppShell(
-        title: 'Settings',
-        currentIndex: 3,
-        child: SettingsView(state: state),
-      ),
+    return SignalBuilder(
+      builder: (context) {
+        final state = SignalProvider.of<SettingsController>(
+          context,
+          listen: false,
+        )!.value;
+        return AppShell(
+          title: 'Settings',
+          currentIndex: 3,
+          child: SettingsView(state: state),
+        );
+      },
     );
   }
 }
@@ -77,10 +83,13 @@ class SettingsView extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    final cubit = context.read<SettingsCubit>();
-    await cubit.deleteModels();
+    final controller = SignalProvider.of<SettingsController>(
+      context,
+      listen: false,
+    )!;
+    await controller.deleteModels();
     if (!context.mounted) return;
-    if (cubit.state.error == null) {
+    if (controller.value.error == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Downloaded models removed.')),
       );
@@ -112,10 +121,13 @@ class SettingsView extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    final cubit = context.read<SettingsCubit>();
-    await cubit.deleteAllNotes();
+    final controller = SignalProvider.of<SettingsController>(
+      context,
+      listen: false,
+    )!;
+    await controller.deleteAllNotes();
     if (!context.mounted) return;
-    if (cubit.state.error == null) {
+    if (controller.value.error == null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('All local notes deleted.')));
@@ -144,7 +156,10 @@ class SettingsView extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    await context.read<SettingsCubit>().resetOnboarding();
+    await SignalProvider.of<SettingsController>(
+      context,
+      listen: false,
+    )!.resetOnboarding();
     if (!context.mounted) return;
     context.go(AppRoutes.welcome);
   }
@@ -170,7 +185,10 @@ class SettingsView extends StatelessWidget {
       );
       if (confirmed != true || !context.mounted) return;
     }
-    await context.read<SettingsCubit>().setThinkingMode(value);
+    await SignalProvider.of<SettingsController>(
+      context,
+      listen: false,
+    )!.setThinkingMode(value);
   }
 
   @override
@@ -186,7 +204,8 @@ class SettingsView extends StatelessWidget {
         : (modelStatus!.storageMb! * 1024 * 1024).round();
 
     return RefreshIndicator(
-      onRefresh: () => context.read<SettingsCubit>().load(),
+      onRefresh: () =>
+          SignalProvider.of<SettingsController>(context, listen: false)!.load(),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
@@ -213,7 +232,10 @@ class SettingsView extends StatelessWidget {
                   const SizedBox(height: 12),
                   ErrorBanner(
                     message: state.error!,
-                    onRetry: () => context.read<SettingsCubit>().load(),
+                    onRetry: () => SignalProvider.of<SettingsController>(
+                      context,
+                      listen: false,
+                    )!.load(),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -364,9 +386,10 @@ class SettingsView extends StatelessWidget {
                         ],
                         onChanged: (value) {
                           if (value != null) {
-                            context.read<SettingsCubit>().setLanguageCode(
-                              value,
-                            );
+                            SignalProvider.of<SettingsController>(
+                              context,
+                              listen: false,
+                            )!.setLanguageCode(value);
                           }
                         },
                       ),
@@ -381,9 +404,11 @@ class SettingsView extends StatelessWidget {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: state.wifiOnlyDownloads,
-                      onChanged: (value) => context
-                          .read<SettingsCubit>()
-                          .setWifiOnlyDownloads(value),
+                      onChanged: (value) =>
+                          SignalProvider.of<SettingsController>(
+                            context,
+                            listen: false,
+                          )!.setWifiOnlyDownloads(value),
                       title: const Text('Wi-Fi only model downloads'),
                       subtitle: const Text(
                         'Recommended for the one-time model download. You can '

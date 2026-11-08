@@ -1,7 +1,7 @@
 import 'package:doctor_app/app.dart';
 import 'package:doctor_app/core/models/clinical_note.dart';
 import 'package:doctor_app/core/models/model_install_progress.dart';
-import 'package:doctor_app/features/dashboard/dashboard_cubit.dart';
+import 'package:doctor_app/features/dashboard/dashboard_controller.dart';
 import 'package:doctor_app/features/dashboard/dashboard_page.dart';
 import 'package:doctor_app/features/notes/widgets/note_card.dart';
 import 'package:flutter/material.dart';
