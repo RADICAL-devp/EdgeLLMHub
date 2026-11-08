@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:bloc/bloc.dart';
 import 'package:shared_models/shared_models.dart';
+import 'package:signals/signals.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/config/app_config.dart';
@@ -12,11 +12,13 @@ import '../../../core/utils/debouncer.dart';
 import 'note_editor_state.dart';
 
 /// Owns one note while it is open and persists edits on a 2-second debounce.
-class NoteEditorCubit extends Cubit<NoteEditorState> {
-  NoteEditorCubit({required NoteRepository repository, Debouncer? debouncer})
-    : _repository = repository,
-      _debouncer = debouncer ?? Debouncer(AppConfig.autoSaveDebounce),
-      super(NoteEditorInitial());
+class NoteEditorController extends Signal<NoteEditorState> {
+  NoteEditorController({
+    required NoteRepository repository,
+    Debouncer? debouncer,
+  }) : _repository = repository,
+       _debouncer = debouncer ?? Debouncer(AppConfig.autoSaveDebounce),
+       super(NoteEditorInitial());
 
   final NoteRepository _repository;
   final Debouncer _debouncer;
@@ -28,17 +30,19 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
   Completer<void>? _saveDone;
 
   Future<ClinicalNote?> load(String id) async {
-    emit(NoteEditorLoading());
+    if (disposed) return null;
+    value = NoteEditorLoading();
     try {
       final note = await _repository.getById(id);
+      if (disposed) return null;
       if (note == null) {
-        emit(const NoteEditorFailure('This note could not be found.'));
+        value = const NoteEditorFailure('This note could not be found.');
         return null;
       }
-      emit(NoteEditorLoaded(note: note, lastSavedAt: note.updatedAt));
+      value = NoteEditorLoaded(note: note, lastSavedAt: note.updatedAt);
       return note;
     } catch (error) {
-      emit(NoteEditorFailure(_messageFor(error)));
+      if (!disposed) value = NoteEditorFailure(_messageFor(error));
       return null;
     }
   }
@@ -48,6 +52,7 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
     required String patientName,
     required String languageCode,
   }) async {
+    if (disposed) return null;
     try {
       final note = ClinicalNote.create(
         id: _uuid.v4(),
@@ -58,11 +63,11 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
             : AppConfig.defaultLanguageCode,
       );
       await _repository.save(note);
-      if (isClosed) return note;
-      emit(NoteEditorLoaded(note: note, lastSavedAt: note.updatedAt));
+      if (disposed) return note;
+      value = NoteEditorLoaded(note: note, lastSavedAt: note.updatedAt);
       return note;
     } catch (error) {
-      if (!isClosed) emit(NoteEditorFailure(_messageFor(error)));
+      if (!disposed) value = NoteEditorFailure(_messageFor(error));
       return null;
     }
   }
@@ -99,7 +104,8 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
   }
 
   Future<void> saveNow() async {
-    final current = state;
+    if (disposed) return;
+    final current = value;
     if (_deleted || current is! NoteEditorLoaded) return;
     if (_saveInFlight) {
       _saveAgain = true;
@@ -111,64 +117,63 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
     final done = Completer<void>();
     _saveDone = done;
     final noteToSave = current.note.copyWith(updatedAt: DateTime.now());
-    if (!isClosed) {
-      emit(current.copyWith(isSaving: true, clearError: true));
+    if (!disposed) {
+      value = current.copyWith(isSaving: true, clearError: true);
     }
     try {
       await _repository.save(noteToSave);
-      if (isClosed || _deleted) return;
-      final latest = state;
+      if (disposed || _deleted) return;
+      final latest = value;
       if (latest is NoteEditorLoaded &&
           latest.note.updatedAt.isAfter(noteToSave.updatedAt)) {
         // An edit landed while the write was in flight; keep it dirty and
         // let the next debounce write it instead of overwriting it.
-        emit(
-          latest.copyWith(
-            isSaving: false,
-            hasUnsavedChanges: true,
-            lastSavedAt: DateTime.now(),
-          ),
+        value = latest.copyWith(
+          isSaving: false,
+          hasUnsavedChanges: true,
+          lastSavedAt: DateTime.now(),
         );
         _debouncer(() => saveNow());
       } else {
-        emit(
-          NoteEditorLoaded(
-            note: noteToSave,
-            isSaving: false,
-            hasUnsavedChanges: false,
-            lastSavedAt: DateTime.now(),
-          ),
+        value = NoteEditorLoaded(
+          note: noteToSave,
+          isSaving: false,
+          hasUnsavedChanges: false,
+          lastSavedAt: DateTime.now(),
         );
       }
     } on AppException catch (error) {
-      if (!isClosed && !_deleted) {
-        _emitSaveFailure(current, error.message);
+      if (!disposed && !_deleted) {
+        _reportSaveFailure(current, error.message);
       }
     } catch (_) {
-      if (!isClosed && !_deleted) {
-        _emitSaveFailure(current, 'Could not save this note on the device.');
+      if (!disposed && !_deleted) {
+        _reportSaveFailure(current, 'Could not save this note on the device.');
       }
     } finally {
       _saveInFlight = false;
       if (identical(_saveDone, done)) _saveDone = null;
       if (!done.isCompleted) done.complete();
-      if (_saveAgain && !_deleted) {
+      if (_saveAgain && !_deleted && !disposed) {
         _saveAgain = false;
         await saveNow();
       }
     }
   }
 
-  void _emitSaveFailure(NoteEditorLoaded fallback, String message) {
-    final latest = state;
+  void _reportSaveFailure(NoteEditorLoaded fallback, String message) {
+    final latest = value;
     final base = latest is NoteEditorLoaded ? latest : fallback;
-    emit(
-      base.copyWith(isSaving: false, hasUnsavedChanges: true, error: message),
+    value = base.copyWith(
+      isSaving: false,
+      hasUnsavedChanges: true,
+      error: message,
     );
   }
 
   Future<void> finalizeNote() async {
-    final current = state;
+    if (disposed) return;
+    final current = value;
     if (current is! NoteEditorLoaded) return;
     _update(
       (note) => note.copyWith(
@@ -180,7 +185,8 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
   }
 
   Future<void> reopenNote() async {
-    final current = state;
+    if (disposed) return;
+    final current = value;
     if (current is! NoteEditorLoaded) return;
     _update(
       (note) =>
@@ -195,7 +201,8 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
   /// it to settle first, otherwise a late write could recreate the record after
   /// the delete. Returns false when the delete did not complete.
   Future<bool> deleteNote() async {
-    final current = state;
+    if (disposed) return false;
+    final current = value;
     if (_deleted || current is! NoteEditorLoaded) return false;
     _deleted = true;
     _debouncer.cancel();
@@ -210,14 +217,12 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
       return true;
     } catch (_) {
       _deleted = false;
-      if (!isClosed) {
-        final latest = state;
+      if (!disposed) {
+        final latest = value;
         final base = latest is NoteEditorLoaded ? latest : current;
-        emit(
-          base.copyWith(
-            isSaving: false,
-            error: 'This note could not be deleted from the device.',
-          ),
+        value = base.copyWith(
+          isSaving: false,
+          error: 'This note could not be deleted from the device.',
         );
       }
       return false;
@@ -225,15 +230,14 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
   }
 
   void _update(ClinicalNote Function(ClinicalNote note) transform) {
-    final current = state;
-    if (_deleted || current is! NoteEditorLoaded || isClosed) return;
+    if (disposed) return;
+    final current = value;
+    if (_deleted || current is! NoteEditorLoaded) return;
     final updated = transform(current.note).copyWith(updatedAt: DateTime.now());
-    emit(
-      current.copyWith(
-        note: updated,
-        hasUnsavedChanges: true,
-        clearError: true,
-      ),
+    value = current.copyWith(
+      note: updated,
+      hasUnsavedChanges: true,
+      clearError: true,
     );
     _debouncer(() => saveNow());
   }
@@ -243,11 +247,21 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
     return 'The note could not be loaded from this device.';
   }
 
-  @override
-  Future<void> close() async {
+  Future<void>? _closeFuture;
+
+  /// Flushes pending edits and tears the editor down.
+  ///
+  /// Callers that can await (tests, explicit teardown) use [close]; widget
+  /// lifecycle calls [dispose], which starts the same flush without awaiting.
+  Future<void> close() => _closeFuture ??= _close();
+
+  Future<void> _close() async {
     _debouncer.cancel();
-    final current = state;
-    if (!_deleted && current is NoteEditorLoaded && current.hasUnsavedChanges) {
+    final current = value;
+    if (!_deleted &&
+        !disposed &&
+        current is NoteEditorLoaded &&
+        current.hasUnsavedChanges) {
       // Flush pending edits before tearing the editor down.
       try {
         await _repository.save(
@@ -257,6 +271,11 @@ class NoteEditorCubit extends Cubit<NoteEditorState> {
         // Close must not mask teardown with a failed best-effort save.
       }
     }
-    return super.close();
+    super.dispose();
+  }
+
+  @override
+  void dispose() {
+    close().ignore();
   }
 }

@@ -213,6 +213,8 @@ class FakeNetworkChecker implements NetworkChecker {
 
 class MemorySecureStorage extends FlutterSecureStorage {
   final Map<String, String> values = {};
+  AppleOptions? lastReadAppleOptions;
+  AppleOptions? lastWriteAppleOptions;
 
   @override
   Future<String?> read({
@@ -223,7 +225,10 @@ class MemorySecureStorage extends FlutterSecureStorage {
     WebOptions? webOptions,
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
-  }) async => values[key];
+  }) async {
+    lastReadAppleOptions = iOptions;
+    return values[key];
+  }
 
   @override
   Future<void> write({
@@ -236,6 +241,7 @@ class MemorySecureStorage extends FlutterSecureStorage {
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
   }) async {
+    lastWriteAppleOptions = iOptions;
     if (value == null) {
       values.remove(key);
     } else {

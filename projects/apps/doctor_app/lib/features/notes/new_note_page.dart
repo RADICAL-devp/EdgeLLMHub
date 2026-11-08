@@ -8,7 +8,7 @@ import '../../core/services/settings_service.dart';
 import '../../core/services/transcription_service.dart';
 import '../../core/ui/app_routes.dart';
 import '../../core/ui/responsive.dart';
-import 'cubits/note_editor_cubit.dart';
+import 'controllers/note_editor_controller.dart';
 
 class NewNotePage extends StatefulWidget {
   const NewNotePage({super.key});
@@ -18,7 +18,7 @@ class NewNotePage extends StatefulWidget {
 }
 
 class _NewNotePageState extends State<NewNotePage> {
-  late final NoteEditorCubit _noteCubit;
+  late final NoteEditorController _noteController;
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _patientController = TextEditingController();
 
@@ -29,7 +29,9 @@ class _NewNotePageState extends State<NewNotePage> {
   @override
   void initState() {
     super.initState();
-    _noteCubit = NoteEditorCubit(repository: GetIt.I<NoteRepository>());
+    _noteController = NoteEditorController(
+      repository: GetIt.I<NoteRepository>(),
+    );
     final settings = GetIt.I<SettingsService>();
     _languageCode = settings.languageCode;
     _thinking = settings.thinkingMode;
@@ -39,7 +41,7 @@ class _NewNotePageState extends State<NewNotePage> {
   void dispose() {
     _titleController.dispose();
     _patientController.dispose();
-    _noteCubit.close();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -51,7 +53,7 @@ class _NewNotePageState extends State<NewNotePage> {
     }
 
     setState(() => _busy = true);
-    final note = await _noteCubit.create(
+    final note = await _noteController.create(
       title: _titleController.text.trim(),
       patientName: _patientController.text.trim(),
       languageCode: _languageCode,
@@ -69,8 +71,8 @@ class _NewNotePageState extends State<NewNotePage> {
     }
 
     if (_thinking) {
-      _noteCubit.setThinkingModeUsed(true);
-      await _noteCubit.saveNow();
+      _noteController.setThinkingModeUsed(true);
+      await _noteController.saveNow();
     }
 
     if (!mounted) return;

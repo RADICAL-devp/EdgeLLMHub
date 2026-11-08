@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_models/shared_models.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/data/note_repository.dart';
@@ -12,8 +12,8 @@ import '../../core/ui/auto_save_lifecycle.dart';
 import '../../core/ui/responsive.dart';
 import '../../core/ui/status_badge.dart';
 import '../../core/utils/formatters.dart';
-import 'cubits/note_editor_cubit.dart';
-import 'cubits/note_editor_state.dart';
+import 'controllers/note_editor_controller.dart';
+import 'controllers/note_editor_state.dart';
 import 'widgets/error_banner.dart';
 import 'widgets/save_indicator.dart';
 import 'widgets/section_field.dart';
@@ -25,9 +25,10 @@ class NoteDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) =>
-          NoteEditorCubit(repository: GetIt.I<NoteRepository>())..load(noteId),
+    return SignalProvider<NoteEditorController>(
+      create: () =>
+          NoteEditorController(repository: GetIt.I<NoteRepository>())
+            ..load(noteId),
       child: _NoteDetailView(noteId: noteId),
     );
   }
@@ -58,7 +59,10 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
   @override
   Future<void> onAutoSaveRequested() async {
     if (!mounted) return;
-    await context.read<NoteEditorCubit>().saveNow();
+    await SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!.saveNow();
   }
 
   @override
@@ -113,10 +117,13 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
   }
 
   void _onEditChanged() {
-    final cubit = context.read<NoteEditorCubit>();
-    cubit.updateTitle(_title.text);
-    cubit.updatePatientName(_patient.text);
-    cubit.updateSections(_sections());
+    final controller = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
+    controller.updateTitle(_title.text);
+    controller.updatePatientName(_patient.text);
+    controller.updateSections(_sections());
   }
 
   Future<void> _startEditing(ClinicalNote note) async {
@@ -142,29 +149,38 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
         ),
       );
       if (reopen != true || !mounted) return;
-      await context.read<NoteEditorCubit>().reopenNote();
+      await SignalProvider.of<NoteEditorController>(
+        context,
+        listen: false,
+      )!.reopenNote();
       if (!mounted) return;
     }
     setState(() => _editing = true);
   }
 
   Future<void> _finishEditing() async {
-    final cubit = context.read<NoteEditorCubit>();
-    cubit.updateTitle(_title.text);
-    cubit.updatePatientName(_patient.text);
-    cubit.updateSections(_sections());
-    await cubit.saveNow();
+    final controller = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
+    controller.updateTitle(_title.text);
+    controller.updatePatientName(_patient.text);
+    controller.updateSections(_sections());
+    await controller.saveNow();
     if (!mounted) return;
     setState(() => _editing = false);
   }
 
   Future<void> _goTo(String route) async {
-    final cubit = context.read<NoteEditorCubit>();
+    final controller = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
     if (_editing) {
-      cubit.updateTitle(_title.text);
-      cubit.updatePatientName(_patient.text);
-      cubit.updateSections(_sections());
-      await cubit.saveNow();
+      controller.updateTitle(_title.text);
+      controller.updatePatientName(_patient.text);
+      controller.updateSections(_sections());
+      await controller.saveNow();
     }
     if (!mounted) return;
     context.go(route);
@@ -192,11 +208,17 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await context.read<NoteEditorCubit>().finalizeNote();
+    await SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!.finalizeNote();
   }
 
   Future<void> _reopen() async {
-    await context.read<NoteEditorCubit>().reopenNote();
+    await SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!.reopenNote();
   }
 
   Future<void> _delete(ClinicalNote note) async {
@@ -224,7 +246,10 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
       ),
     );
     if (confirmed != true || !mounted) return;
-    final deleted = await context.read<NoteEditorCubit>().deleteNote();
+    final deleted = await SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!.deleteNote();
     if (!mounted) return;
     if (deleted) {
       context.go(AppRoutes.notes);
@@ -240,8 +265,13 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return BlocBuilder<NoteEditorCubit, NoteEditorState>(
-      builder: (context, state) {
+    return SignalBuilder(
+      builder: (context) {
+        final controller = SignalProvider.of<NoteEditorController>(
+          context,
+          listen: false,
+        )!;
+        final state = controller.value;
         if (state is NoteEditorLoading || state is NoteEditorInitial) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -274,7 +304,6 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
         final loaded = state as NoteEditorLoaded;
         final note = loaded.note;
         if (!_initialized) _syncFromNote(note);
-        final cubit = context.read<NoteEditorCubit>();
 
         return PopScope(
           // This route is opened with go(), so it has no route to pop back to.
@@ -282,7 +311,7 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
           canPop: false,
           onPopInvokedWithResult: (didPop, _) {
             if (didPop) return;
-            cubit.saveNow();
+            controller.saveNow();
             context.go(AppRoutes.notes);
           },
           child: Scaffold(
@@ -291,7 +320,7 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
               leading: IconButton(
                 tooltip: 'Back to notes',
                 onPressed: () {
-                  cubit.saveNow();
+                  controller.saveNow();
                   context.go(AppRoutes.notes);
                 },
                 icon: const Icon(Icons.arrow_back),
@@ -392,7 +421,7 @@ class _NoteDetailViewState extends State<_NoteDetailView> with AutoSaveOnPause {
                       if (loaded.error != null) ...[
                         ErrorBanner(
                           message: loaded.error!,
-                          onRetry: cubit.saveNow,
+                          onRetry: controller.saveNow,
                         ),
                         const SizedBox(height: 10),
                       ],

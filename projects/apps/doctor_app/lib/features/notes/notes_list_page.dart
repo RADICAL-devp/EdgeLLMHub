@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/data/note_repository.dart';
 import '../../core/models/clinical_note.dart';
 import '../../core/ui/app_routes.dart';
 import '../../core/ui/app_shell.dart';
 import '../../core/ui/responsive.dart';
-import 'cubits/notes_cubit.dart';
-import 'cubits/notes_state.dart';
+import 'controllers/notes_controller.dart';
+import 'controllers/notes_state.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/error_banner.dart';
 import 'widgets/note_card.dart';
@@ -19,9 +19,9 @@ class NotesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) =>
-          NotesCubit(repository: GetIt.I<NoteRepository>())..load(),
+    return SignalProvider<NotesController>(
+      create: () =>
+          NotesController(repository: GetIt.I<NoteRepository>())..load(),
       child: const _NotesScaffold(),
     );
   }
@@ -32,9 +32,13 @@ class _NotesScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<NotesCubit, NotesState>(
-      builder: (context, state) {
-        final cubit = context.read<NotesCubit>();
+    return SignalBuilder(
+      builder: (context) {
+        final controller = SignalProvider.of<NotesController>(
+          context,
+          listen: false,
+        )!;
+        final state = controller.value;
         return AppShell(
           title: 'Notes',
           currentIndex: 1,
@@ -52,10 +56,10 @@ class _NotesScaffold extends StatelessWidget {
           ),
           child: NotesView(
             state: state,
-            onRefresh: cubit.load,
-            onFilterChanged: cubit.setFilter,
+            onRefresh: controller.load,
+            onFilterChanged: controller.setFilter,
             onOpenNote: (id) => context.go(AppRoutes.note(id)),
-            onDeleteNote: cubit.deleteNote,
+            onDeleteNote: controller.deleteNote,
             onNewNote: () => context.go(AppRoutes.newNote),
           ),
         );

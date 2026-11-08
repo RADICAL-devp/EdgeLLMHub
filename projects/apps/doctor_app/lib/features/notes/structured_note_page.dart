@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_models/shared_models.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/ai/ai_service.dart';
 import '../../core/ai/heuristic_note_structurer.dart';
@@ -15,9 +15,9 @@ import '../../core/ui/auto_save_lifecycle.dart';
 import '../../core/ui/responsive.dart';
 import '../../core/ui/status_badge.dart';
 import '../../core/utils/formatters.dart';
-import 'cubits/note_editor_cubit.dart';
-import 'cubits/note_editor_state.dart';
-import 'cubits/structure_note_cubit.dart';
+import 'controllers/note_editor_controller.dart';
+import 'controllers/note_editor_state.dart';
+import 'controllers/structure_note_controller.dart';
 import 'widgets/error_banner.dart';
 import 'widgets/save_indicator.dart';
 import 'widgets/section_field.dart';
@@ -29,15 +29,15 @@ class StructuredNotePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
+    return SignalProvider.multi(
       providers: [
-        BlocProvider(
-          create: (context) =>
-              NoteEditorCubit(repository: GetIt.I<NoteRepository>())
+        SignalProvider<NoteEditorController>(
+          create: () =>
+              NoteEditorController(repository: GetIt.I<NoteRepository>())
                 ..load(noteId),
         ),
-        BlocProvider(
-          create: (context) => StructureNoteCubit(ai: GetIt.I<AIService>()),
+        SignalProvider<StructureNoteController>(
+          create: () => StructureNoteController(ai: GetIt.I<AIService>()),
         ),
       ],
       child: _StructuredView(noteId: noteId),
@@ -71,7 +71,10 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
   @override
   Future<void> onAutoSaveRequested() async {
     if (!mounted) return;
-    await context.read<NoteEditorCubit>().saveNow();
+    await SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!.saveNow();
   }
 
   @override
@@ -136,14 +139,23 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
   }
 
   void _onSectionChanged() {
-    context.read<NoteEditorCubit>().updateSections(_sections());
+    SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!.updateSections(_sections());
   }
 
   Future<void> _generate({required bool auto}) async {
     if (_generating) return;
-    final noteCubit = context.read<NoteEditorCubit>();
-    final aiCubit = context.read<StructureNoteCubit>();
-    final noteState = noteCubit.state;
+    final noteController = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
+    final aiController = SignalProvider.of<StructureNoteController>(
+      context,
+      listen: false,
+    )!;
+    final noteState = noteController.value;
     if (noteState is! NoteEditorLoaded) return;
     final note = noteState.note;
 
@@ -158,7 +170,7 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
       return;
     }
 
-    if (!aiCubit.isReady) {
+    if (!aiController.isReady) {
       if (!auto) await _showSetupDialog();
       return;
     }
@@ -193,7 +205,7 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
       _aiError = null;
     });
 
-    final sections = await aiCubit.generate(
+    final sections = await aiController.generate(
       transcript: note.transcript,
       languageCode: note.languageCode,
       enableThinking: _thinking,
@@ -205,17 +217,17 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
       setState(() {
         _generating = false;
         _aiError =
-            aiCubit.state.error ??
+            aiController.value.error ??
             'The on-device model could not draft this note. Try again.';
       });
       return;
     }
 
     _setControllersFromSections(sections);
-    noteCubit.updateSections(sections);
-    noteCubit.setThinkingModeUsed(_thinking);
-    noteCubit.updateModelName(ModelCatalog.llm.displayName);
-    await noteCubit.saveNow();
+    noteController.updateSections(sections);
+    noteController.setThinkingModeUsed(_thinking);
+    noteController.updateModelName(ModelCatalog.llm.displayName);
+    await noteController.saveNow();
     if (!mounted) return;
     setState(() => _generating = false);
   }
@@ -267,14 +279,20 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
       if (confirmed != true || !mounted) return;
     }
     setState(() => _thinking = value);
-    final cubit = context.read<NoteEditorCubit>();
-    cubit.setThinkingModeUsed(value);
-    cubit.saveNow();
+    final controller = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
+    controller.setThinkingModeUsed(value);
+    controller.saveNow();
   }
 
   Future<void> _useTranscriptScaffold() async {
-    final cubit = context.read<NoteEditorCubit>();
-    final noteState = cubit.state;
+    final controller = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
+    final noteState = controller.value;
     if (noteState is! NoteEditorLoaded) return;
     final scaffold = const HeuristicNoteStructurer().scaffold(
       noteState.note.transcript,
@@ -287,8 +305,8 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
       return;
     }
     _setControllersFromSections(scaffold);
-    cubit.updateSections(scaffold);
-    await cubit.saveNow();
+    controller.updateSections(scaffold);
+    await controller.saveNow();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -298,9 +316,12 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
   }
 
   Future<void> _saveDraft() async {
-    final cubit = context.read<NoteEditorCubit>();
-    cubit.updateSections(_sections());
-    await cubit.saveNow();
+    final controller = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
+    controller.updateSections(_sections());
+    await controller.saveNow();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Draft saved on this device.')),
@@ -308,9 +329,12 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
   }
 
   Future<void> _finalize() async {
-    final cubit = context.read<NoteEditorCubit>();
-    cubit.updateSections(_sections());
-    await cubit.saveNow();
+    final controller = SignalProvider.of<NoteEditorController>(
+      context,
+      listen: false,
+    )!;
+    controller.updateSections(_sections());
+    await controller.saveNow();
     if (!mounted) return;
 
     final confirmed = await showDialog<bool>(
@@ -335,7 +359,7 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
     );
     if (confirmed != true || !mounted) return;
 
-    await cubit.finalizeNote();
+    await controller.finalizeNote();
     if (!mounted) return;
     context.go(AppRoutes.note(widget.noteId));
   }
@@ -343,8 +367,13 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return BlocBuilder<NoteEditorCubit, NoteEditorState>(
-      builder: (context, state) {
+    return SignalBuilder(
+      builder: (context) {
+        final controller = SignalProvider.of<NoteEditorController>(
+          context,
+          listen: false,
+        )!;
+        final state = controller.value;
         if (state is NoteEditorLoading || state is NoteEditorInitial) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -377,7 +406,6 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
         final loaded = state as NoteEditorLoaded;
         final note = loaded.note;
         if (!_initialized) _syncFromNote(note);
-        final cubit = context.read<NoteEditorCubit>();
         final aiReady = GetIt.I<AIService>().isReady;
 
         return PopScope(
@@ -385,7 +413,7 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
           canPop: false,
           onPopInvokedWithResult: (didPop, _) {
             if (didPop) return;
-            cubit.saveNow();
+            controller.saveNow();
             context.go(AppRoutes.note(widget.noteId));
           },
           child: Scaffold(
@@ -394,7 +422,7 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
               leading: IconButton(
                 tooltip: 'Back to note',
                 onPressed: () {
-                  cubit.saveNow();
+                  controller.saveNow();
                   context.go(AppRoutes.note(widget.noteId));
                 },
                 icon: const Icon(Icons.arrow_back),
@@ -518,7 +546,7 @@ class _StructuredViewState extends State<_StructuredView> with AutoSaveOnPause {
                         const SizedBox(height: 12),
                         ErrorBanner(
                           message: loaded.error!,
-                          onRetry: cubit.saveNow,
+                          onRetry: controller.saveNow,
                         ),
                       ],
                       if (!aiReady) ...[

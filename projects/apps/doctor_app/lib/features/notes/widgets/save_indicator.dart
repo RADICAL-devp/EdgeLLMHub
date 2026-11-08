@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../cubits/note_editor_state.dart';
+import '../controllers/note_editor_state.dart';
 
 class NoteSaveIndicator extends StatelessWidget {
   const NoteSaveIndicator({super.key, required this.state});

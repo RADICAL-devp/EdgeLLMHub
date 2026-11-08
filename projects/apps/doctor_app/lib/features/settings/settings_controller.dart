@@ -1,5 +1,5 @@
-import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:signals/signals.dart';
 
 import '../../../core/data/note_repository.dart';
 import '../../../core/exceptions/app_exceptions.dart';
@@ -69,8 +69,8 @@ class SettingsState extends Equatable {
   ];
 }
 
-class SettingsCubit extends Cubit<SettingsState> {
-  SettingsCubit({
+class SettingsController extends Signal<SettingsState> {
+  SettingsController({
     required SettingsService settings,
     required ModelManagerService models,
     required NoteRepository repository,
@@ -90,83 +90,75 @@ class SettingsCubit extends Cubit<SettingsState> {
   final NoteRepository _repository;
 
   Future<void> load() async {
-    emit(state.copyWith(isLoading: true, clearError: true));
+    value = value.copyWith(isLoading: true, clearError: true);
     try {
       final status = await _models.getStatus();
       final count = await _repository.countAll();
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          modelStatus: status,
-          noteCount: count,
-          thinkingMode: _settings.thinkingMode,
-          languageCode: _settings.languageCode,
-          wifiOnlyDownloads: _settings.wifiOnlyDownloads,
-          isLoading: false,
-          clearError: true,
-        ),
+      if (disposed) return;
+      value = value.copyWith(
+        modelStatus: status,
+        noteCount: count,
+        thinkingMode: _settings.thinkingMode,
+        languageCode: _settings.languageCode,
+        wifiOnlyDownloads: _settings.wifiOnlyDownloads,
+        isLoading: false,
+        clearError: true,
       );
     } catch (_) {
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: 'The local settings could not be loaded.',
-        ),
+      if (disposed) return;
+      value = value.copyWith(
+        isLoading: false,
+        error: 'The local settings could not be loaded.',
       );
     }
   }
 
-  Future<void> setThinkingMode(bool value) async {
-    await _settings.setThinkingMode(value);
-    if (!isClosed) emit(state.copyWith(thinkingMode: value));
+  Future<void> setThinkingMode(bool enabled) async {
+    await _settings.setThinkingMode(enabled);
+    if (!disposed) value = value.copyWith(thinkingMode: enabled);
   }
 
-  Future<void> setLanguageCode(String value) async {
-    await _settings.setLanguageCode(value);
-    if (!isClosed) emit(state.copyWith(languageCode: _settings.languageCode));
+  Future<void> setLanguageCode(String code) async {
+    await _settings.setLanguageCode(code);
+    if (!disposed) value = value.copyWith(languageCode: _settings.languageCode);
   }
 
-  Future<void> setWifiOnlyDownloads(bool value) async {
-    await _settings.setWifiOnlyDownloads(value);
-    if (!isClosed) emit(state.copyWith(wifiOnlyDownloads: value));
+  Future<void> setWifiOnlyDownloads(bool enabled) async {
+    await _settings.setWifiOnlyDownloads(enabled);
+    if (!disposed) value = value.copyWith(wifiOnlyDownloads: enabled);
   }
 
   Future<void> deleteModels() async {
-    if (state.isDeletingModels) return;
-    emit(state.copyWith(isDeletingModels: true, clearError: true));
+    if (value.isDeletingModels) return;
+    value = value.copyWith(isDeletingModels: true, clearError: true);
     try {
       await _models.deleteModels();
       final status = await _models.getStatus();
-      if (isClosed) return;
-      emit(state.copyWith(isDeletingModels: false, modelStatus: status));
+      if (disposed) return;
+      value = value.copyWith(isDeletingModels: false, modelStatus: status);
     } catch (error) {
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          isDeletingModels: false,
-          error: error is AppException
-              ? error.message
-              : 'The models could not be removed.',
-        ),
+      if (disposed) return;
+      value = value.copyWith(
+        isDeletingModels: false,
+        error: error is AppException
+            ? error.message
+            : 'The models could not be removed.',
       );
     }
   }
 
   Future<void> deleteAllNotes() async {
-    if (state.isDeletingNotes) return;
-    emit(state.copyWith(isDeletingNotes: true, clearError: true));
+    if (value.isDeletingNotes) return;
+    value = value.copyWith(isDeletingNotes: true, clearError: true);
     try {
       await _repository.deleteAll();
-      if (isClosed) return;
-      emit(state.copyWith(isDeletingNotes: false, noteCount: 0));
+      if (disposed) return;
+      value = value.copyWith(isDeletingNotes: false, noteCount: 0);
     } catch (_) {
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          isDeletingNotes: false,
-          error: 'The local notes could not be deleted.',
-        ),
+      if (disposed) return;
+      value = value.copyWith(
+        isDeletingNotes: false,
+        error: 'The local notes could not be deleted.',
       );
     }
   }

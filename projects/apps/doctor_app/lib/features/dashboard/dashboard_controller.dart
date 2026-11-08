@@ -1,5 +1,5 @@
-import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:signals/signals.dart';
 
 import '../../../core/data/note_repository.dart';
 import '../../../core/exceptions/app_exceptions.dart';
@@ -64,8 +64,8 @@ class DashboardState extends Equatable {
   ];
 }
 
-class DashboardCubit extends Cubit<DashboardState> {
-  DashboardCubit({
+class DashboardController extends Signal<DashboardState> {
+  DashboardController({
     required NoteRepository repository,
     required ModelManagerService models,
   }) : _repository = repository,
@@ -76,11 +76,11 @@ class DashboardCubit extends Cubit<DashboardState> {
   final ModelManagerService _models;
 
   Future<void> load() async {
-    emit(state.copyWith(isLoading: true, clearError: true));
+    value = value.copyWith(isLoading: true, clearError: true);
     try {
       final notes = await _repository.getAll();
       final status = await _models.getStatus();
-      if (isClosed) return;
+      if (disposed) return;
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final updatedToday = notes.where((note) {
@@ -89,29 +89,25 @@ class DashboardCubit extends Cubit<DashboardState> {
             date.month == today.month &&
             date.day == today.day;
       }).length;
-      emit(
-        state.copyWith(
-          totalNotes: notes.length,
-          drafts: notes.where((note) => note.status == NoteStatus.draft).length,
-          finalized: notes
-              .where((note) => note.status == NoteStatus.finalized)
-              .length,
-          updatedToday: updatedToday,
-          recentNotes: notes.take(3).toList(growable: false),
-          modelStatus: status,
-          isLoading: false,
-          clearError: true,
-        ),
+      value = value.copyWith(
+        totalNotes: notes.length,
+        drafts: notes.where((note) => note.status == NoteStatus.draft).length,
+        finalized: notes
+            .where((note) => note.status == NoteStatus.finalized)
+            .length,
+        updatedToday: updatedToday,
+        recentNotes: notes.take(3).toList(growable: false),
+        modelStatus: status,
+        isLoading: false,
+        clearError: true,
       );
     } catch (error) {
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: error is AppException
-              ? error.message
-              : 'The dashboard could not load the local notes.',
-        ),
+      if (disposed) return;
+      value = value.copyWith(
+        isLoading: false,
+        error: error is AppException
+            ? error.message
+            : 'The dashboard could not load the local notes.',
       );
     }
   }

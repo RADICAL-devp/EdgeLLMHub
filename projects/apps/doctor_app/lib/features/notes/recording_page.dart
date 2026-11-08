@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:signals/signals_flutter.dart';
 
 import '../../core/data/note_repository.dart';
 import '../../core/models/clinical_note.dart';
@@ -13,10 +13,10 @@ import '../../core/services/transcription_service.dart';
 import '../../core/ui/app_routes.dart';
 import '../../core/ui/responsive.dart';
 import '../../core/utils/formatters.dart';
-import 'cubits/note_editor_cubit.dart';
-import 'cubits/note_editor_state.dart';
-import 'cubits/recording_cubit.dart';
-import 'cubits/recording_state.dart';
+import 'controllers/note_editor_controller.dart';
+import 'controllers/note_editor_state.dart';
+import 'controllers/recording_controller.dart';
+import 'controllers/recording_state.dart';
 import 'widgets/error_banner.dart';
 
 class RecordingPage extends StatefulWidget {
@@ -29,8 +29,8 @@ class RecordingPage extends StatefulWidget {
 }
 
 class _RecordingPageState extends State<RecordingPage> {
-  NoteEditorCubit? _noteCubit;
-  RecordingCubit? _recordingCubit;
+  NoteEditorController? _noteController;
+  RecordingController? _recordingController;
   bool _loading = true;
   bool _hasSavedTranscript = false;
   bool _sttReady = false;
@@ -43,11 +43,13 @@ class _RecordingPageState extends State<RecordingPage> {
   }
 
   Future<void> _init() async {
-    final noteCubit = NoteEditorCubit(repository: GetIt.I<NoteRepository>());
+    final noteController = NoteEditorController(
+      repository: GetIt.I<NoteRepository>(),
+    );
     try {
-      final note = await noteCubit.load(widget.noteId);
+      final note = await noteController.load(widget.noteId);
       if (!mounted) {
-        await noteCubit.close();
+        await noteController.close();
         return;
       }
       if (note == null) {
@@ -55,24 +57,24 @@ class _RecordingPageState extends State<RecordingPage> {
           _loading = false;
           _error = 'This note could not be found.';
         });
-        await noteCubit.close();
+        await noteController.close();
         return;
       }
 
-      final recordingCubit = RecordingCubit(
+      final recordingController = RecordingController(
         audio: GetIt.I<AudioCaptureService>(),
         transcription: GetIt.I<TranscriptionService>(),
         languageCode: note.languageCode,
       );
 
       setState(() {
-        _noteCubit = noteCubit;
-        _recordingCubit = recordingCubit;
+        _noteController = noteController;
+        _recordingController = recordingController;
         _sttReady = GetIt.I<TranscriptionService>().isReady;
         _loading = false;
       });
     } catch (_) {
-      await noteCubit.close();
+      await noteController.close();
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -84,19 +86,19 @@ class _RecordingPageState extends State<RecordingPage> {
   Future<void> _saveTranscript(RecordingState state) async {
     if (_hasSavedTranscript) return;
     _hasSavedTranscript = true;
-    final noteCubit = _noteCubit;
-    if (noteCubit == null || state.transcript.trim().isEmpty) return;
+    final noteController = _noteController;
+    if (noteController == null || state.transcript.trim().isEmpty) return;
 
-    noteCubit.updateTranscript(state.transcript);
-    await noteCubit.saveNow();
+    noteController.updateTranscript(state.transcript);
+    await noteController.saveNow();
     if (!mounted) return;
     context.go(AppRoutes.transcript(widget.noteId));
   }
 
   @override
   void dispose() {
-    _recordingCubit?.close();
-    _noteCubit?.close();
+    _recordingController?.dispose();
+    _noteController?.dispose();
     super.dispose();
   }
 
@@ -105,7 +107,9 @@ class _RecordingPageState extends State<RecordingPage> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_error != null || _noteCubit == null || _recordingCubit == null) {
+    if (_error != null ||
+        _noteController == null ||
+        _recordingController == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Record consultation')),
         body: Center(
@@ -129,10 +133,10 @@ class _RecordingPageState extends State<RecordingPage> {
       );
     }
 
-    return MultiBlocProvider(
+    return SignalProvider.multi(
       providers: [
-        BlocProvider.value(value: _noteCubit!),
-        BlocProvider.value(value: _recordingCubit!),
+        SignalProvider<NoteEditorController>.value(value: _noteController!),
+        SignalProvider<RecordingController>.value(value: _recordingController!),
       ],
       child: _RecordingView(
         noteId: widget.noteId,
@@ -155,8 +159,11 @@ class _RecordingView extends StatelessWidget {
   final Future<void> Function(RecordingState state) onTranscriptReady;
 
   Future<void> _handleBack(BuildContext context) async {
-    final cubit = context.read<RecordingCubit>();
-    final state = cubit.state;
+    final controller = SignalProvider.of<RecordingController>(
+      context,
+      listen: false,
+    )!;
+    final state = controller.value;
 
     if (state.phase == RecordingPhase.transcribing) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -195,10 +202,10 @@ class _RecordingView extends StatelessWidget {
         ),
       );
       if (discard != true) return;
-      await cubit.cancel();
+      await controller.cancel();
       if (!context.mounted) return;
     } else {
-      await cubit.cancel();
+      await controller.cancel();
       if (!context.mounted) return;
     }
     context.go(AppRoutes.note(noteId));
@@ -207,11 +214,16 @@ class _RecordingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return BlocListener<RecordingCubit, RecordingState>(
-      listenWhen: (previous, current) =>
-          current.phase == RecordingPhase.done &&
-          previous.phase != RecordingPhase.done,
-      listener: (context, state) => onTranscriptReady(state),
+    return SignalEffect(
+      effect: (context) {
+        final state = SignalProvider.of<RecordingController>(
+          context,
+          listen: false,
+        )!.value;
+        if (state.phase == RecordingPhase.done) {
+          onTranscriptReady(state);
+        }
+      },
       child: PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) async {
@@ -230,13 +242,21 @@ class _RecordingView extends StatelessWidget {
             child: SingleChildScrollView(
               child: CenteredContent(
                 maxWidth: 640,
-                child: BlocBuilder<NoteEditorCubit, NoteEditorState>(
-                  builder: (context, noteState) {
+                child: SignalBuilder(
+                  builder: (context) {
+                    final noteState = SignalProvider.of<NoteEditorController>(
+                      context,
+                      listen: false,
+                    )!.value;
                     final note = noteState is NoteEditorLoaded
                         ? noteState.note
                         : null;
-                    return BlocBuilder<RecordingCubit, RecordingState>(
-                      builder: (context, state) {
+                    return SignalBuilder(
+                      builder: (context) {
+                        final state = SignalProvider.of<RecordingController>(
+                          context,
+                          listen: false,
+                        )!.value;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -512,9 +532,12 @@ class _Actions extends StatelessWidget {
   final String noteId;
 
   Future<void> _start(BuildContext context) async {
-    final cubit = context.read<RecordingCubit>();
-    cubit.reset();
-    await cubit.start();
+    final controller = SignalProvider.of<RecordingController>(
+      context,
+      listen: false,
+    )!;
+    controller.reset();
+    await controller.start();
   }
 
   Future<void> _openSettings() async {
@@ -523,7 +546,10 @@ class _Actions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cubit = context.read<RecordingCubit>();
+    final controller = SignalProvider.of<RecordingController>(
+      context,
+      listen: false,
+    )!;
 
     switch (state.phase) {
       case RecordingPhase.idle:
@@ -547,7 +573,7 @@ class _Actions extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: cubit.pause,
+                onPressed: controller.pause,
                 icon: const Icon(Icons.pause),
                 label: const Text('Pause'),
                 style: OutlinedButton.styleFrom(
@@ -559,7 +585,7 @@ class _Actions extends StatelessWidget {
             Expanded(
               flex: 2,
               child: FilledButton.icon(
-                onPressed: cubit.stopAndTranscribe,
+                onPressed: controller.stopAndTranscribe,
                 icon: const Icon(Icons.stop),
                 label: const Text('Stop & transcribe'),
                 style: FilledButton.styleFrom(
@@ -574,7 +600,7 @@ class _Actions extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: cubit.resume,
+                onPressed: controller.resume,
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Resume'),
                 style: OutlinedButton.styleFrom(
@@ -586,7 +612,7 @@ class _Actions extends StatelessWidget {
             Expanded(
               flex: 2,
               child: FilledButton.icon(
-                onPressed: cubit.stopAndTranscribe,
+                onPressed: controller.stopAndTranscribe,
                 icon: const Icon(Icons.stop),
                 label: const Text('Stop & transcribe'),
                 style: FilledButton.styleFrom(
